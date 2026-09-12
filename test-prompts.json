@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "prompt": "我有一个全新的 TypeScript + React 项目，没有任何代理配置。创建一个最小化 harness，让我的代理在单功能开发中可靠工作。",
+    "expected": "AGENTS.md（启动工作流+一次一个功能+完成定义）、feature_list.json（合法 JSON 占位功能）、init.sh（可运行验证命令）、引用式交接约定说明"
+  },
+  {
+    "id": 2,
+    "prompt": "我的团队用 issue tracker 管理需求（to-spec/to-tickets 工作流），仓库里维护 CONTEXT.md 和 ADR，每个需求一个 worktree，.scratch 随任务删除。为这个项目设计 harness，别让代理每次会话都失忆。",
+    "expected": "识别为 tracker 模式：状态由 issue tracker 承接、CONTEXT.md+ADR 为仓内长期资产、init.sh/CI 承接证据、.scratch/handoff.md 引用式交接；不强制仓内 feature_list.json/progress.md"
+  },
+  {
+    "id": 3,
+    "prompt": "我的代理总说'完成了'但测试其实是失败的。评估我现在的 harness（只有一个简单的 AGENTS.md），告诉我先改什么。",
+    "expected": "运行 validate-harness.mjs 或按五子系统评估，验证子系统应为瓶颈，给出证据门禁（init.sh/CI）与完成定义的优先改进项"
+  }
+]

@@ -1,0 +1,44 @@
+{
+  "features": [
+    {
+      "id": "feat-001",
+      "name": "项目初始化",
+      "description": "确认项目能从干净检出安装依赖、运行验证并启动",
+      "dependencies": [],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-002",
+      "name": "第一个面向用户的功能",
+      "description": "用代理应实现的第一个具体行为替换此占位条目",
+      "dependencies": ["feat-001"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-003",
+      "name": "验证覆盖",
+      "description": "为活动功能添加或确认测试、类型检查、lint 或手动验证",
+      "dependencies": ["feat-002"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-004",
+      "name": "文档更新",
+      "description": "更新受已实现功能影响的 README、架构说明或产品文档",
+      "dependencies": ["feat-003"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-005",
+      "name": "清理与交接",
+      "description": "记录验证证据、更新 progress.md，按需写引用式交接文档（.scratch/handoff.md）",
+      "dependencies": ["feat-004"],
+      "status": "not-started",
+      "evidence": ""
+    }
+  ]
+}

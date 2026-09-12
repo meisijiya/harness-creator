@@ -1,0 +1,150 @@
+{
+  "skill_name": "harness-creator",
+  "evals": [
+    {
+      "id": 1,
+      "name": "最小化 Harness 创建",
+      "prompt": "我有一个全新的 TypeScript + React 项目，没有任何代理配置。创建一个最小化 harness，让我的代理在单功能开发中可靠工作。",
+      "expected_output": "AGENTS.md（约 50-100 行）、含 3-5 个占位功能的 feature_list.json、带验证命令的 init.sh",
+      "files": [],
+      "expectations": [
+        "AGENTS.md 包含启动工作流（读文件、运行 init、查看功能列表）",
+        "AGENTS.md 包含一次一个功能的策略",
+        "feature_list.json 是合法 JSON，含 id、name、description、status 字段",
+        "init.sh 在可用时运行安装、类型/静态检查、测试与构建命令",
+        "所有文件位于项目根目录"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "会话连续性设置",
+      "prompt": "我的代理在会话之间会忘记一切。我需要持久记忆与会话交接，以便它能处理跨越多天的功能。",
+      "expected_output": "精简版 progress.md、引用式交接约定（.scratch/handoff.md 或临时目录）、记忆目录设置说明",
+      "files": [],
+      "expectations": [
+        "progress.md 只包含四类小节：当前状态、完成证据、阻塞/风险、下一步",
+        "决策指向 ADR，变更文件指向 git log/diff，不在 progress.md 中重复记录",
+        "交接文档为引用式：写在 .scratch/ 或临时目录，引用 spec/ADR/提交而不复制内容",
+        "记忆目录创建说明（.claude/memory/ 或类似）",
+        "解释了两步保存不变量（先主题文件后索引）"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Harness 评估",
+      "prompt": "我已有一个 AGENTS.md 文件，但我的代理仍然会搞砸事情。评估我的 harness，告诉我先改进什么。",
+      "expected_output": "覆盖五个子系统的评估（各按 1-5 评分）、识别出瓶颈、按优先级排序的改进计划",
+      "files": ["existing-AGENTS.md"],
+      "expectations": [
+        "评估覆盖全部 5 个子系统：指令、状态、验证、范围、生命周期",
+        "每个子系统按 1-5 评分并附理由",
+        "得分最低的子系统被识别为瓶颈或候选瓶颈",
+        "按优先级排序的改进计划，含 2-3 个具体的下一步"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "验证工作流设计",
+      "prompt": "我的代理说'完成了'但测试是失败的。设计一个验证工作流，强制代理在声称完成前真正做验证。",
+      "expected_output": "验证命令清单、AGENTS.md 小节更新、可选的质量得分跟踪",
+      "files": [],
+      "expectations": [
+        "列出明确的验证命令（测试、lint、类型检查、构建）",
+        "AGENTS.md 包含带验证要求的完成定义小节",
+        "会话结束清单包含验证证据记录",
+        "失败路径明确说明验证失败时不得声称完成"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "记忆分类设计",
+      "prompt": "我希望代理能跨会话记住项目约定与用户偏好。设计一套记忆分类体系，并告诉我什么该放在哪里。",
+      "expected_output": "记忆层定义、自动记忆的类型分类、什么该保存什么该跳过",
+      "files": [],
+      "expectations": [
+        "定义了指令记忆（人工维护、纳入版本控制）",
+        "定义了自动记忆（代理写入、持久保存）",
+        "含 3-4 种类型的分类体系（如 用户/反馈/项目/参考）",
+        "关于不应保存什么（可推导内容）的明确指引"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "工具安全设计",
+      "prompt": "我的自定义编码代理可以运行 shell 命令和编辑文件。设计工具注册表与权限 harness，让它强大但不会静默做出危险操作。",
+      "expected_output": "含按调用并发分类、默认权限、拒绝处理与审计追踪的工具注册策略",
+      "files": [],
+      "expectations": [
+        "敏感工具默认为 ask 或 deny，而非 allow",
+        "并发安全性按调用分类，而非按工具分类",
+        "承认权限评估的副作用，且不做不安全的缓存",
+        "审计追踪记录命令、决策与理由"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "上下文预算规划",
+      "prompt": "我的代理启动时加载了太多文档，变得很慢。设计一套上下文策略，既保住重要上下文又控制 token 成本。",
+      "expected_output": "使用 select/write/compress/isolate 操作与显式上下文预算的渐进式披露方案",
+      "files": [],
+      "expectations": [
+        "定义了常驻加载的元数据与按需加载的参考",
+        "使用 SELECT、WRITE、COMPRESS、ISOLATE 操作",
+        "包含硬上限或预算阈值",
+        "解释了记忆化上下文构建器的失效机制"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "多代理协调",
+      "prompt": "我希望多个代理在大型重构上协作而不互相踩踏。设计多代理 harness 与委派规则。",
+      "expected_output": "含所有权边界、上下文共享策略与合并/评审关卡的协调者/委派设计",
+      "files": [],
+      "expectations": [
+        "定义了协调者、工作者与可选评审者的职责",
+        "分配互不重叠的文件或模块所有权",
+        "防止递归分叉的子级再次分叉",
+        "在声称完成前包含集成与验证关卡"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "生命周期引导",
+      "prompt": "每次新会话的起始状态都不一致。设计启动、钩子与交接的生命周期规则，让新代理能安全地接续工作。",
+      "expected_output": "含 init.sh、干净状态检查、交接阅读与钩子信任边界的生命周期引导设计",
+      "files": [],
+      "expectations": [
+        "init.sh 是标准的启动与验证入口",
+        "启动时阅读 AGENTS.md、feature_list.json、progress.md，以及交接文档（如存在）",
+        "会话结束程序记录证据、阻塞与下一步",
+        "钩子受信任闸门控制，失败行为是显式的"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "脚本化 Harness 验证",
+      "prompt": "使用 harness-creator 的脚本为某个仓库搭建 harness、验证它，并生成 HTML 评估报告。",
+      "expected_output": "使用 create-harness.mjs、validate-harness.mjs 与 render-assessment-html.mjs 的命令，以及对得分的解读",
+      "files": [],
+      "expectations": [
+        "使用 create-harness.mjs 并指定目标目录",
+        "使用 validate-harness.mjs 并解释五子系统得分输出",
+        "使用 render-assessment-html.mjs 或带 --html 的 run-benchmark.mjs",
+        "解释结构性基准测试是对真实前后对照代理会话的补充而非替代"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "Tracker 模式与工单驱动工作流集成",
+      "prompt": "我的团队用 issue tracker 管理需求（to-spec/to-tickets 工作流），仓库里维护 CONTEXT.md 和 ADR，每个需求一个 worktree，.scratch 随任务删除。为这个项目设计 tracker 模式的 harness。",
+      "expected_output": "状态由 issue tracker 承接、CONTEXT.md + ADR 为仓内长期资产、init.sh/CI 为证据门禁、.scratch 为任务级暂存区的 harness 设计",
+      "files": [],
+      "expectations": [
+        "不强制仓内 feature_list.json/progress.md，状态与依赖由 issue tracker（含 blocking 边）承接",
+        "AGENTS.md 启动工作流路由 CONTEXT.md 与 ADR，且 CONTEXT.md 只承载代码表达不了的领域语言",
+        "完成证据由 init.sh/CI 机器门禁承接，文本证据只是指向门禁结果的指针",
+        "交接为引用式临时文档（.scratch/handoff.md），任务完成随 worktree 删除"
+      ]
+    }
+  ]
+}
