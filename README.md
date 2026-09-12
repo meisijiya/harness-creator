@@ -18,7 +18,7 @@
 | `CONTEXT.md` | 领域语言：与代码互补的规范用语，不重复代码 | 长期：持续更新 |
 | ADR（`docs/adr/`） | 决策及理由 | 长期：只增不删 |
 | `init.sh` / CI | 可执行约束（测试、Schema、门禁） | 长期：违反即报错 |
-| 工单 / `feature_list.json` | 状态与依赖 | tracker 模式用工单；registry 模式用仓内注册表 |
+| 工单 / `feature_list.json` | 状态与依赖 | tracker 模式用工单系统（本地或仓外）；registry 模式用仓内注册表 |
 
 第三方 skill 的产物落不进五个落点之一，**拒绝引入**——他人的 skill 无法改造，只能选或拒。
 
@@ -58,7 +58,7 @@ node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project 
 - `progress.md`（精简版：当前状态、证据、阻塞、下一步）
 - `init.sh`
 
-会话交接是约定而非仓库文件：引用式交接文档写在 `.scratch/handoff.md` 或临时目录。tracker 模式（`CONTEXT.md` + ADR + issue tracker 承接状态）见 SKILL.md 的"两种模式"一节。
+会话交接是约定而非仓库文件：引用式交接文档写在 `.scratch/handoff.md` 或临时目录。tracker 模式（`CONTEXT.md` + ADR + 工单系统承接状态，工单可本地可仓外）见 SKILL.md 的"两种模式"一节。
 
 `create-harness.mjs` 可检测常见的项目类型与包管理器。在基础验证命令层面支持 Node/npm/pnpm/yarn/bun、Python、Go、Rust、Maven、Gradle 和 .NET。
 
@@ -93,13 +93,28 @@ tracker 模式的默认搭配：
 
 无信号的新仓库：harness-creator 先问"仓库用来做什么"判定模式；判 tracker 则先调 `setup-matt-pocock-skills` 初始化工单基础设施，再回到本技能继续 harness 初始化。
 
-### 补充：[addyosmani/agent-skills](https://github.com/addyosmani/agent-skills)
+### 补充：[addyosmani/agent-skills](https://github.com/addyosmani/agent-skills)（registry 模式的工作流层）
 
-经五落点审查后的筛选结论：
+不采用工单体系时，addyosmani 提供完整工作流层，状态骨架由 registry 模式承担：
 
-- **可用（14）**：`constraint-driven-development`（约束转门禁，最契合）、`ci-cd-and-automation`、`security-and-hardening`、`observability-and-instrumentation`、`shipping-and-launch`、`browser-testing-with-devtools`、`frontend-ui-engineering`、`api-and-interface-design`、`incremental-implementation`、`code-simplification`、`source-driven-development`、`deprecation-and-migration`、`git-workflow-and-versioning`、`doubt-driven-development`（高风险场景）
-- **改造后用（2）**：`spec-driven-development`（PRD 必须落 `.scratch`，不留仓内）、`idea-refine`（限概念萌芽期，进入设计即切 grill）
-- **不引入（8）**：`using-agent-skills`、`interview-me`、`planning-and-task-breakdown`、`test-driven-development`、`context-engineering`、`code-review-and-quality`、`debugging-and-error-recovery`、`documentation-and-adrs`——与 matt 体系或本技能职责重复，或理念冲突（测试配额 vs 测试克制、行内文档标准 vs 代码即文档）
+| 生命周期 | 技能 | 产物落点 |
+|---|---|---|
+| Define | `interview-me`、`idea-refine`、`spec-driven-development` | PRD/访谈结论 → `.scratch/` |
+| Define | `constraint-driven-development` | 约束 → `init.sh`/CI（CONSTRAINTS.md 只做指针） |
+| Plan | `planning-and-task-breakdown` | 拆解 → `feature_list.json`（features + dependencies） |
+| Build | `incremental-implementation`、`test-driven-development`、`source-driven` / `doubt-driven`、`frontend-ui-engineering`、`api-and-interface-design` | 代码 + evidence |
+| Verify | `browser-testing-with-devtools`、`debugging-and-error-recovery` | 证据 → `progress.md`/CI |
+| Review | `code-review-and-quality`、`code-simplification`、`security-and-hardening`、`performance-optimization` | 结论 → 注册表状态 |
+| Ship | `git-workflow-and-versioning`、`ci-cd-and-automation`、`deprecation-and-migration`、`observability-and-instrumentation`、`shipping-and-launch` | 门禁与发布检查 |
+
+与 matt 体系并存时的取舍：
+
+- **与 matt 重复（matt 为主时不引入；无 matt 时翻转为可用，即上表）**：`interview-me`、`planning-and-task-breakdown`、`test-driven-development`、`code-review-and-quality`、`debugging-and-error-recovery`
+- **无条件不引入**：`using-agent-skills`（与 `AGENTS.md` 路由双写）、`context-engineering`（与本技能本体双写）、`documentation-and-adrs`（行内文档标准 vs 代码即文档；其 ADR 部分可用）
+- **改造后用**：`spec-driven-development`（PRD 必须落 `.scratch/`）、`idea-refine`（限概念萌芽期）
+- **注意**：`test-driven-development` 的 80/15/5 配额与"只做重要逻辑测试"的克制原则冲突，与用哪套生态无关
+
+模式回答"状态住哪"，技能生态回答"活怎么干"——两个正交维度，不因换生态而新增模式。
 
 ## 状态
 
