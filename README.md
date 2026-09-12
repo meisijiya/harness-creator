@@ -35,9 +35,25 @@
 
 ## 安装
 
+### 安装（推荐）
+
 ```bash
-npx skills add walkinglabs/learn-harness-engineering --skill harness-creator
+npx skills add meisijiya/harness-creator --skill harness-creator
 ```
+
+### 升级
+
+```bash
+npx skills update harness-creator
+```
+
+### 卸载
+
+```bash
+npx skills remove harness-creator
+```
+
+### 手动安装
 
 或将 `skills/harness-creator/` 复制到你的技能路径中。
 
