@@ -59,13 +59,23 @@ npx skills remove harness-creator
 
 ## 使用
 
+安装后，`harness-creator` 落在 agent 的全局技能目录下，默认是 `~/.agents/skills/harness-creator/`（Claude Code 为 `~/.claude/skills/harness-creator/`）。
+
+### 运行脚本
+
 ```bash
-node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
-node skills/harness-creator/scripts/validate-harness.mjs --target /path/to/project
-node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project --html /path/to/report.html
+# 从仓库根运行：使用仓库内的 scripts/
+node scripts/create-harness.mjs --target /path/to/project
+node scripts/validate-harness.mjs --target /path/to/project
+node scripts/run-benchmark.mjs --target /path/to/project --html /path/to/report.html
+
+# 从技能目录运行：使用已安装的 scripts/
+node ~/.agents/skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
+node ~/.agents/skills/harness-creator/scripts/validate-harness.mjs --target /path/to/project
+node ~/.agents/skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project --html /path/to/report.html
 ```
 
-这些脚本仅使用 Node.js 内置模块。将技能目录复制到其他仓库后即可直接运行。
+这些脚本仅使用 Node.js 内置模块，不需要额外安装依赖。
 
 ## 它会创建什么
 
