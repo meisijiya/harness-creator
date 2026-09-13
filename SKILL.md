@@ -64,6 +64,8 @@ node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
 
 脚本创建 registry 模式的最小骨架。tracker 模式在其基础上：删除 `feature_list.json`/`progress.md` 的强制要求，改为建立 `CONTEXT.md`、`docs/adr/` 与 `.scratch/`，并把状态跟踪指向 issue tracker。
 
+**AGENTS.md 章节级所有权**（tracker 模式与 matt setup 共存时）：matt 拥有 `## Agent skills` 块与 `docs/agents/*`；harness 拥有其余章节（启动工作流、工作规则、必需产物、完成定义、会话结束、验证命令、升级处理）。AGENTS.md 已存在时**合并而非跳过或覆写**：保留现有内容，只追加缺失的本方章节；CONTEXT.md/ADR 路由两处出现属互补（matt 定义布局，harness 定义阅读时机），不构成双写。
+
 输入：目标仓库路径、（可选）包管理器与验证命令。输出：四个产物 + 创建说明（含占位条目替换指引）。
 
 ### 审计现有 harness

@@ -143,7 +143,8 @@
         "不强制仓内 feature_list.json/progress.md，状态与依赖由 issue tracker（含 blocking 边）承接",
         "AGENTS.md 启动工作流路由 CONTEXT.md 与 ADR，且 CONTEXT.md 只承载代码表达不了的领域语言",
         "完成证据由 init.sh/CI 机器门禁承接，文本证据只是指向门禁结果的指针",
-        "交接为引用式临时文档（.scratch/handoff.md），任务完成随 worktree 删除"
+        "交接为引用式临时文档（.scratch/handoff.md），任务完成随 worktree 删除",
+        "AGENTS.md 与 matt setup 共存时合并而非覆写：`## Agent skills` 块保留，harness 章节追加，互不交叉"
       ]
     }
   ]
