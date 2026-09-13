@@ -145,7 +145,8 @@
         "完成证据由 init.sh/CI 机器门禁承接，文本证据只是指向门禁结果的指针",
         "交接为引用式临时文档（.scratch/handoff.md），任务完成随 worktree 删除",
         "AGENTS.md 与 matt setup 共存时合并而非覆写：`## Agent skills` 块保留，harness 章节追加，互不交叉",
-        "判定 tracker 即默认用户已自行运行 setup-matt-pocock-skills：本技能不调用、不询问安装、不提供仓内替代；状态源绑定可探测则绑定，否则挂起并提示用户先运行 setup"
+        "判定 tracker 即默认用户已自行运行 setup-matt-pocock-skills：本技能不调用、不询问安装、不提供仓内替代；状态源绑定可探测则绑定，否则挂起并提示用户先运行 setup",
+        "matt 名下产物（docs/agents/*、CONTEXT.md、docs/adr/、## Agent skills 块）不代建：缺失时列为待办并指引用户运行 setup；CONTEXT.md/ADR 属延迟创建，缺失不判为缺陷"
       ]
     },
     {
@@ -160,6 +161,21 @@
         "清账只作用于状态落点，ADR（只增不删）与 CONTEXT.md（持续更新）不动",
         "status=done 但缺 evidence 的条目标记为不可清，提示先补证据",
         "沉淀沿用委托原则：提示用户运行 matt/addyosmani 沉淀 skill，本技能只补未覆盖的落点，不重复写已有内容"
+      ]
+    },
+    {
+      "id": 13,
+      "name": "与 matt setup 共存：单一写入者与延迟创建",
+      "prompt": "仓库已经跑过 setup-matt-pocock-skills：有 docs/agents/issue-tracker.md 与 docs/agents/domain.md，AGENTS.md 里有 ## Agent skills 块，但还没有 CONTEXT.md。为这个项目建 harness。",
+      "expected_output": "判定为 tracker 模式（docs/agents/ 是信号，不因缺 CONTEXT.md 回退 registry）；只落 harness 自己的章节与 init.sh；matt 名下产物列为待办并指引用户运行 setup，不预建 CONTEXT.md/docs/adr/、不预建空 .scratch/、不写 ## Agent skills 块",
+      "files": [],
+      "expectations": [
+        "由 docs/agents/ 识别 tracker 模式，不因缺 CONTEXT.md 判定为 registry 或要求先补齐 CONTEXT.md",
+        "不预创建 CONTEXT.md 与 docs/adr/：它们由 matt 的 domain-modeling 延迟创建，缺失是正常状态",
+        "不预建空 .scratch/ 目录（matt 会把它读作本地 markdown 工单已在用的信号），只在 AGENTS.md 中约定其用途",
+        "不写 ## Agent skills 块、不改 docs/agents/*：保留 matt 现有内容，只追加 harness 章节",
+        "CONTEXT.md/ADR 沿用 matt 规范（## Language + _Avoid_），不改写成 harness 自有标题",
+        "目标已有 CLAUDE.md 时不另建 AGENTS.md"
       ]
     }
   ]

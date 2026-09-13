@@ -278,20 +278,31 @@ export function scoreHarness(files) {
   const legacyHandoff = byPath.get('session-handoff.md') || '';
   const scratchHandoff = byPath.get('.scratch/handoff.md') || '';
   const contextDoc = byPath.get('CONTEXT.md') || '';
+  // matt's setup-matt-pocock-skills owns docs/agents/* and creates CONTEXT.md/ADRs only
+  // lazily (via domain-modeling). Either artifact therefore proves tracker mode on its own:
+  // a repo where setup ran before harness-creator has docs/agents/ but no CONTEXT.md yet.
+  const domainRouting = byPath.get('docs/agents/domain.md') || '';
+  const issueTracker = byPath.get('docs/agents/issue-tracker.md') || '';
   const handoffMaterial = `${scratchHandoff}\n${legacyHandoff}`;
   const stateDocs = `${progress}\n${handoffMaterial}\n${contextDoc}`;
 
-  // Tracker mode: no feature registry, so CONTEXT.md is the state artifact and continuity
-  // lives in the ticket system + the AGENTS.md session-end routine. Scoring a tracker
-  // harness with registry-shaped checks would report a false "state" bottleneck and push
-  // users toward feature_list.json — the wrong mode. When tracker mode is detected, the
-  // state/scope checks below read AGENTS.md too and accept tracker vocabulary.
-  const trackerMode = !featureList && Boolean(contextDoc);
+  // Tracker mode: no feature registry, so the state artifact is CONTEXT.md or the tracker
+  // routing matt owns, and continuity lives in the ticket system + the AGENTS.md session-end
+  // routine. Scoring a tracker harness with registry-shaped checks would report a false
+  // "state" bottleneck and push users toward feature_list.json — the wrong mode. When tracker
+  // mode is detected, the state/scope checks below read AGENTS.md too and accept tracker
+  // vocabulary, and never require harness-shaped markers inside files matt owns.
+  const trackerMode = !featureList && Boolean(contextDoc || domainRouting || issueTracker);
   const stateScope = trackerMode ? `${stateDocs}\n${agents}` : stateDocs;
 
   const stateArtifactStructured = () => {
     if (jsonFeatureList(featureList, '').pass) return true;
-    return structuredHas(contextDoc, ['##', '术语', 'glossary', 'domain', '领域'], '').pass;
+    // matt's tracker routing is a generated, structured spec — accept it as-is rather than
+    // forcing a glossary heading that matt's CONTEXT-FORMAT never produces.
+    if (issueTracker.trim().length > 0) return true;
+    // CONTEXT.md: accept matt's canonical format (## Language + **Term**: + _Avoid_) as well
+    // as harness vocabulary, so a domain-modeling-authored file scores without edits.
+    return structuredHas(contextDoc, ['## Language', '## Terms', '术语', 'glossary', 'domain', '领域'], '').pass;
   };
 
   const checks = {
@@ -300,11 +311,11 @@ export function scoreHarness(files) {
       structuredHas(agents, ['Startup Workflow', 'Before writing code', '启动工作流', '编写代码前'], 'Startup workflow documented'),
       structuredHas(agents, ['Definition of Done', 'done only when', '完成定义'], 'Definition of done documented'),
       structuredHas(agents, ['Verification Commands', '验证命令', './init.sh', 'test', 'verify', '测试'], 'Verification commands discoverable'),
-      structuredHas(agents, ['feature_list.json', 'progress.md', 'CONTEXT.md'], 'State artifacts routed from instructions')
+      structuredHas(agents, ['feature_list.json', 'progress.md', 'CONTEXT.md', 'docs/agents/domain.md'], 'State artifacts routed from instructions')
     ],
     state: [
-      hasFile(byPath, ['feature_list.json', 'feature-list.json', 'CONTEXT.md'], 'State artifact exists (feature tracker or CONTEXT.md)'),
-      { pass: stateArtifactStructured(), message: 'State artifact is structured (valid feature JSON or CONTEXT.md glossary)' },
+      hasFile(byPath, ['feature_list.json', 'feature-list.json', 'CONTEXT.md', 'docs/agents/issue-tracker.md'], 'State artifact exists (feature registry, CONTEXT.md, or tracker routing)'),
+      { pass: stateArtifactStructured(), message: 'State artifact is structured (valid feature JSON, CONTEXT.md glossary, or tracker routing)' },
       {
         pass: trackerMode
           ? hasFile(byPath, ['.scratch/handoff.md', 'session-handoff.md'], '').pass
@@ -415,6 +426,16 @@ function jsonFeatureList(text, message) {
   }
 }
 
+// matt's setup-matt-pocock-skills edits CLAUDE.md when it exists and treats AGENTS.md and
+// CLAUDE.md as mutually exclusive ("never create AGENTS.md when CLAUDE.md already exists").
+// harness-creator follows the same invariant so the two skills never end up maintaining
+// divergent instruction files in one repo.
+export async function detectAgentFile(root, explicit) {
+  if (explicit) return explicit;
+  if (await exists(path.join(root, 'CLAUDE.md'))) return 'CLAUDE.md';
+  return 'AGENTS.md';
+}
+
 export async function loadHarnessFiles(root) {
   const candidates = [
     'AGENTS.md',
@@ -425,6 +446,8 @@ export async function loadHarnessFiles(root) {
     'progress.md',
     '.scratch/handoff.md',
     'session-handoff.md',
+    'docs/agents/domain.md',
+    'docs/agents/issue-tracker.md',
     'init.sh'
   ];
   const files = [];

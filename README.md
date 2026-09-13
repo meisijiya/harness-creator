@@ -91,7 +91,7 @@ node ~/.agents/skills/harness-creator/scripts/run-benchmark.mjs --target /path/t
 - `progress.md`（精简版：当前状态、证据、阻塞、下一步）
 - `init.sh`
 
-会话交接是约定而非仓库文件：引用式交接文档写在 `.scratch/handoff.md` 或临时目录。tracker 模式（`CONTEXT.md` + ADR + 工单系统承接状态，工单可本地可仓外）见 SKILL.md 的"两种模式"一节。
+会话交接是约定而非仓库文件：引用式交接文档写在 `.scratch/handoff.md` 或临时目录。tracker 模式（`CONTEXT.md` + ADR + 工单系统承接状态，工单可本地可仓外）见 SKILL.md 的"两种模式"一节。与 matt setup 共存时按**单一写入者**分工：matt 拥有 `docs/agents/*`、`CONTEXT.md`、`docs/adr/`、`## Agent skills` 块（其中 `CONTEXT.md`/ADR 由 domain-modeling **延迟创建**），本技能不代建，只落自己的章节与 `init.sh`；详见 `references/matt-coexistence.md`。
 
 `create-harness.mjs` 可检测常见的项目类型与包管理器。在基础验证命令层面支持 Node/npm/pnpm/yarn/bun、Python、Go、Rust、Maven、Gradle 和 .NET。
 
@@ -136,7 +136,9 @@ tracker 模式的默认搭配：
 | 会话交接 | `handoff` | `.scratch/handoff.md`（引用式） |
 | 大块工作规划 | `wayfinder` | 工单决策地图 |
 
-无信号的新仓库：harness-creator 先问"仓库用来做什么"判定模式；判 tracker 即默认用户已自行运行 `setup-matt-pocock-skills`（本技能不调用、不询问安装、不提供仓内替代），随后继续 harness 初始化。
+无信号的新仓库：harness-creator 先问"仓库用来做什么"判定模式；判 tracker 即默认用户已自行运行 `setup-matt-pocock-skills`（本技能不调用、不询问安装、不提供仓内替代），随后只落本方骨架，matt 名下产物列为待办。
+
+**为什么不复制 matt 的产物**：`setup-matt-pocock-skills` 创建 `docs/agents/*` 与 `## Agent skills` 块，而 `CONTEXT.md`/ADR 由 `domain-modeling` **延迟创建**（首个术语/决策定稿时才建）。若本技能也预建这些文件，就会出现两个写入者与两种方言（harness 的 `## 术语` vs matt 的 `## Language`）。因此规则是**单一写入者**：格式与创建时机归 matt，本技能引用而不复制。`create-harness.mjs` 同样遵循 matt 的互斥不变量——已有 `CLAUDE.md` 时不另建 `AGENTS.md`。完整分区、两个方向的顺序与反例见 `references/matt-coexistence.md`。
 
 ### 补充：[addyosmani/agent-skills](https://github.com/addyosmani/agent-skills)（registry 模式的工作流层）
 
@@ -173,6 +175,7 @@ tracker 模式的默认搭配：
 - [x] 双模式治理：registry（仓内注册表）与 tracker（工单驱动，CONTEXT.md + ADR）
 - [x] 常见技术栈的通用验证检测
 - [x] 整理仓库：只读清账扫描（`scan-housekeeping.mjs`）+ 按需沉淀（补齐为准）
+- [x] 与 matt setup 共存：单一写入者分区（matt 拥有 `docs/agents/*` 与 `CONTEXT.md`/ADR 的格式及延迟创建）
 - [ ] 可选的真实前后对照代理会话回放
 
 ## 文件

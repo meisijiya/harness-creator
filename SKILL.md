@@ -26,7 +26,7 @@ license: MIT
 | 状态 | `feature_list.json`、`progress.md`（精简版） | 当前功能、状态、证据、下一步 |
 | 验证 | `init.sh` 或 CI 门禁 | 声称完成前必须运行的检查；证据由机器承接 |
 | 范围 | 功能依赖关系与完成标准 | 防止越界与半途而废的工作 |
-| 生命周期 | 会话结束例程（更新状态文件 + 干净提交）；交接文档由用户按需生成，落 `.scratch/` | 让下一次会话可以重新启动 |
+| 生命周期 | 会话结束例程（更新状态 + 干净提交）；交接文档由用户按需生成，落 `.scratch/` | 让下一次会话可以重新启动 |
 
 ## 两种模式
 
@@ -34,16 +34,16 @@ harness 有两种状态治理模式。先用下面的信号探测，无法确定
 
 **Registry 模式（默认，自包含）**：状态事实来源在仓库内——`feature_list.json` 注册表 + 精简 `progress.md`。适用于任意仓库、任意代理、无 issue tracker 的项目。
 
-**Tracker 模式（Matt 工程流）**：状态与依赖由工单系统承接（本地或仓外，如 to-spec/to-tickets），仓库只保留两类长期资产——`CONTEXT.md`（领域语言，与代码互补）和 ADR（决策史，只增不删）；`.scratch/` 承载任务级材料（spec 草稿、交接文档），随任务或 worktree 删除。探测信号：存在 `CONTEXT.md`、ADR 目录或 `.scratch/`，或用户使用工单工作流。
+**Tracker 模式（Matt 工程流）**：状态与依赖由工单系统承接（本地或仓外，如 to-spec/to-tickets），仓库只保留两类长期资产——`CONTEXT.md`（领域语言，与代码互补）和 ADR（决策史，只增不删），二者均由 matt 的 `domain-modeling` **延迟创建**；`.scratch/` 承载任务级材料（spec 草稿、交接文档），随任务或 worktree 删除。探测信号：存在 `CONTEXT.md`、ADR 目录、`.scratch/` 或 matt 的 `docs/agents/`，或用户使用工单工作流。
 
 两种模式共享同一骨架：`AGENTS.md` 路由、验证门禁、范围规则、引用式交接。区别只在状态事实来源的位置。
 
 ## 第一步
 
-1. 检查已有内容：指令文件、功能/状态文件、验证命令、文档、`CONTEXT.md`/ADR/`.scratch`、包清单。→ 输出：现有产物清单。
+1. 检查已有内容：指令文件、功能/状态文件、验证命令、文档、`CONTEXT.md`/ADR/`.scratch/`/matt `docs/agents/`、包清单。→ 输出：现有产物清单。
 2. 判定模式：有探测信号按信号判；无信号（既无 `feature_list.json` 也无 `CONTEXT.md`/ADR/工单痕迹）时 🔴 CHECKPOINT——询问用户这个仓库用来做什么（产品形态、协作方式、是否有工单系统），据此判定模式，再生成任何文件。→ 输出：模式判定结论。
-3. 判定 tracker 模式即默认用户已自行运行 `setup-matt-pocock-skills`：本技能不调用、不询问安装、不提供仓内 tracker 替代。先落地两模式共有骨架（AGENTS.md 路由、`init.sh` 门禁、`.scratch` 约定），状态源绑定工单置于最后——可探测（见第 1 步）则直接绑定，暂未探测到则挂起并提示用户先运行 setup、完成后再补。其余缺失上下文仅在无法安全推断时询问。
-4. 优先采用最小化 harness。仅当用户的问题涉及跨会话记忆、工具权限安全、多代理协调或基准测试时，才加载对应参考文档并添加相应产物；除此之外一律不添加。→ 输出：本轮要创建的产物清单。
+3. 判定 tracker 模式即默认用户已自行运行 `setup-matt-pocock-skills`：本技能不调用、不询问安装、不提供仓内 tracker 替代。**matt 名下产物不代建**（`docs/agents/*`、`CONTEXT.md`、`docs/adr/`、`## Agent skills` 块；后两者延迟创建，缺失是正常状态），只落本方骨架（AGENTS.md 章节、`init.sh` 门禁、`.scratch` 约定），把 matt 名下缺失项列为待办并指引用户运行 setup；状态源可探测则绑定，否则挂起。→ 输出：本轮要创建的产物清单。
+4. 优先最小化 harness：仅当问题涉及跨会话记忆、权限安全、多代理协调或基准测试时，才加载对应参考并加产物；否则不加。其余缺失上下文仅在无法安全推断时询问。
 
 ## 常见任务
 
@@ -66,7 +66,7 @@ node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
 
 脚本生成 registry 骨架；tracker 模式按交付清单手工落地，不强制 `feature_list.json`/`progress.md`。
 
-**AGENTS.md 章节级所有权**（tracker 模式与 matt setup 共存时）：matt 拥有 `## Agent skills` 块与 `docs/agents/*`；harness 拥有其余章节（启动工作流、工作规则、必需产物、完成定义、会话结束、验证命令、升级处理）。AGENTS.md 已存在时**合并而非跳过或覆写**：保留现有内容，只追加缺失的本方章节；CONTEXT.md/ADR 路由两处出现属互补（matt 定义布局，harness 定义阅读时机），不构成双写。
+**与 matt setup 共存**：单一写入者分区——matt 拥有 `docs/agents/*`、`## Agent skills`、`CONTEXT.md`/`docs/adr/` 的格式与延迟创建；harness 拥有其余章节与 `init.sh`。顺序、指令文件不变量与反例见 [Matt Coexistence](references/matt-coexistence.md)。
 
 输入：目标仓库路径、（可选）包管理器与验证命令。输出：四个产物 + 创建说明（含占位条目替换指引）。
 
@@ -78,7 +78,7 @@ node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
 node skills/harness-creator/scripts/validate-harness.mjs --target /path/to/project
 ```
 
-报告五子系统得分、最低分子系统与最能提升可靠性的前 2-3 项改动。打分对两模式与中英文产物同样适用（benchmark 自检含英文 tracker 夹具常驻回归）。最低分只是候选瓶颈；先用失败记录或任务结果确认因果，再改。
+报告五子系统得分、最低分子系统与最能提升可靠性的前 2-3 项改动。打分对两模式与中英文产物同样适用。最低分只是候选瓶颈；先确认因果再改。
 
 输入：目标仓库。输出：五子系统得分、候选瓶颈、前 2-3 项改动。
 
@@ -91,7 +91,7 @@ node skills/harness-creator/scripts/render-assessment-html.mjs --target /path/to
 node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project --html /path/to/report.html
 ```
 
-需明确说明这是一种结构性基准测试：自检先搭一次性 harness 验证脚本端到端可用，再对目标与 eval 覆盖率评分；真实有效性仍需前后对照代理会话验证。
+需说明这是结构性基准测试：自检先验证脚本可用，再对目标与 eval 覆盖率评分；真实有效性仍需前后对照会话验证。
 
 输入：目标仓库与报告路径。输出：JSON/HTML 报告与结构性结论。
 
@@ -107,15 +107,16 @@ node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project 
 - 钩子、启动、长时间运行的工作：[Lifecycle & Bootstrap](references/lifecycle-bootstrap-pattern.md)
 - 不易察觉的失败模式：[Gotchas](references/gotchas.md)
 - 整理仓库（清账，用户显式触发）：[Housekeeping](references/housekeeping-pattern.md)
+- 与 matt 生态共存（tracker 分区所有权）：[Matt Coexistence](references/matt-coexistence.md)
 
 ## 异常与边界条件
 
-创建与审计中的异常处理（已有文件、栈识别失败、低分、模式信号矛盾、无权限、无 Node、自检失败、基线失败）见 [Failure Modes](references/failure-modes.md)。原则：先告知用户再执行，绝不静默跳过或静默降级。
+创建与审计中的异常处理（已有文件、栈识别、低分、模式矛盾、无权限、无 Node、自检失败）见 [Failure Modes](references/failure-modes.md)。原则：先告知再执行，绝不静默跳过或降级。
 
 ## 设计规则
 
 - 根指令文件保持简短：只做路由与不变量，而不是完整手册。
-- `CONTEXT.md` 承载领域语言：与代码互补的规范化用语，不重复代码已表达的内容；用 `## 术语` 小节逐条列出。
+- `CONTEXT.md` 承载领域语言：与代码互补、不重复代码已表达的内容；格式归 matt（`## Language` + `_Avoid_`），本技能引用不复制。
 - 决策进 ADR，不进进度日志；进度日志只留当前状态、证据、阻塞、下一步。
 - 项目文档（`design.md`、`docs/` 等）纳入治理：可执行约束进门禁，术语进 `CONTEXT.md`，决策进 ADR，意图类活文档指定 owner；与代码重复视为双写，过时即归档。
 - 任务级材料（spec 草稿、调研笔记）放 `.scratch/`，任务完成即删除。
@@ -144,11 +145,11 @@ harness 设计中不要做的事；交付前对照一次。
 
 ## 交付清单
 
-一个可用的最小化 harness 应为目标项目留下：
+最小化 harness 应为目标项目留下：
 
 **Registry 模式（基础）**
 
-- [ ] `AGENTS.md` 或 `CLAUDE.md`（路由状态产物与 `CONTEXT.md`/ADR）
+- [ ] `AGENTS.md` 或 `CLAUDE.md`（路由状态产物与 `CONTEXT.md`/ADR；已有 `CLAUDE.md` 则沿用）
 - [ ] `feature_list.json`
 - [ ] `progress.md`（精简版：当前状态、证据、阻塞、下一步）
 - [ ] `init.sh`
@@ -156,9 +157,9 @@ harness 设计中不要做的事；交付前对照一次。
 
 **Tracker 模式（附加或替代）**
 
-- [ ] `CONTEXT.md`（领域语言）
-- [ ] `docs/adr/`（决策记录）
-- [ ] `.scratch/`（任务级暂存区，随任务删除）
+- [ ] `CONTEXT.md`（领域语言）——matt 延迟创建，harness 不预建
+- [ ] `docs/adr/`（决策记录）——同上，首个 ADR 时才建
+- [ ] `.scratch/`（任务级暂存区，随任务删除）——约定文档化，不预建空目录
 - [ ] 状态与依赖指向工单系统（本地或仓外）
 - [ ] CI 或 `init.sh` 机器门禁承接完成证据
 

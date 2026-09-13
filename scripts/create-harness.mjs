@@ -3,6 +3,7 @@ import { chmod, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import {
   copyTemplate,
+  detectAgentFile,
   detectPackageManager,
   detectProject,
   exists,
@@ -18,21 +19,23 @@ if (args.help) {
   console.log(`Usage: node scripts/create-harness.mjs [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--force]
 
 Creates a minimal production harness (registry mode):
-  AGENTS.md or CLAUDE.md
+  AGENTS.md or CLAUDE.md (an existing CLAUDE.md is kept and preferred)
   feature_list.json
   progress.md
   init.sh
 
 Handoffs are a convention, not a repo file: write reference-style handoff docs
 to .scratch/handoff.md or the OS temp directory (see AGENTS.md, end-of-session).
-Tracker mode (CONTEXT.md + ADR + issue tracker) is documented in SKILL.md.
+Tracker mode is documented in SKILL.md: matt setup owns docs/agents/* and lazily creates
+CONTEXT.md/ADRs, so harness-creator never scaffolds them itself.
 
 Existing files are skipped unless --force is set.`);
   process.exit(0);
 }
 
 const target = path.resolve(args.target || args._[0] || process.cwd());
-const agentFile = args.agentFile || 'AGENTS.md';
+// CLAUDE.md wins when it already exists, matching setup-matt-pocock-skills; --agent-file overrides.
+const agentFile = await detectAgentFile(target, args.agentFile);
 const force = Boolean(args.force);
 const project = await detectProject(target);
 project.packageManager = detectPackageManager(target, args.packageManager);
