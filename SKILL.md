@@ -62,9 +62,9 @@ node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
 - `--agent-file CLAUDE.md` 用于面向 Claude 的项目。
 - `--package-manager npm|pnpm|yarn|bun` 用于自动检测结果不正确时。
 - `--commands "cmd one,cmd two"` 用于自定义验证命令。
-- `--force` 覆盖已存在文件。🔴 CHECKPOINT：使用 `--force` 前**必须**获得用户明确批准，并在执行前列出将被覆盖的文件清单。
+- `--force` 覆盖已存在文件。🔴 CHECKPOINT：使用前**必须**获得用户明确批准并列出将被覆盖的文件。
 
-脚本生成 registry 骨架；tracker 模式按交付清单手工落地，不强制 `feature_list.json`/`progress.md`。
+脚本生成 registry 骨架；tracker 模式跳过 `feature_list.json`/`progress.md`（`--mode tracker` 或见 `docs/agents/`），其余手工落地。
 
 **与 matt setup 共存**：单一写入者分区——matt 拥有 `docs/agents/*`、`## Agent skills`、`CONTEXT.md`/`docs/adr/` 的格式与延迟创建；harness 拥有其余章节与 `init.sh`。顺序、指令文件不变量与反例见 [Matt Coexistence](references/matt-coexistence.md)。
 

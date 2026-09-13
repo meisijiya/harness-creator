@@ -283,6 +283,7 @@ export function scoreHarness(files) {
   // a repo where setup ran before harness-creator has docs/agents/ but no CONTEXT.md yet.
   const domainRouting = byPath.get('docs/agents/domain.md') || '';
   const issueTracker = byPath.get('docs/agents/issue-tracker.md') || '';
+  const adrDir = byPath.has('docs/adr/');
   const handoffMaterial = `${scratchHandoff}\n${legacyHandoff}`;
   const stateDocs = `${progress}\n${handoffMaterial}\n${contextDoc}`;
 
@@ -292,7 +293,7 @@ export function scoreHarness(files) {
   // "state" bottleneck and push users toward feature_list.json — the wrong mode. When tracker
   // mode is detected, the state/scope checks below read AGENTS.md too and accept tracker
   // vocabulary, and never require harness-shaped markers inside files matt owns.
-  const trackerMode = !featureList && Boolean(contextDoc || domainRouting || issueTracker);
+  const trackerMode = !featureList && Boolean(contextDoc || domainRouting || issueTracker || adrDir);
   const stateScope = trackerMode ? `${stateDocs}\n${agents}` : stateDocs;
 
   const stateArtifactStructured = () => {
@@ -456,6 +457,12 @@ export async function loadHarnessFiles(root) {
     if (await exists(fullPath)) {
       files.push({ path: candidate, content: await readText(fullPath) });
     }
+  }
+  // matt creates docs/adr/ lazily — it can exist while CONTEXT.md still does not — so an ADR
+  // directory alone must still mark the repo as tracker. A directory is not readable as text,
+  // so record a marker entry that only the tracker-mode probe consults.
+  if (await exists(path.join(root, 'docs/adr'))) {
+    files.push({ path: 'docs/adr/', content: '', kind: 'dir' });
   }
   return files;
 }

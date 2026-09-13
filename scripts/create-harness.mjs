@@ -16,18 +16,20 @@ import {
 const args = parseArgs(process.argv.slice(2));
 
 if (args.help) {
-  console.log(`Usage: node scripts/create-harness.mjs [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--force]
+  console.log(`Usage: node scripts/create-harness.mjs [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--mode auto|registry|tracker] [--commands "a,b"] [--force]
 
-Creates a minimal production harness (registry mode):
+Creates a minimal production harness:
   AGENTS.md or CLAUDE.md (an existing CLAUDE.md is kept and preferred)
-  feature_list.json
-  progress.md
   init.sh
+  feature_list.json + progress.md — registry mode only
+
+Tracker mode (--mode tracker, or auto-detected when docs/agents/ exists) skips the registry
+state files: state lives in the ticket system, so writing feature_list.json/progress.md there
+would create a second state source. matt setup owns docs/agents/*; CONTEXT.md and docs/adr/
+are created lazily by matt's domain-modeling skill, so this script never scaffolds them.
 
 Handoffs are a convention, not a repo file: write reference-style handoff docs
 to .scratch/handoff.md or the OS temp directory (see AGENTS.md, end-of-session).
-Tracker mode is documented in SKILL.md: matt setup owns docs/agents/* and lazily creates
-CONTEXT.md/ADRs, so harness-creator never scaffolds them itself.
 
 Existing files are skipped unless --force is set.`);
   process.exit(0);
@@ -43,6 +45,15 @@ const commands = args.commands
   ? String(args.commands).split(',').map((command) => command.trim()).filter(Boolean)
   : verificationCommands(project, args.packageManager);
 
+// Tracker mode: state lives in the ticket system, so registry artifacts must NOT be scaffolded —
+// writing feature_list.json/progress.md would create a second state source, the exact drift this
+// skill forbids (references/matt-coexistence.md, counterexample #1). docs/agents/ is matt setup's
+// unambiguous marker; --mode tracker covers tracker repos configured by other means.
+const mode = args.mode ? String(args.mode) : 'auto';
+const mattSetup = await exists(path.join(target, 'docs/agents/domain.md'))
+  || await exists(path.join(target, 'docs/agents/issue-tracker.md'));
+const trackerMode = mode === 'tracker' || (mode === 'auto' && mattSetup);
+
 await mkdir(target, { recursive: true });
 
 const replacements = {
@@ -56,8 +67,19 @@ const replacements = {
 
 const results = [];
 results.push(await copyTemplate('agents.md', path.join(target, agentFile), replacements, { force }));
-results.push(await copyTemplate('feature-list.json', path.join(target, 'feature_list.json'), {}, { force }));
-results.push(await copyTemplate('progress.md', path.join(target, 'progress.md'), {}, { force }));
+
+if (trackerMode) {
+  for (const name of ['feature_list.json', 'progress.md']) {
+    results.push({
+      path: path.join(target, name),
+      status: 'skipped',
+      reason: mode === 'tracker' ? 'tracker mode (--mode tracker)' : 'tracker mode (docs/agents/ present)'
+    });
+  }
+} else {
+  results.push(await copyTemplate('feature-list.json', path.join(target, 'feature_list.json'), {}, { force }));
+  results.push(await copyTemplate('progress.md', path.join(target, 'progress.md'), {}, { force }));
+}
 
 const initPath = path.join(target, 'init.sh');
 if (force || !await exists(initPath)) {

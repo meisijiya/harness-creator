@@ -175,7 +175,8 @@
         "不预建空 .scratch/ 目录（matt 会把它读作本地 markdown 工单已在用的信号），只在 AGENTS.md 中约定其用途",
         "不写 ## Agent skills 块、不改 docs/agents/*：保留 matt 现有内容，只追加 harness 章节",
         "CONTEXT.md/ADR 沿用 matt 规范（## Language + _Avoid_），不改写成 harness 自有标题",
-        "目标已有 CLAUDE.md 时不另建 AGENTS.md"
+        "目标已有 CLAUDE.md 时不另建 AGENTS.md",
+        "不产生第二状态源：tracker 模式下不写 feature_list.json/progress.md（脚本在 --mode tracker 或检测到 docs/agents/ 时跳过），状态只指向工单系统"
       ]
     }
   ]
