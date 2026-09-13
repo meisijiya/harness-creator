@@ -64,7 +64,7 @@ node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
 - `--commands "cmd one,cmd two"` 用于自定义验证命令。
 - `--force` 覆盖已存在文件。🔴 CHECKPOINT：使用 `--force` 前**必须**获得用户明确批准，并在执行前列出将被覆盖的文件清单。
 
-脚本创建 registry 模式的最小骨架。tracker 模式在其基础上：删除 `feature_list.json`/`progress.md` 的强制要求，改为建立 `CONTEXT.md`、`docs/adr/` 与 `.scratch/`，并把状态跟踪指向 issue tracker。
+脚本创建 registry 模式最小骨架。tracker 模式改以 `CONTEXT.md`、`docs/adr/`、`.scratch/` 为仓内长期资产，状态指向工单系统，不强制 `feature_list.json`/`progress.md`。
 
 **AGENTS.md 章节级所有权**（tracker 模式与 matt setup 共存时）：matt 拥有 `## Agent skills` 块与 `docs/agents/*`；harness 拥有其余章节（启动工作流、工作规则、必需产物、完成定义、会话结束、验证命令、升级处理）。AGENTS.md 已存在时**合并而非跳过或覆写**：保留现有内容，只追加缺失的本方章节；CONTEXT.md/ADR 路由两处出现属互补（matt 定义布局，harness 定义阅读时机），不构成双写。
 
@@ -78,7 +78,7 @@ node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
 node skills/harness-creator/scripts/validate-harness.mjs --target /path/to/project
 ```
 
-报告五个子系统的得分、得分最低的领域，以及最能提升可靠性的前 2-3 项改动。打分对两种模式与中英文产物同样适用（Matt 技能生态的英文产出可直接审计，benchmark 自检含英文 tracker 夹具常驻回归）。将最低分视为候选瓶颈；在声称因果关系之前，先用失败记录、日志或任务结果加以确认。
+报告五子系统得分、最低分子系统与最能提升可靠性的前 2-3 项改动。打分对两模式与中英文产物同样适用（benchmark 自检含英文 tracker 夹具常驻回归）。最低分只是候选瓶颈；先用失败记录或任务结果确认因果，再改。
 
 输入：目标仓库。输出：五子系统得分、候选瓶颈、前 2-3 项改动。
 
@@ -106,14 +106,13 @@ node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project 
 - 任务委派与并行代理：[Multi-Agent Coordination](references/multi-agent-pattern.md)
 - 钩子、启动、长时间运行的工作：[Lifecycle & Bootstrap](references/lifecycle-bootstrap-pattern.md)
 - 不易察觉的失败模式：[Gotchas](references/gotchas.md)
+- 整理仓库（清账，用户显式触发）：[Housekeeping](references/housekeeping-pattern.md)
 
 ## 异常与边界条件
 
 创建与审计中的异常处理（已有文件、栈识别失败、低分、模式信号矛盾、无权限、无 Node、自检失败、基线失败）见 [Failure Modes](references/failure-modes.md)。原则：先告知用户再执行，绝不静默跳过或静默降级。
 
 ## 设计规则
-
-正向规则如下；"不要做什么"见「反例黑名单」。
 
 - 根指令文件保持简短：只做路由与不变量，而不是完整手册。
 - `CONTEXT.md` 承载领域语言：与代码互补的规范化用语，不重复代码已表达的内容。
@@ -123,6 +122,7 @@ node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project 
 - 交接文档由用户按需生成（matt handoff 或等价技能），代理不主动创建；格式引用而不复制——这是无 handoff 技能时的兜底原则。
 - 验证命令必须明确且可直接运行。
 - 状态文件追加/更新，不依赖聊天历史。
+- 整理（清账）只作用于状态落点：ADR 与 `CONTEXT.md` 永不清，删除前必经 🔴 CHECKPOINT 列清单获批准。
 
 ## 反例黑名单
 

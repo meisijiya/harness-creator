@@ -107,6 +107,18 @@ node ~/.agents/skills/harness-creator/scripts/run-benchmark.mjs --target /path/t
 
 得分是结构性的。它告诉你 harness 是否存在且自洽；不能替代真实的前后对照代理会话测试。
 
+## 它会整理什么
+
+`scan-housekeeping.mjs` 是「整理仓库」的**只读**扫描器——用户显式请求时使用，用于把仓库收敛回五个落点：
+
+```bash
+node ~/.agents/skills/harness-creator/scripts/scan-housekeeping.mjs --target /path/to/project --session-ref <会话起始 commit>
+```
+
+它只输出清单、不删任何东西：治理模式、五个落点的缺失项、`feature_list.json` 中「done 且有证据」（可清）／「done 无证据」（**不可清**，先补证据）／未完成的条目、`.scratch/` 的分级（current／stale／unverified），以及自 `--session-ref` 以来改动的文件（即本会话范围）。`--session-ref` 必须是**本会话起始 commit**，**不默认 `HEAD`**——省略时只有未提交改动算本会话，其余标为「无法判定」而非「陈旧」，以免把已提交的本会话内容误判为历史。
+
+清账的作用域**只有状态这一个落点**：ADR（只增不删）与 `CONTEXT.md`（持续更新）永不清；删除前必须列出「将删/将留」清单并经 🔴 CHECKPOINT 批准。沉淀按需进行——默认你已在需求对齐后用 matt/addyosmani 的沉淀 skill 完成，本技能只补缺口、不代调用他人 skill。完整流程见 `references/housekeeping-pattern.md`。
+
 ## 技能生态搭配
 
 harness-creator 管"产物落在哪、代理怎么启动、完成怎么验证"；怎么访谈、怎么拆工单、怎么写代码，交给专业 skill。
@@ -160,6 +172,7 @@ tracker 模式的默认搭配：
 - [x] 10+ 个评估用例（含 tracker 模式集成）
 - [x] 双模式治理：registry（仓内注册表）与 tracker（工单驱动，CONTEXT.md + ADR）
 - [x] 常见技术栈的通用验证检测
+- [x] 整理仓库：只读清账扫描（`scan-housekeeping.mjs`）+ 按需沉淀（补齐为准）
 - [ ] 可选的真实前后对照代理会话回放
 
 ## 文件
@@ -174,6 +187,7 @@ harness-creator/
 │   ├── validate-harness.mjs
 │   ├── render-assessment-html.mjs
 │   ├── run-benchmark.mjs
+│   ├── scan-housekeeping.mjs
 │   └── lib/harness-utils.mjs
 ├── templates/
 │   ├── agents.md

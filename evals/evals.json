@@ -147,6 +147,20 @@
         "AGENTS.md 与 matt setup 共存时合并而非覆写：`## Agent skills` 块保留，harness 章节追加，互不交叉",
         "判定 tracker 即默认用户已自行运行 setup-matt-pocock-skills：本技能不调用、不询问安装、不提供仓内替代；状态源绑定可探测则绑定，否则挂起并提示用户先运行 setup"
       ]
+    },
+    {
+      "id": 12,
+      "name": "整理仓库：只读清账扫描 + 按需沉淀",
+      "prompt": "帮我把这个仓库整理一下：状态文件里堆了不少历史，把该清的清了，该沉淀的沉淀到该去的地方。",
+      "expected_output": "先跑 scan-housekeeping.mjs 只读扫描导出「将删/将留」清单与未沉淀材料，经 🔴 CHECKPOINT 批准后才删除；作用域只有状态落点，ADR 与 CONTEXT.md 不动；沉淀以补齐为准、不代调用他人 skill",
+      "files": [],
+      "expectations": [
+        "先运行 scan-housekeeping.mjs（只读）并展示清单，不直接删除任何文件",
+        "删除前有显性 🔴 CHECKPOINT：逐条列出将删/将留清单并等待用户批准",
+        "清账只作用于状态落点，ADR（只增不删）与 CONTEXT.md（持续更新）不动",
+        "status=done 但缺 evidence 的条目标记为不可清，提示先补证据",
+        "沉淀沿用委托原则：提示用户运行 matt/addyosmani 沉淀 skill，本技能只补未覆盖的落点，不重复写已有内容"
+      ]
     }
   ]
 }
