@@ -281,6 +281,14 @@ export function scoreHarness(files) {
   const handoffMaterial = `${scratchHandoff}\n${legacyHandoff}`;
   const stateDocs = `${progress}\n${handoffMaterial}\n${contextDoc}`;
 
+  // Tracker mode: no feature registry, so CONTEXT.md is the state artifact and continuity
+  // lives in the ticket system + the AGENTS.md session-end routine. Scoring a tracker
+  // harness with registry-shaped checks would report a false "state" bottleneck and push
+  // users toward feature_list.json — the wrong mode. When tracker mode is detected, the
+  // state/scope checks below read AGENTS.md too and accept tracker vocabulary.
+  const trackerMode = !featureList && Boolean(contextDoc);
+  const stateScope = trackerMode ? `${stateDocs}\n${agents}` : stateDocs;
+
   const stateArtifactStructured = () => {
     if (jsonFeatureList(featureList, '').pass) return true;
     return structuredHas(contextDoc, ['##', '术语', 'glossary', 'domain', '领域'], '').pass;
@@ -297,11 +305,17 @@ export function scoreHarness(files) {
     state: [
       hasFile(byPath, ['feature_list.json', 'feature-list.json', 'CONTEXT.md'], 'State artifact exists (feature tracker or CONTEXT.md)'),
       { pass: stateArtifactStructured(), message: 'State artifact is structured (valid feature JSON or CONTEXT.md glossary)' },
-      hasFile(byPath, ['progress.md', '.scratch/handoff.md', 'session-handoff.md'], 'Continuity artifact exists (progress log or handoff)'),
-      structuredHas(stateDocs, ['Current State', '当前状态', 'Status', '现状', 'Where things stand', 'Where we are'], 'Current state snapshot recorded'),
       {
-        pass: structuredHas(stateDocs + '\n' + agents, ['Blockers', '阻塞', 'Risks', '风险', 'Open questions', 'Remaining'], '').pass
-          && structuredHas(stateDocs + '\n' + agents, ['Next', '下一步', '接下来'], '').pass,
+        pass: trackerMode
+          ? hasFile(byPath, ['.scratch/handoff.md', 'session-handoff.md'], '').pass
+            || structuredHas(agents, ['handoff', '交接'], '').pass
+          : hasFile(byPath, ['progress.md', '.scratch/handoff.md', 'session-handoff.md'], '').pass,
+        message: 'Continuity artifact exists (progress log, handoff file, or tracker-mode handoff convention)'
+      },
+      structuredHas(stateScope, ['Current State', '当前状态', 'Status', '现状', '状态', 'Where things stand', 'Where we are'], 'Current state snapshot recorded'),
+      {
+        pass: structuredHas(stateScope, ['Blockers', '阻塞', '依赖', 'Risks', '风险', 'Open questions', 'Remaining'], '').pass
+          && structuredHas(stateScope, ['Next', '下一步', '接下来', '需求进度', '继续'], '').pass,
         message: 'Blockers and next step captured'
       }
     ],
@@ -313,7 +327,7 @@ export function scoreHarness(files) {
       textHas(allText, ['Evidence', 'Verification Evidence', 'command and output', '证据', 'CI'], 'Verification evidence is recorded')
     ],
     scope: [
-      structuredHas(agents, ['One feature at a time', 'one-feature-at-a-time', '一次一个功能'], 'One-feature-at-a-time rule exists'),
+      structuredHas(agents, ['One feature at a time', 'one-feature-at-a-time', 'one requirement at a time', 'one ticket at a time', '一次一个功能', '一次一个需求', '一次一个工单'], 'One-feature-at-a-time rule exists'),
       textHas(featureList + contextDoc + agents, ['dependencies', '依赖', 'blocking'], 'Dependencies or blocking edges tracked'),
       textHas(agents + featureList, ['status', '状态'], 'Feature status is explicit'),
       structuredHas(agents, ['Stay in scope', 'scope', '保持在范围内', '范围'], 'Scope boundary documented'),
@@ -327,7 +341,7 @@ export function scoreHarness(files) {
           || structuredHas(agents, ['handoff', '交接'], '').pass,
         message: 'Handoff path documented (reference-style convention or file)'
       },
-      structuredHas(`${progress}\n${handoffMaterial}\n${agents}`, ['Last Updated', '最后更新', 'Current Objective', '当前目标', 'Recommended Next Step', '推荐的下一步', '下一步', 'Goal', 'Objective', 'Next steps'], 'Session restart markers exist'),
+      structuredHas(`${progress}\n${handoffMaterial}\n${agents}`, ['Last Updated', '最后更新', 'Current Objective', '当前目标', 'Recommended Next Step', '推荐的下一步', '下一步', '需求进度', 'Goal', 'Objective', 'Next steps'], 'Session restart markers exist'),
       textHas(agents + init, ['restartable', 'clean', 'Next steps', '重新启动', '干净'], 'Clean restart path documented')
     ]
   };

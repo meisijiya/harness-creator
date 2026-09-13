@@ -64,7 +64,7 @@ node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
 - `--commands "cmd one,cmd two"` 用于自定义验证命令。
 - `--force` 覆盖已存在文件。🔴 CHECKPOINT：使用 `--force` 前**必须**获得用户明确批准，并在执行前列出将被覆盖的文件清单。
 
-脚本创建 registry 模式最小骨架。tracker 模式改以 `CONTEXT.md`、`docs/adr/`、`.scratch/` 为仓内长期资产，状态指向工单系统，不强制 `feature_list.json`/`progress.md`。
+脚本生成 registry 骨架；tracker 模式按交付清单手工落地，不强制 `feature_list.json`/`progress.md`。
 
 **AGENTS.md 章节级所有权**（tracker 模式与 matt setup 共存时）：matt 拥有 `## Agent skills` 块与 `docs/agents/*`；harness 拥有其余章节（启动工作流、工作规则、必需产物、完成定义、会话结束、验证命令、升级处理）。AGENTS.md 已存在时**合并而非跳过或覆写**：保留现有内容，只追加缺失的本方章节；CONTEXT.md/ADR 路由两处出现属互补（matt 定义布局，harness 定义阅读时机），不构成双写。
 
@@ -115,7 +115,7 @@ node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project 
 ## 设计规则
 
 - 根指令文件保持简短：只做路由与不变量，而不是完整手册。
-- `CONTEXT.md` 承载领域语言：与代码互补的规范化用语，不重复代码已表达的内容。
+- `CONTEXT.md` 承载领域语言：与代码互补的规范化用语，不重复代码已表达的内容；用 `## 术语` 小节逐条列出。
 - 决策进 ADR，不进进度日志；进度日志只留当前状态、证据、阻塞、下一步。
 - 项目文档（`design.md`、`docs/` 等）纳入治理：可执行约束进门禁，术语进 `CONTEXT.md`，决策进 ADR，意图类活文档指定 owner；与代码重复视为双写，过时即归档。
 - 任务级材料（spec 草稿、调研笔记）放 `.scratch/`，任务完成即删除。
