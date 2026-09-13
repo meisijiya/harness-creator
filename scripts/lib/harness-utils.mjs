@@ -191,11 +191,28 @@ export function verificationCommands(project, explicitPackageManager) {
 }
 
 export function initScriptFromCommands(commands) {
-  const body = commands.map((command) => `echo "=== ${escapeForEcho(command)} ==="\n${command}`).join('\n\n');
+  const body = commands.map(renderVerificationStep).join('\n\n');
   return `#!/bin/bash
 set -e
 
+# Verification gate. It must exit 0 before any feature is claimed done.
+
 echo "=== Harness Initialization ==="
+
+# A script that package.json does not define yet is SKIPPED with a notice, so a
+# fresh skeleton runs cleanly; a real verification failure still aborts below.
+has_script() {
+  [ -f package.json ] && node -e "const s=require('./package.json').scripts||{};process.exit(s[process.argv[1]]?0:1)" "$1"
+}
+
+explain_failure() {
+  echo ""
+  echo "=== Verification FAILED ==="
+  echo "Either the baseline is broken, or this skeleton has no runnable check yet."
+  echo "Fix the baseline first, then re-run ./init.sh."
+  echo "Do NOT mark any feature done until ./init.sh exits 0."
+}
+trap explain_failure ERR
 
 ${body}
 
@@ -209,6 +226,35 @@ echo "4. Pick ONE unfinished feature to work on"
 echo "5. Implement only that feature"
 echo "6. Re-run verification before claiming done"
 `;
+}
+
+const INSTALL_STEP = /^(?:npm|pnpm|yarn|bun) (?:install|ci|i)$/;
+const SCRIPT_STEP = /^(?:npm|pnpm|yarn|bun) (?:run )?([\w:.-]+)$/;
+const NON_SCRIPT_ARGS = new Set(['install', 'ci', 'i', 'exec', 'dlx', 'create']);
+
+function renderVerificationStep(command) {
+  if (INSTALL_STEP.test(command)) {
+    return `if [ -d node_modules ]; then
+  echo "SKIP: ${escapeForEcho(command)} (node_modules already present)"
+else
+  echo "=== ${escapeForEcho(command)} ==="
+  ${command}
+fi`;
+  }
+
+  const script = command.match(SCRIPT_STEP);
+  if (script && !NON_SCRIPT_ARGS.has(script[1])) {
+    const name = script[1];
+    return `if has_script "${name}"; then
+  echo "=== ${escapeForEcho(command)} ==="
+  ${command}
+else
+  echo "SKIP: ${escapeForEcho(command)} (package.json has no \\"${name}\\" script yet)"
+fi`;
+  }
+
+  return `echo "=== ${escapeForEcho(command)} ==="
+${command}`;
 }
 
 function escapeForEcho(value) {

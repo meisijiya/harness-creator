@@ -55,6 +55,8 @@ harness 有两种状态治理模式。先用下面的信号探测，无法确定
 node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
 ```
 
+🔴 CHECKPOINT：写盘前先向用户展示将创建/跳过的产物清单，确认后再执行。
+
 选项：
 
 - `--agent-file CLAUDE.md` 用于面向 Claude 的项目。

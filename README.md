@@ -55,11 +55,18 @@ npx skills remove harness-creator
 
 ### 手动安装
 
-或将 `skills/harness-creator/` 复制到你的技能路径中。
+`npx skills add` 会自动探测运行时并把技能放进对应目录。手动安装时，把 `skills/harness-creator/` 复制到所用运行时的技能目录：
+
+| 运行时 | 技能目录 |
+|---|---|
+| 通用（Agent Skills 标准） | `~/.agents/skills/` |
+| Claude Code | `~/.claude/skills/` |
+
+其他 skills-compatible 运行时（Codex、Cursor、OpenClaw、Hermes、Gemini CLI、OpenCode 等）各有自己的技能目录，按其文档指定的路径放置即可。
 
 ## 使用
 
-安装后，`harness-creator` 落在 agent 的全局技能目录下，默认是 `~/.agents/skills/harness-creator/`（Claude Code 为 `~/.claude/skills/harness-creator/`）。
+安装后，`harness-creator` 位于所用运行时的技能目录（见上表），例如 `~/.agents/skills/harness-creator/`。
 
 ### 运行脚本
 

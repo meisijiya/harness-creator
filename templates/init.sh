@@ -1,7 +1,18 @@
 #!/bin/bash
 set -e
 
+# Verification gate. It must exit 0 before any feature is claimed done.
+
 echo "=== Harness Initialization ==="
+
+explain_failure() {
+  echo ""
+  echo "=== Verification FAILED ==="
+  echo "Either the baseline is broken, or this skeleton has no runnable check yet."
+  echo "Fix the baseline first, then re-run ./init.sh."
+  echo "Do NOT mark any feature done until ./init.sh exits 0."
+}
+trap explain_failure ERR
 
 if [ -f package.json ]; then
   if [ -f pnpm-lock.yaml ]; then
@@ -14,11 +25,15 @@ if [ -f package.json ]; then
     PM="npm"
   fi
 
-  echo "=== Installing dependencies with $PM ==="
-  if [ "$PM" = "npm" ]; then
-    npm install
+  if [ -d node_modules ]; then
+    echo "SKIP: dependency install (node_modules already present)"
   else
-    "$PM" install
+    echo "=== Installing dependencies with $PM ==="
+    if [ "$PM" = "npm" ]; then
+      npm install
+    else
+      "$PM" install
+    fi
   fi
 
   node -e "const s=require('./package.json').scripts||{}; process.exit(s.check||s.typecheck||s['type-check']?0:1)" && {
