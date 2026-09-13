@@ -26,7 +26,7 @@ license: MIT
 | 状态 | `feature_list.json`、`progress.md`（精简版） | 当前功能、状态、证据、下一步 |
 | 验证 | `init.sh` 或 CI 门禁 | 声称完成前必须运行的检查；证据由机器承接 |
 | 范围 | 功能依赖关系与完成标准 | 防止越界与半途而废的工作 |
-| 生命周期 | 引用式交接约定（`.scratch/handoff.md` 或临时目录）、会话结束例程 | 让下一次会话可以重新启动 |
+| 生命周期 | 会话结束例程（更新状态文件 + 干净提交）；交接文档由用户按需生成，落 `.scratch/` | 让下一次会话可以重新启动 |
 
 ## 两种模式
 
@@ -116,6 +116,7 @@ node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project 
 - 决策进 ADR，不进进度日志；进度日志只留当前状态、证据、阻塞、下一步。
 - 项目文档（`design.md`、`docs/` 等）纳入治理：可执行约束进门禁，术语进 `CONTEXT.md`，决策进 ADR，意图类活文档指定 owner；与代码重复视为双写，过时即归档。
 - 任务级材料（spec 草稿、调研笔记）放 `.scratch/`，任务完成即删除。
+- 交接文档由用户按需生成（matt handoff 或等价技能），代理不主动创建；格式引用而不复制——这是无 handoff 技能时的兜底原则。
 - 验证命令必须明确且可直接运行。
 - 状态文件追加/更新，不依赖聊天历史。
 
@@ -147,7 +148,7 @@ harness 设计中不要做的事；交付前对照一次。
 - [ ] `feature_list.json`
 - [ ] `progress.md`（精简版：当前状态、证据、阻塞、下一步）
 - [ ] `init.sh`
-- [ ] 引用式交接约定（`.scratch/handoff.md`，按需生成）
+- [ ] 交接落点约定（`.scratch/handoff.md`）：用户按需生成，代理启动时若存在必读
 
 **Tracker 模式（附加或替代）**
 

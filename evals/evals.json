@@ -19,12 +19,12 @@
       "id": 2,
       "name": "会话连续性设置",
       "prompt": "我的代理在会话之间会忘记一切。我需要持久记忆与会话交接，以便它能处理跨越多天的功能。",
-      "expected_output": "精简版 progress.md、引用式交接约定（.scratch/handoff.md 或临时目录）、记忆目录设置说明",
+      "expected_output": "精简版 progress.md、交接落点约定（.scratch/handoff.md，用户按需生成）、记忆目录设置说明",
       "files": [],
       "expectations": [
         "progress.md 只包含四类小节：当前状态、完成证据、阻塞/风险、下一步",
         "决策指向 ADR，变更文件指向 git log/diff，不在 progress.md 中重复记录",
-        "交接文档为引用式：写在 .scratch/ 或临时目录，引用 spec/ADR/提交而不复制内容",
+        "交接落点为 .scratch/ 或临时目录；交接文档由用户按需生成（handoff 技能），代理不主动创建，启动时若存在必读",
         "记忆目录创建说明（.claude/memory/ 或类似）",
         "解释了两步保存不变量（先主题文件后索引）"
       ]
