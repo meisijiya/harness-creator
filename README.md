@@ -142,6 +142,8 @@ tracker 模式的默认搭配：
 
 模式回答"状态住哪"，技能生态回答"活怎么干"——两个正交维度，不因换生态而新增模式。
 
+**治理权归属**：两种模式下 AGENTS.md 的 harness 章节（启动工作流、工作规则、完成定义、验证命令等）都归本技能全权管理——模式切换只改变状态事实来源的位置，不改变治理权。第三方 skill（含 addyosmani 系）只在五个落点内产出，不制定规则；被无条件拒绝的三个（`using-agent-skills`、`context-engineering`、`documentation-and-adrs`）正是治理竞争者。AGENTS.md 文件可与第三方块共存（合并规则见 SKILL.md「创建 harness」），但治理权威唯一。
+
 ## 状态
 
 - [x] 最小化 harness 脚手架
