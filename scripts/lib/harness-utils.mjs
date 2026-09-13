@@ -314,8 +314,8 @@ export function scoreHarness(files) {
       },
       structuredHas(stateScope, ['Current State', '当前状态', 'Status', '现状', '状态', 'Where things stand', 'Where we are'], 'Current state snapshot recorded'),
       {
-        pass: structuredHas(stateScope, ['Blockers', '阻塞', '依赖', 'Risks', '风险', 'Open questions', 'Remaining'], '').pass
-          && structuredHas(stateScope, ['Next', '下一步', '接下来', '需求进度', '继续'], '').pass,
+        pass: structuredHas(`${stateDocs}\n${agents}`, ['Blockers', '阻塞', '依赖', 'Risks', '风险', 'Open questions', 'Remaining'], '').pass
+          && structuredHas(`${stateDocs}\n${agents}`, ['Next', '下一步', '接下来', '需求进度', '继续'], '').pass,
         message: 'Blockers and next step captured'
       }
     ],
