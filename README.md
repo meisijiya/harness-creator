@@ -110,14 +110,14 @@ tracker 模式的默认搭配：
 
 | 环节 | 技能 | 产物落点 |
 |---|---|---|
-| 初始化工单基础设施 | `setup-matt-pocock-skills` | issue tracker、标签、领域文档布局 |
+| 初始化工单基础设施（用户自行运行） | `setup-matt-pocock-skills` | issue tracker、标签、领域文档布局 |
 | 需求访谈与领域建模 | `grill-me` / `grill-with-docs` | `CONTEXT.md` + ADR |
 | spec 与拆单 | `to-spec` / `to-tickets` | 工单（含 blocking 边） |
 | 实现与验证 | `implement` / `tdd` / `code-review` | 代码 + CI 证据 |
 | 会话交接 | `handoff` | `.scratch/handoff.md`（引用式） |
 | 大块工作规划 | `wayfinder` | 工单决策地图 |
 
-无信号的新仓库：harness-creator 先问"仓库用来做什么"判定模式；判 tracker 则先调 `setup-matt-pocock-skills` 初始化工单基础设施，再回到本技能继续 harness 初始化。
+无信号的新仓库：harness-creator 先问"仓库用来做什么"判定模式；判 tracker 即默认用户已自行运行 `setup-matt-pocock-skills`（本技能不调用、不询问安装、不提供仓内替代），随后继续 harness 初始化。
 
 ### 补充：[addyosmani/agent-skills](https://github.com/addyosmani/agent-skills)（registry 模式的工作流层）
 
