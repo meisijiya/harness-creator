@@ -26,15 +26,15 @@ license: MIT
 | 状态 | `feature_list.json`、`progress.md`（精简版） | 当前功能、状态、证据、下一步 |
 | 验证 | `init.sh` 或 CI 门禁 | 声称完成前必须运行的检查；证据由机器承接 |
 | 范围 | 功能依赖关系与完成标准 | 防止越界与半途而废的工作 |
-| 生命周期 | 会话结束例程（更新状态 + 干净提交）；交接文档由用户按需生成，落 `.scratch/` | 让下一次会话可以重新启动 |
+| 生命周期 | 会话结束例程（更新状态 + 干净提交）；交接文档按需生成 | 让下一次会话可以重新启动 |
 
 ## 两种模式
 
-两种状态治理模式；用下表信号探测。**无信号时不得自行默认**——见「第一步」第 2 步，用户无法应答才回落 registry：
+两种状态治理模式；用下表信号探测。**无信号时不得自行默认**——见「第一步」第 2 步，用户无法应答（未回复或表示不确定）才回落 registry：
 
 **Registry 模式（默认，自包含）**：状态事实来源在仓库内——`feature_list.json` 注册表 + 精简 `progress.md`。适用于无 issue tracker 的任意仓库与代理。
 
-**Tracker 模式（Matt 工程流）**：状态与依赖由工单系统承接（本地或仓外，如 to-spec/to-tickets），仓库只保留两类长期资产——`CONTEXT.md`（领域语言，与代码互补）和 ADR（决策史，只增不删），二者均由 matt 的 `domain-modeling` **延迟创建**；`.scratch/` 承载任务级材料（spec 草稿、交接文档），随任务或 worktree 删除。探测信号：matt `docs/agents/`、`CONTEXT.md`、ADR 目录，或用户使用工单工作流——`.scratch/` **不算**信号（第三方 skill 也会写它）。
+**Tracker 模式（Matt 工程流）**：状态与依赖由工单系统承接（本地或仓外，如 to-spec/to-tickets），仓库只保留两类长期资产——`CONTEXT.md`（领域语言，与代码互补）和 ADR（决策史，只增不删），二者均由 matt 的 `domain-modeling` **延迟创建**；`.scratch/` 承载任务级材料（spec 草稿、交接文档）。探测信号：matt `docs/agents/`、`CONTEXT.md`、ADR 目录，或用户使用工单工作流——`.scratch/` **不算**信号（第三方 skill 也会写它）。
 
 两模式共享骨架：`AGENTS.md` 路由、验证门禁、范围规则、引用式交接；区别只在状态来源位置。
 
@@ -67,7 +67,7 @@ node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
 
 脚本生成 registry 骨架；tracker 模式跳过 `feature_list.json`/`progress.md`（`--mode tracker` 或见 `docs/agents/`）。
 
-**与 matt setup 共存**：单一写入者分区——matt 拥有 `docs/agents/*`、`## Agent skills`、`CONTEXT.md`/`docs/adr/` 的格式与延迟创建；harness 拥有其余章节与 `init.sh`。反例见 [Matt Coexistence](references/matt-coexistence.md)。
+**与 matt setup 共存**：单一写入者分区——matt 拥有 `docs/agents/*`、`## Agent skills`、`CONTEXT.md`/`docs/adr/` 的格式与延迟创建。反例见 [Matt Coexistence](references/matt-coexistence.md)。
 
 输入：仓库路径与（可选）命令。输出：四个产物 + 创建说明。
 
@@ -105,7 +105,7 @@ node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project 
 - 任务委派与并行代理：[Multi-Agent Coordination](references/multi-agent-pattern.md)
 - 钩子、启动、长时间运行的工作：[Lifecycle & Bootstrap](references/lifecycle-bootstrap-pattern.md)
 - 不易察觉的失败模式：[Gotchas](references/gotchas.md)
-- 整理仓库（清账，用户显式触发）：[Housekeeping](references/housekeeping-pattern.md)
+- 整理仓库（清账，用户显式触发）：[Housekeeping](references/housekeeping-pattern.md)，扫描器 `scripts/scan-housekeeping.mjs`
 - 与 matt 生态共存（tracker 分区所有权）：[Matt Coexistence](references/matt-coexistence.md)
 - 产物落点的 git 跟踪对齐（一次性询问）：[Git Tracking Alignment](references/git-tracking-alignment.md)
 
