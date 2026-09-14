@@ -178,6 +178,40 @@
         "目标已有 CLAUDE.md 时不另建 AGENTS.md",
         "不产生第二状态源：tracker 模式下不写 feature_list.json/progress.md（脚本在 --mode tracker 或检测到 docs/agents/ 时跳过），状态只指向工单系统"
       ]
+    },
+    {
+      "id": 14,
+      "name": "产物落点的 git 跟踪对齐（一次性询问）",
+      "prompt": "帮这个仓库建 harness。五个落点里 `.scratch/` 我不想提交（已在 .gitignore 里），CONTEXT.md 和 ADR 要提交；另外我平时会在仓库里用 matt 的 teach 学东西。这些要不要纳入版本控制，你确认一下。",
+      "expected_output": "用 check-git-tracking.mjs 只读探测五落点与第三方产物的跟踪状态；`.gitignore` 命中项直接判「不跟踪」不再问，仅对游离/无法判定项做一次 🔴 CHECKPOINT；结论落 AGENTS.md 一节（指针 + 豁免清单），不新增落点；teach 工作区首选软路由到 .scratch/teach/，不可重定向则受控放行且不重复询问",
+      "files": [],
+      "expectations": [
+        "运行只读探测器 scripts/check-git-tracking.mjs（--paths 带上第三方产物），不靠猜、不改仓库",
+        "`.scratch/` 已被 .gitignore 命中，直接判为「不跟踪」并不再询问；只对 stray/unknown 项询问，且全程只问一次",
+        "识别出 `.gitignore` 对已提交路径无效：若落点已被跟踪又被列入 .gitignore，报 ineffective opt-out 并按跟踪处理，不判为不跟踪",
+        "对齐范围包含第三方 skill 产物：teach 工作区首选重定向到 .scratch/teach/；不可重定向时受控放行（登记豁免 + 用户裁决 + 追踪结论），而非直接拒绝或放任",
+        "受控放行不等于不看见：豁免项必须登记在 AGENTS.md（路径、产出 skill、性质、裁决、追踪状态），且其内容不进代理默认上下文",
+        "放行的硬门槛被守住：只有落点由 skill 自身硬规定、不可配置的产物才放行；可配置的一律先路由；放行项一旦承担状态/决策/术语职责即收归五落点",
+        "不越界治理：放行项的格式与内部结构由产出 skill 自治理，harness 不搬移、不改写、不套用五落点格式",
+        "结论只落两处——.gitignore（机制）与 AGENTS.md「产物追踪策略」节（指针与不变量）；不新建 git-tracking.json 等第六落点",
+        "声明询问职责由本技能独占：其他 skill（含 matt teach）只读结论、不重复询问",
+        "不代用户静默修改 .gitignore：给出确切行并经 🔴 CHECKPOINT 批准后才写；需 git rm --cached 时由用户决定"
+      ]
+    },
+    {
+      "id": 15,
+      "name": "第三方产物落点冲突：受控放行与用户裁决",
+      "prompt": "matt 的 teach 会把当前目录当成教学工作区，这跟你的五个落点约束是冲突的。我不想因为它就放弃用 teach，也不想让仓库变乱——怎么处理？",
+      "expected_output": "先路由（把 teach 工作目录重定向到 .scratch/teach/）；确实不可重定向时受控放行——harness 不治理其内容与形态、只在 AGENTS.md 登记豁免清单、由用户裁决原样保留还是收归治理，并给出追踪结论；放行不是第六落点，也不是\"不用管\"",
+      "files": [],
+      "expectations": [
+        "承认该 skill 的落点是硬约束：不把\"改造他人 skill\"当解法，也不因落点冲突就直接拒绝引入",
+        "分级处理：先尝试软路由（teach 以 .scratch/teach/ 为 cwd）；只有真正不可重定向时才走受控放行",
+        "受控放行三要素齐备：登记豁免清单（路径、产出 skill、性质/生命周期、用户裁决、追踪状态）、用户裁决（原样保留 vs 收归治理）、追踪结论（提交或显式 ignore）",
+        "明确不治理：harness 不搬移、不改写、不把放行项套进五落点格式，其内容与形态由产出 skill 自治理",
+        "放行项不进默认上下文（启动工作流不默认读取）；一旦代理从它读状态/决策/术语，即收归五落点，防第六事实来源",
+        "放行门槛三条（落点由 skill 自身硬规定 / 只服务该 skill 自身会话 / 能一行登记）任一缺失即回落为拒绝引入，不拿\"有硬约束\"当绕过落点纪律的借口"
+      ]
     }
   ]
 }

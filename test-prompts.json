@@ -13,5 +13,15 @@
     "id": 3,
     "prompt": "我的代理总说'完成了'但测试其实是失败的。评估我现在的 harness（只有一个简单的 AGENTS.md），告诉我先改什么。",
     "expected": "运行 validate-harness.mjs 或按五子系统评估，验证子系统应为瓶颈，给出证据门禁（init.sh/CI）与完成定义的优先改进项"
+  },
+  {
+    "id": 4,
+    "prompt": "建 harness 时顺便确认一下：五个落点的产物要不要提交到 git？我平时还会用 matt 的 teach 在这个仓库里学东西。",
+    "expected": "check-git-tracking.mjs 只读探测五落点 + 第三方产物；.gitignore 命中即判「不跟踪」且不再问，只有 stray/unknown 走一次 CHECKPOINT；结论落 AGENTS.md「产物追踪策略」节，teach 工作区首选路由到 .scratch/teach/，其他 skill 只读不问"
+  },
+  {
+    "id": 5,
+    "prompt": "matt 的 teach 把当前目录当教学工作区，这跟五个落点的约束冲突。我不想放弃用它，也不想仓库变乱，怎么办？",
+    "expected": "分级处理：先软路由（teach 以 .scratch/teach/ 为 cwd）；不可重定向才受控放行——harness 不治理其内容与形态，只在 AGENTS.md 登记豁免清单，由用户裁决原样保留或收归治理，并给出追踪结论；放行非第六落点，越界承担事实职责即收归"
   }
 ]

@@ -13,7 +13,8 @@ matt 的 `setup-matt-pocock-skills` 与本技能都会在 tracker 模式的仓�
 | `CONTEXT.md` | matt 的 `domain-modeling` | **延迟**——首个术语定稿时 | 不预创建；已存在则只读路由 |
 | `docs/adr/` | matt 的 `domain-modeling` | **延迟**——首个 ADR 需要时 | 不预创建；已存在则只读路由 |
 | `AGENTS.md`/`CLAUDE.md` 其余章节、`init.sh`/CI | harness | harness 运行时 | 写入/合并 |
-| `.scratch/` | 使用方（按需） | 首次写入任务材料时 | 只文档化约定，**不预建空目录** |
+| `.scratch/` | 使用方（按需） | 首次写入任务材料时 | 只文档化约定，**不预建空目录**；handoff/teach/research 等 skill 也会写入，**不构成 tracker 信号** |
+| 放行豁免项（如 `teach` 工作区，落点由 skill 自身硬规定） | **产出 skill / 使用方** | 首次写入时 | 只在 AGENTS.md 豁免清单里登记（路径、owner、用户裁决、追踪状态）；**不治理其内容与形态**，放行不等于不看见 |
 | `feature_list.json`、`progress.md` | harness | registry 模式 | tracker 模式不创建 |
 
 ## 两个方向的顺序
@@ -40,3 +41,5 @@ matt 规定：`CLAUDE.md` 存在则编辑它；否则编辑 `AGENTS.md`；两者
 | 把 matt 的 `docs/agents/*` 复制进 harness 参考文档 | 复制外部版本化规范，matt 升级即漂移 |
 | tracker 模式仍写 `feature_list.json`/`progress.md` | 与工单系统形成第二状态源（黑名单 #1） |
 | 因缺 `CONTEXT.md` 就把 matt 配置过的仓库判为非 tracker | 延迟创建被误读为缺陷，用户被推向错误模式 |
+| 仅凭 `.scratch/` 存在就判 tracker 模式 | 第三方 skill（teach/research/handoff）也会写它，会把 registry 仓库误判为 tracker |
+| 让 `teach` 等第三方 skill 在仓库根目录新建工作区，却不登记、不裁决 | 产物隐身：无人知道它是什么、归谁、跟不跟踪——比"落在落点外"本身更危险 |

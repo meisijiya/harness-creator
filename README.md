@@ -74,11 +74,13 @@ npx skills remove harness-creator
 # 从仓库根运行：使用仓库内的 scripts/
 node scripts/create-harness.mjs --target /path/to/project
 node scripts/validate-harness.mjs --target /path/to/project
+node scripts/check-git-tracking.mjs --target /path/to/project
 node scripts/run-benchmark.mjs --target /path/to/project --html /path/to/report.html
 
 # 从技能目录运行：使用已安装的 scripts/
 node ~/.agents/skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
 node ~/.agents/skills/harness-creator/scripts/validate-harness.mjs --target /path/to/project
+node ~/.agents/skills/harness-creator/scripts/check-git-tracking.mjs --target /path/to/project
 node ~/.agents/skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project --html /path/to/report.html
 ```
 
@@ -86,7 +88,7 @@ node ~/.agents/skills/harness-creator/scripts/run-benchmark.mjs --target /path/t
 
 ## 它会创建什么
 
-- `AGENTS.md` 或 `CLAUDE.md`
+- `AGENTS.md` 或 `CLAUDE.md`（含「产物追踪策略」一节，见下）
 - `feature_list.json`
 - `progress.md`（精简版：当前状态、证据、阻塞、下一步）
 - `init.sh`
@@ -106,6 +108,39 @@ node ~/.agents/skills/harness-creator/scripts/run-benchmark.mjs --target /path/t
 5. 生命周期
 
 得分是结构性的。它告诉你 harness 是否存在且自洽；不能替代真实的前后对照代理会话测试。
+
+## 它会对齐什么（只问一次）
+
+五个落点是产物的合法落点，但"落在仓库里"不等于"该进版本控制"。`check-git-tracking.mjs` 是**只读**探测器，逐落点给出五种状态：
+
+| 状态 | 含义 | 是否询问 |
+|---|---|---|
+| `tracked` | 已在 git 索引中 | 不问 |
+| `ignored` | 被 ignore 源命中（`.gitignore`、`.git/info/exclude`、全局 excludes） | **视为用户已选择「不跟踪」**，不问 |
+| `stray` | 存在，却既未提交也未忽略（游离态） | 🔴 必问 |
+| `absent` | 尚未产生，按默认语义执行 | 不问 |
+| `unknown` | git 不可用或非仓库 | 🔴 问一次 |
+
+**询问职责唯一**：这次对齐由 harness-creator **独占处理，且每个项目只问一次**。结论有两处载体——`.gitignore`（机制）与 AGENTS.md 的「产物追踪策略」节（指针与不变量）；后者存在即表示已对齐，因此其他 skill（含 matt 的 `teach`）**只读不问**，避免同一策略被反复询问、结论分散成第二事实源。
+
+第三条边界值得单独说：`.gitignore` **只对未跟踪路径有效**。已提交的路径即使写进 `.gitignore` 也仍被跟踪，探测器会报 `ineffective opt-out`——此时不能判为「不跟踪」，要么按跟踪处理，要么由用户决定 `git rm --cached`（本技能不代做）。
+
+覆盖范围不止五个落点，还包括会往仓库里写东西的第三方 skill。处理顺序是**先路由、再放行、最后拒绝**：
+
+1. **先路由**：产物落点可配置、可重定向 → 路由进五落点之一（多数情况）。
+2. **受控放行**：产出 skill 自带**硬约束**（落点由它自身规定、不可改造，如 `teach` 的「以当前目录为工作区」）→ 放行，但 harness **不治理**其内容与形态（由产出 skill 自治理），只**审视**：登记豁免清单、由用户裁决"原样保留"还是"收归治理"，并给出追踪结论。
+3. **拒绝**：既路由不进、也援引不出硬约束 → 拒绝引入（反例 #9）。
+
+放行不是第六个落点，也**不是"不用管"**：门槛有三条（硬约束 / 该产物只服务 skill 自身会话 / 能一行登记），漏掉登记、裁决、追踪结论任何一项即回落为"拒绝引入"。豁免项一旦被代理当作项目知识读取（承担状态、决策或术语职责），立即收归五落点。
+
+| 来源 | 产物 | 路由 |
+|---|---|---|
+| matt `teach` | 教学工作区（原文：以**当前目录**为有状态工作区） | 首选软路由到 `.scratch/teach/`；不可重定向则受控放行（登记豁免 + 用户裁决 + 追踪结论） |
+| matt `research` / `prototype` / `improve-codebase-architecture` / `to-questionnaire` | 引用式 md、HTML 原型、HTML 报告、问卷 | `.scratch/` |
+| matt `wizard` | 交互式 bash 向导 | 需裁决（可提交则该跟踪） |
+| addyosmani `constraint-driven-development` | `CONSTRAINTS.md` | 约束进 `init.sh`/CI，文件只作指针；留在根目录即落点外，必问 |
+
+完整判定表、放行门槛、路由理由、反例与边界见 `references/git-tracking-alignment.md`。
 
 ## 它会整理什么
 
@@ -134,7 +169,11 @@ tracker 模式的默认搭配：
 | spec 与拆单 | `to-spec` / `to-tickets` | 工单（含 blocking 边） |
 | 实现与验证 | `implement` / `tdd` / `code-review` | 代码 + CI 证据 |
 | 会话交接 | `handoff` | `.scratch/handoff.md`（引用式） |
+| 教学与调研 | `teach` / `research` | `.scratch/teach/`、`.scratch/` |
+| 原型与报告 | `prototype` / `improve-codebase-architecture` | `.scratch/` |
 | 大块工作规划 | `wayfinder` | 工单决策地图 |
+
+`teach` 是这一层里最需要约定的一个：它把**当前目录**当作有状态教学工作区（这是它的硬约束，不可配置），直接在仓库根目录运行就会把教学状态倒进默认上下文。约定分两级——首选把工作目录重定向到 `.scratch/teach/`；确实无法重定向时**受控放行**：登记进 AGENTS.md 的豁免清单、由你裁决原样保留或收归治理，并明确其追踪状态。无论哪级，**它都不再自行询问**是否纳入版本控制——追踪策略已由 harness-creator 一次性对齐（见「它会对齐什么」）。
 
 无信号的新仓库：harness-creator 先问"仓库用来做什么"判定模式；判 tracker 即默认用户已自行运行 `setup-matt-pocock-skills`（本技能不调用、不询问安装、不提供仓内替代），随后只落本方骨架，matt 名下产物列为待办。
 
@@ -176,6 +215,7 @@ tracker 模式的默认搭配：
 - [x] 常见技术栈的通用验证检测
 - [x] 整理仓库：只读清账扫描（`scan-housekeeping.mjs`）+ 按需沉淀（补齐为准）
 - [x] 与 matt setup 共存：单一写入者分区（matt 拥有 `docs/agents/*` 与 `CONTEXT.md`/ADR 的格式及延迟创建）
+- [x] 产物落点的 git 跟踪对齐：只读探测（`check-git-tracking.mjs`）+ 每项目一次性询问，含 `teach` 等第三方产物
 - [ ] 可选的真实前后对照代理会话回放
 
 ## 文件
@@ -191,6 +231,7 @@ harness-creator/
 │   ├── render-assessment-html.mjs
 │   ├── run-benchmark.mjs
 │   ├── scan-housekeeping.mjs
+│   ├── check-git-tracking.mjs
 │   └── lib/harness-utils.mjs
 ├── templates/
 │   ├── agents.md

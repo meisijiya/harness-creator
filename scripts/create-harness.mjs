@@ -16,7 +16,7 @@ import {
 const args = parseArgs(process.argv.slice(2));
 
 if (args.help) {
-  console.log(`Usage: node scripts/create-harness.mjs [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--mode auto|registry|tracker] [--commands "a,b"] [--force]
+  console.log(`Usage: node scripts/create-harness.mjs [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--mode auto|registry|tracker] [--tracking "CONCLUSION"] [--commands "a,b"] [--force]
 
 Creates a minimal production harness:
   AGENTS.md or CLAUDE.md (an existing CLAUDE.md is kept and preferred)
@@ -27,6 +27,10 @@ Tracker mode (--mode tracker, or auto-detected when docs/agents/ exists) skips t
 state files: state lives in the ticket system, so writing feature_list.json/progress.md there
 would create a second state source. matt setup owns docs/agents/*; CONTEXT.md and docs/adr/
 are created lazily by matt's domain-modeling skill, so this script never scaffolds them.
+
+--tracking records the one-time git-tracking alignment conclusion in the AGENTS.md
+"## 产物追踪策略" section. Omit it and the section is written as pending: harness-creator
+asks the question once and fills the conclusion in. See references/git-tracking-alignment.md.
 
 Handoffs are a convention, not a repo file: write reference-style handoff docs
 to .scratch/handoff.md or the OS temp directory (see AGENTS.md, end-of-session).
@@ -62,7 +66,14 @@ const replacements = {
     ? 'Project harness for reliable agent-assisted development.'
     : `Project harness for reliable agent-assisted development in a ${project.stack} codebase.`,
   VERIFICATION_COMMANDS: commands.map((command) => `- \`${command}\``).join('\n'),
-  PRIMARY_VERIFICATION_COMMAND: './init.sh'
+  PRIMARY_VERIFICATION_COMMAND: './init.sh',
+  // The tracking-alignment conclusion is filled by the one-time question harness-creator asks
+  // before writing, or supplied up front with --tracking. Leaving it marked as pending is the
+  // signal that the question has NOT been asked yet, so a later session asks it exactly once
+  // instead of re-deriving an answer (references/git-tracking-alignment.md).
+  TRACKING_STATUS: args.tracking
+    ? String(args.tracking)
+    : '待对齐——由 harness-creator 一次性询问后填入；此字样存在即表示尚未询问'
 };
 
 const results = [];
@@ -99,4 +110,12 @@ for (const command of commands) {
 console.log('');
 for (const result of results) {
   console.log(`${result.status.toUpperCase()} ${path.relative(target, result.path)}${result.reason ? ` (${result.reason})` : ''}`);
+}
+
+if (!args.tracking) {
+  console.log('');
+  console.log('Git tracking alignment: pending.');
+  console.log('  Run: node scripts/check-git-tracking.mjs --target ' + target);
+  console.log('  Then ask ONCE which landing points stay untracked (.gitignore match = opt-out)');
+  console.log(`  and record the conclusion in ${agentFile} → "## 产物追踪策略".`);
 }
