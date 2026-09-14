@@ -119,7 +119,7 @@ node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project 
 - `CONTEXT.md` 承载领域语言：与代码互补、不重复代码已表达的内容；格式归 matt（`## Language` + `_Avoid_`），本技能引用不复制。
 - 决策进 ADR，不进进度日志；进度日志只留当前状态、证据、阻塞、下一步。
 - 项目文档（`design.md`、`docs/`）纳入治理：约束进门禁、术语进 `CONTEXT.md`、决策进 ADR、活文档指定 owner；与代码重复视为双写，过时即归档。
-- 任务级材料（spec 草稿、调研笔记）放 `.scratch/`，任务完成即删除。
+- 任务级材料（spec 草稿、调研笔记）放 `.scratch/`，任务完成或 worktree 关闭即删。
 - 交接文档由用户按需生成（matt handoff 或等价技能），代理不主动创建；格式引用而不复制。
 - 验证命令必须明确且可直接运行。
 - 状态文件追加/更新，不依赖聊天历史。
