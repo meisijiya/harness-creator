@@ -30,7 +30,7 @@ license: MIT
 
 ## 两种模式
 
-两种状态治理模式；先用下面的信号探测，无法确定时默认 registry：
+两种状态治理模式；用下表信号探测。**无信号时不得自行默认**——见「第一步」第 2 步，用户无法应答才回落 registry：
 
 **Registry 模式（默认，自包含）**：状态事实来源在仓库内——`feature_list.json` 注册表 + 精简 `progress.md`。适用于无 issue tracker 的任意仓库与代理。
 
@@ -41,8 +41,8 @@ license: MIT
 ## 第一步
 
 1. 检查已有内容：指令文件、功能/状态文件、验证命令、文档、`CONTEXT.md`/ADR/matt `docs/agents/`、包清单。→ 输出：现有产物清单。
-2. 判定模式：有探测信号按信号判；无信号（既无 `feature_list.json` 也无 `CONTEXT.md`/ADR/工单痕迹）时 🔴 CHECKPOINT——询问仓库用途（产品形态、协作方式、是否有工单系统），据此判定模式再生成文件。→ 输出：模式判定结论。
-3. 判定 tracker 即默认用户已自行运行 `setup-matt-pocock-skills`：本技能不调用、不询问安装、不提供仓内替代。**matt 名下产物不代建**（`docs/agents/*`、`CONTEXT.md`、`docs/adr/`、`## Agent skills` 块，后两者延迟创建），只落本方骨架（AGENTS.md 章节、`init.sh` 门禁、`.scratch` 约定），缺失项列待办并指引用户运行 setup。→ 输出：本轮要创建的产物清单。
+2. 判定模式：**有信号**按信号判；**无信号**（既无 `feature_list.json` 也无 `CONTEXT.md`/ADR/工单痕迹）→ 🔴 CHECKPOINT 询问仓库用途（产品形态、协作方式、有无工单系统），**得到答复前不写盘**；信号矛盾按最强信号判。→ 输出：模式判定结论。
+3. 判定 tracker 即默认用户已运行 `setup-matt-pocock-skills`：不调用、不询问安装、不提供仓内替代。**matt 名下产物不代建**（`docs/agents/*`、`CONTEXT.md`、`docs/adr/`、`## Agent skills` 块），只落本方骨架（AGENTS.md 章节、`init.sh` 门禁、`.scratch` 约定），缺失项列待办并指引运行 setup。→ 输出：本轮产物清单。
 4. 优先最小化：仅当涉及跨会话记忆、权限安全、多代理协调或基准测试时，才加载对应参考并加产物；否则不加。其余缺失上下文仅在无法安全推断时询问。
 5. 追踪对齐（一次性，见下方参考）：写盘前运行 `scripts/check-git-tracking.mjs` 探测五个落点与第三方产物；🔴 CHECKPOINT 只问一次，`.gitignore` 命中即判「不跟踪」，结论落 AGENTS.md 的指针与豁免清单，其余 skill 只读不问。→ 输出：追踪策略表。
 
