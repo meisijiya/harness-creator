@@ -98,20 +98,20 @@ node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project 
 
 仅加载解决当前问题所需的参考文档：
 
-- 跨会话记忆：[Memory Persistence](references/memory-persistence-pattern.md)
-- 可复用工作流（技能形式）：[Skill Runtime](references/skill-runtime-pattern.md)
-- 权限、工具、并发：[Tool Registry & Safety](references/tool-registry-pattern.md)
-- 上下文预算与渐进式披露：[Context Engineering](references/context-engineering-pattern.md)
-- 任务委派与并行代理：[Multi-Agent Coordination](references/multi-agent-pattern.md)
-- 钩子、启动、长时间运行的工作：[Lifecycle & Bootstrap](references/lifecycle-bootstrap-pattern.md)
-- 不易察觉的失败模式：[Gotchas](references/gotchas.md)
-- 整理仓库（清账，用户显式触发）：[Housekeeping](references/housekeeping-pattern.md)，扫描器 `scripts/scan-housekeeping.mjs`
-- 与 matt 生态共存（tracker 分区所有权）：[Matt Coexistence](references/matt-coexistence.md)
-- 产物落点的 git 跟踪对齐（一次性询问）：[Git Tracking Alignment](references/git-tracking-alignment.md)
+- 跨会话记忆：`references/memory-persistence-pattern.md`
+- 可复用工作流（技能形式）：`references/skill-runtime-pattern.md`
+- 权限、工具、并发：`references/tool-registry-pattern.md`
+- 上下文预算与渐进式披露：`references/context-engineering-pattern.md`
+- 任务委派与并行代理：`references/multi-agent-pattern.md`
+- 钩子、启动、长时间运行的工作：`references/lifecycle-bootstrap-pattern.md`
+- 不易察觉的失败模式：`references/gotchas.md`
+- 整理仓库（清账，用户显式触发）：`references/housekeeping-pattern.md`，扫描器 `scripts/scan-housekeeping.mjs`
+- 与 matt 生态共存（tracker 分区所有权）：`references/matt-coexistence.md`
+- 产物落点的 git 跟踪对齐（一次性询问）：`references/git-tracking-alignment.md`
 
 ## 异常与边界条件
 
-创建与审计中的异常见 [Failure Modes](references/failure-modes.md)。原则：先告知再执行，绝不静默跳过或降级。
+创建与审计中的异常见 [Failure Modes](references/failure-modes.md)。以下任一情况**先读它再动手**：已有同名文件或第三方块、模式信号矛盾或缺失、追踪报 `stray`/`unknown`、第三方产物出落点（含 `teach`）、`validate` 低于阈值、环境无 Node。**第三方工具存在不构成模式信号**——无信号即走第 2 步的 🔴 CHECKPOINT。原则：先告知再执行，绝不静默跳过或降级。
 
 ## 设计规则
 
@@ -133,16 +133,16 @@ harness 设计中不要做的事；交付前对照一次。
 
 | # | 反模式 | 为什么不要做 | 替代做法 |
 |---|---|---|---|
-| 1 | 状态双写：同一事实同时记在 `feature_list.json`、`progress.md`、交接文档多处 | 双写必然漂移，代理读到互相矛盾的材料 | 每个事实只有一个落点：状态→注册表，证据→`progress.md`/CI，决策→ADR，变更→git |
-| 2 | 把会话交接长期留在仓库默认上下文（如仓内 `session-handoff.md` 常驻） | 过期交接成为噪声事实来源 | 引用式交接到 `.scratch/` 或临时目录：只写增量，用路径/URL 引用 spec、ADR、提交与 diff，不复制内容；任务完成即删 |
-| 3 | 无证据标记功能完成 | "声称完成但测试没过"是要防的头号失败 | `evidence` 必填：命令+结果摘要或 CI 链接；无证据不得标 `done` |
+| 1 | 状态双写：同一事实记在注册表、进度、交接文档多处 | 双写必然漂移，代理读到互相矛盾的材料 | 每个事实只有一个落点：状态→注册表，证据→`progress.md`/CI，决策→ADR，变更→git |
+| 2 | 把会话交接长期留在仓库默认上下文（如仓内 `session-handoff.md` 常驻） | 过期交接成为噪声事实来源 | 引用式交接到 `.scratch/` 或临时目录：只写增量，用路径/URL 引用 spec、ADR、提交与 diff，不复制内容；完成即删 |
+| 3 | 无证据标记功能完成 | "声称完成但测试没过"是头号失败 | `evidence` 必填：命令+结果摘要或 CI 链接；无证据不得标 `done` |
 | 4 | 把项目事实写进本 skill 或让 skill 引用特定项目 | 混入项目事实即腐化 | 项目事实只放目标仓库的 `AGENTS.md`/`CONTEXT.md`/ADR |
 | 5 | 无多代理所有权边界时同时推进多个功能 | 越界与半途工作的主要来源 | 一次一个活动功能；多代理必须先定义所有权边界 |
 | 6 | 为通过 `validate` 审计堆砌关键词 | 审计只看结构化行，堆词无效 | 真实落地 harness，审计只是体检不是目标 |
 | 7 | 静默覆盖已有文件、静默跳过异常 | 破坏用户工作且无法追溯 | 默认跳过+告知；`--force` 走 🔴 CHECKPOINT；异常按 failure-modes 处理 |
 | 8 | 把文字说明当约束的唯一载体 | 代理可能没读到或误解说明 | 能写成测试/Schema/门禁的约束一律进 `init.sh`/CI，文字只是指针 |
 | 9 | 引入产物落在五个落点之外的第三方 skill | 制造第六个事实来源；他人 skill 无法改造 | 先路由回落点；skill 自带硬约束时**受控放行**（放行不治理、登记豁免、用户裁决、追踪有结论），其余拒绝 |
-| 10 | 让第三方 skill 自行询问产物追踪策略 | 重复询问、结论分散，跟踪状态成为第二事实源 | 对齐询问由本技能独占一次；结论落 AGENTS.md，其余 skill 只读不问 |
+| 10 | 让第三方 skill 自行询问产物追踪策略 | 重复询问，结论分散成第二事实源 | 本技能独占询问一次；结论落 AGENTS.md，其余 skill 只读不问 |
 
 ## 交付清单
 
