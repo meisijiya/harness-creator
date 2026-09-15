@@ -26,10 +26,12 @@ Creates a minimal production harness:
   init.sh
   feature_list.json + progress.md — registry mode only
 
-Tracker mode (--mode tracker, or auto-detected when docs/agents/ exists) skips the registry
-state files: state lives in the ticket system, so writing feature_list.json/progress.md there
-would create a second state source. matt setup owns docs/agents/*; CONTEXT.md and docs/adr/
-are created lazily by matt's domain-modeling skill, so this script never scaffolds them.
+Tracker mode (--mode tracker, or auto-detected from docs/agents/*, CONTEXT.md or docs/adr/)
+skips the registry state files: state lives in the ticket system, so writing
+feature_list.json/progress.md there would create a second state source. An existing
+feature_list.json wins over those signals. matt setup owns docs/agents/*; CONTEXT.md and
+docs/adr/ are created lazily by matt's domain-modeling skill, so this script never scaffolds
+them.
 
 --tracking records the one-time git-tracking alignment conclusion in the AGENTS.md
 "## 产物追踪策略" section. Omit it and the section is written as pending: harness-creator
@@ -58,12 +60,26 @@ const commands = args.commands
 
 // Tracker mode: state lives in the ticket system, so registry artifacts must NOT be scaffolded —
 // writing feature_list.json/progress.md would create a second state source, the exact drift this
-// skill forbids (references/matt-coexistence.md, counterexample #1). docs/agents/ is matt setup's
-// unambiguous marker; --mode tracker covers tracker repos configured by other means.
+// skill forbids (references/matt-coexistence.md, counterexample #1).
+// Signal set mirrors scoreHarness and references/matt-coexistence.md: matt setup ran
+// (docs/agents/*) OR the repo already keeps the long-lived tracker assets (CONTEXT.md, docs/adr/).
+// Keying on docs/agents/ alone reported registry for team-maintained tracker repos, which is how
+// the sandbox arm ended up bypassing this script with an explicit --mode tracker.
+// Two guards keep the wider net safe: an existing feature_list.json wins (flipping a working
+// registry repo would be the worse failure), and the signal that fired is always printed, so a
+// wrong detection shows up in the pre-write checklist instead of silently changing the shape.
 const mode = args.mode ? String(args.mode) : 'auto';
-const mattSetup = await exists(path.join(target, 'docs/agents/domain.md'))
-  || await exists(path.join(target, 'docs/agents/issue-tracker.md'));
-const trackerMode = mode === 'tracker' || (mode === 'auto' && mattSetup);
+const trackerSignals = [];
+if (await exists(path.join(target, 'docs/agents/domain.md'))) trackerSignals.push('docs/agents/domain.md');
+if (await exists(path.join(target, 'docs/agents/issue-tracker.md'))) trackerSignals.push('docs/agents/issue-tracker.md');
+if (await exists(path.join(target, 'CONTEXT.md'))) trackerSignals.push('CONTEXT.md');
+if (await exists(path.join(target, 'docs/adr'))) trackerSignals.push('docs/adr/');
+const registryStateExists = await exists(path.join(target, 'feature_list.json'));
+const trackerMode = mode === 'tracker'
+  || (mode === 'auto' && trackerSignals.length > 0 && !registryStateExists);
+const trackerReason = mode === 'tracker'
+  ? 'tracker mode (--mode tracker)'
+  : `tracker mode (signals: ${trackerSignals.join(', ')})`;
 
 await mkdir(target, { recursive: true });
 
@@ -121,7 +137,7 @@ if (trackerMode) {
     results.push({
       path: path.join(target, name),
       status: 'skipped',
-      reason: mode === 'tracker' ? 'tracker mode (--mode tracker)' : 'tracker mode (docs/agents/ present)'
+      reason: trackerReason
     });
   }
 } else {
@@ -140,6 +156,9 @@ if (force || !await exists(initPath)) {
 
 console.log(`Created harness for ${target}`);
 console.log(`Detected stack: ${project.stack}`);
+if (mode === 'auto' && trackerSignals.length > 0 && registryStateExists) {
+  console.log(`Mode: registry — tracker signals present (${trackerSignals.join(', ')}) but feature_list.json exists; pass --mode tracker to override.`);
+}
 console.log(`Verification commands:`);
 for (const command of commands) {
   console.log(`  - ${command}`);
