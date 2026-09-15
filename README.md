@@ -88,7 +88,7 @@ node ~/.agents/skills/harness-creator/scripts/run-benchmark.mjs --target /path/t
 
 ## 它会创建什么
 
-- `AGENTS.md` 或 `CLAUDE.md`（含「产物追踪策略」一节，见下）
+- `AGENTS.md` 或 `CLAUDE.md`（含「仓库结构」与「产物追踪策略」两节，见下）
 - `feature_list.json`
 - `progress.md`（精简版：当前状态、证据、阻塞、下一步）
 - `init.sh`
@@ -202,7 +202,7 @@ tracker 模式的默认搭配：
 
 模式回答"状态住哪"，技能生态回答"活怎么干"——两个正交维度，不因换生态而新增模式。
 
-**治理权归属**：两种模式下 AGENTS.md 的 harness 章节（启动工作流、工作规则、完成定义、验证命令等）都归本技能全权管理——模式切换只改变状态事实来源的位置，不改变治理权。第三方 skill（含 addyosmani 系）只在五个落点内产出，不制定规则；被无条件拒绝的三个（`using-agent-skills`、`context-engineering`、`documentation-and-adrs`）正是治理竞争者。AGENTS.md 文件可与第三方块共存（合并规则见 SKILL.md「创建 harness」），但治理权威唯一。
+**治理权归属**：两种模式下 AGENTS.md 的 harness 章节（启动工作流、工作规则、完成定义、验证命令等）都归本技能全权管理——模式切换只改变状态事实来源的位置，不改变治理权。第三方 skill（含 addyosmani 系）只在五个落点内产出，不制定规则；被无条件拒绝的三个（`using-agent-skills`、`context-engineering`、`documentation-and-adrs`）正是治理竞争者。AGENTS.md 文件可与第三方块共存（合并规则见 `references/matt-coexistence.md`：章节以 `templates/agents.md` 为唯一来源，已存在时脚本只报告缺失章节、合并由代理执行），但治理权威唯一。
 
 ## 状态
 

@@ -34,7 +34,7 @@ license: MIT
 
 **Registry 模式（默认，自包含）**：状态事实来源在仓库内——`feature_list.json` 注册表 + 精简 `progress.md`。适用于无 issue tracker 的任意仓库与代理。
 
-**Tracker 模式（Matt 工程流）**：状态与依赖由工单系统承接（本地或仓外，如 to-spec/to-tickets），仓库只保留两类长期资产——`CONTEXT.md`（领域语言，与代码互补）和 ADR（决策史，只增不删），二者均由 matt 的 `domain-modeling` **延迟创建**；`.scratch/` 承载任务级材料（spec 草稿、交接文档）。探测信号：matt `docs/agents/`、`CONTEXT.md`、ADR 目录，或用户使用工单工作流——`.scratch/` **不算**信号（第三方 skill 也会写它）。
+**Tracker 模式（Matt 工程流）**：状态与依赖由工单系统承接（本地或仓外），仓库只保留 `CONTEXT.md`（领域语言）与 ADR（决策史，只增不删），二者均由 matt 的 `domain-modeling` **延迟创建**；`.scratch/` 承载任务级材料。探测信号：matt `docs/agents/`、`CONTEXT.md`、ADR 目录，或用户使用工单工作流——`.scratch/` **不算**信号。
 
 两模式共享骨架：`AGENTS.md` 路由、验证门禁、范围规则、引用式交接；区别只在状态来源位置。
 
@@ -42,9 +42,9 @@ license: MIT
 
 1. 检查已有内容：指令文件、功能/状态文件、验证命令、文档、`CONTEXT.md`/ADR/matt `docs/agents/`、包清单。→ 输出：现有产物清单。
 2. 判定模式：**有信号**按信号判；**无信号**（既无 `feature_list.json` 也无 `CONTEXT.md`/ADR/工单痕迹）→ 🔴 CHECKPOINT 询问仓库用途（产品形态、协作方式、有无工单系统），**得到答复前不写盘**；信号矛盾按最强信号判。→ 输出：模式判定结论。
-3. 判定 tracker 即默认用户已运行 `setup-matt-pocock-skills`：不调用、不询问安装、不提供仓内替代。**matt 名下产物不代建**（`docs/agents/*`、`CONTEXT.md`、`docs/adr/`、`## Agent skills` 块），只落本方骨架（AGENTS.md 章节、`init.sh` 门禁、`.scratch` 约定），缺失项列待办并指引运行 setup。→ 输出：本轮产物清单。
+3. 判定 tracker 即默认用户已运行 `setup-matt-pocock-skills`：不调用、不询问安装、不提供仓内替代。matt 名下产物（`docs/agents/*`、`CONTEXT.md`、`docs/adr/`、`## Agent skills`）不代建，只落本方骨架，缺失项列待办并指引 setup。→ 输出：本轮产物清单。
 4. 优先最小化：仅当涉及跨会话记忆、权限安全、多代理协调或基准测试时，才加载对应参考并加产物；否则不加。其余缺失上下文仅在无法安全推断时询问。
-5. 追踪对齐（一次性，见下方参考）：写盘前运行 `scripts/check-git-tracking.mjs` 探测五个落点与第三方产物；🔴 CHECKPOINT 只问一次，`.gitignore` 命中即判「不跟踪」，结论落 AGENTS.md 的指针与豁免清单，其余 skill 只读不问。→ 输出：追踪策略表。
+5. 追踪对齐（一次性）：写盘前运行 `scripts/check-git-tracking.mjs`；🔴 CHECKPOINT 只问一次，`.gitignore` 命中即判「不跟踪」，结论落 AGENTS.md，其余 skill 只读不问。→ 输出：追踪策略表。
 
 ## 常见任务
 
@@ -63,11 +63,11 @@ node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
 - `--agent-file CLAUDE.md` 面向 Claude 的项目。
 - `--package-manager npm|pnpm|yarn|bun` 自动检测不正确时用。
 - `--commands "a,b"` 自定义验证命令。
-- `--force` 覆盖已存在文件。🔴 CHECKPOINT：使用前**必须**获批并列出被覆盖文件。
+- `--force` 覆盖已存在文件。🔴 CHECKPOINT：使用前**必须**获批并列出被覆盖文件；含第三方块的文件一律不用。
 
 脚本生成 registry 骨架；tracker 模式跳过 `feature_list.json`/`progress.md`（`--mode tracker` 或见 `docs/agents/`）。
 
-**与 matt setup 共存**：单一写入者分区——matt 拥有 `docs/agents/*`、`## Agent skills`、`CONTEXT.md`/`docs/adr/` 的格式与延迟创建。反例见 [Matt Coexistence](references/matt-coexistence.md)。
+**与 matt setup 共存**：单一写入者分区——matt 拥有 `docs/agents/*`、`## Agent skills`、`CONTEXT.md`/`docs/adr/` 的格式与延迟创建。**AGENTS.md 章节以 `templates/agents.md` 为唯一来源**（生成端即固定，审计不校验结构）；已存在时脚本只报告缺失章节、不写盘，合并由代理执行：保留第三方块，不为已有章节另建等价副本。反例见 [Matt Coexistence](references/matt-coexistence.md)。
 
 输入：仓库路径与（可选）命令。输出：四个产物 + 创建说明。
 
@@ -79,7 +79,7 @@ node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
 node skills/harness-creator/scripts/validate-harness.mjs --target /path/to/project
 ```
 
-报告五子系统得分与最能提升可靠性的前 2-3 项改动；打分对两模式与中英文产物同样适用。最低分只是候选瓶颈，先确认因果再改。
+报告五子系统得分与前 2-3 项改动建议；两模式与中英文产物同标准。最低分只是候选瓶颈，先确认因果再改。
 
 输入：目标仓库。输出：五子系统得分、候选瓶颈、前 2-3 项改动。
 
@@ -92,7 +92,7 @@ node skills/harness-creator/scripts/render-assessment-html.mjs --target /path/to
 node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project --html /path/to/report.html
 ```
 
-需说明这是结构性基准测试：自检先验证脚本可用，再评分；真实有效性仍需前后对照会话验证。输出：JSON/HTML 报告与结构性结论。
+说明这是结构性基准测试（自检证明脚本可跑通，非有效性证明）；真实有效性靠前后对照会话。输出：JSON/HTML 报告。
 
 ## 何时阅读参考文档
 
@@ -150,15 +150,14 @@ harness 设计中不要做的事；交付前对照一次。
 
 **Registry 模式（基础）**
 
-- [ ] `AGENTS.md` 或 `CLAUDE.md`（路由状态产物与 `CONTEXT.md`/ADR；含一次性追踪策略）
+- [ ] `AGENTS.md` 或 `CLAUDE.md`（含仓库结构与一次性追踪策略，并路由状态产物与 `CONTEXT.md`/ADR）
 - [ ] `feature_list.json` + `progress.md`（精简版：当前状态、证据、阻塞、下一步）
 - [ ] `init.sh`
 - [ ] 交接落点约定（`.scratch/handoff.md`）：用户按需生成，启动时若存在必读
 
 **Tracker 模式（附加或替代）**
 
-- [ ] `CONTEXT.md`（领域语言）——matt 延迟创建，harness 不预建
-- [ ] `docs/adr/`（决策记录）——同上，首个 ADR 时才建
+- [ ] `CONTEXT.md`（领域语言）、`docs/adr/`（决策记录）——matt 延迟创建，不预建
 - [ ] `.scratch/`（任务级暂存区，随任务删除）——约定文档化，不预建空目录
 - [ ] 状态与依赖指向工单系统（本地或仓外）
 - [ ] CI 或 `init.sh` 机器门禁承接完成证据

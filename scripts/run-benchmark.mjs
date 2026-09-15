@@ -11,11 +11,19 @@ import {
   loadHarnessFiles,
   parseArgs,
   readJson,
+  readText,
   scoreHarness,
   writeText
 } from './lib/harness-utils.mjs';
 
 const execFileAsync = promisify(execFile);
+
+// The root instruction file must stay short enough to actually be read and followed. Baseline
+// is the pre-optimization SKILL.md; the cap is 150% of it and is enforced here rather than
+// recorded only as a convention — a constraint with no mechanical carrier is the thing this
+// skill tells everyone else to fix. Editing SKILL.md near the cap means de-duplicating first.
+const SKILL_MD_BASELINE_BYTES = 7889;
+const SKILL_MD_MAX_BYTES = Math.floor(SKILL_MD_BASELINE_BYTES * 1.5);
 
 // English tracker-mode fixture used by the self-check's second stage. Declared before
 // the top-level flow below — const initializers would still be in the TDZ otherwise.
@@ -105,10 +113,12 @@ if (args.help) {
   console.log(`Usage: node scripts/run-benchmark.mjs [--target DIR] [--output FILE] [--html FILE] [--no-self-check]
 
 Runs a lightweight harness benchmark:
-  1. Self-check: scaffold a throwaway harness and confirm it validates (proves the scripts work).
+  1. Self-check: scaffold a throwaway harness and confirm it validates, then score an English
+     tracker-mode fixture (proves the scripts work AND that scoring is bilingual).
   2. Scores the current target harness.
   3. Checks eval coverage in evals/evals.json.
-  4. Produces a JSON report and optional HTML report.
+  4. Checks the SKILL.md size budget (${SKILL_MD_MAX_BYTES} bytes, 150% of the ${SKILL_MD_BASELINE_BYTES}-byte baseline).
+  5. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -136,6 +146,10 @@ console.log(`Benchmark report written to ${output}`);
 console.log('');
 if (!selfCheck.skipped) {
   console.log(`Self-check: ${selfCheck.pass ? 'PASS' : 'FAIL'} — scaffolded harness scored ${selfCheck.score}/100, English tracker fixture scored ${selfCheck.englishScore ?? 0}/100`);
+  if (selfCheck.budget) {
+    const { size, max, pass } = selfCheck.budget;
+    console.log(`  SKILL.md budget: ${pass ? 'PASS' : 'FAIL'} — ${size}/${max} bytes (${max - size >= 0 ? `${max - size} left` : `${size - max} over`})`);
+  }
   if (!selfCheck.pass && selfCheck.error) console.log(`  ${selfCheck.error}`);
 }
 console.log(formatScoreReport(harnessResult, target));
@@ -161,7 +175,8 @@ if (
 // create-harness.mjs — this can. Failure here means the skill ships broken, not just thin.
 // The second stage guards bilingual scoring: Matt-style toolchains (to-spec, handoff,
 // grill-with-docs) produce English artifacts, so an English tracker-mode harness must
-// score just as well as the Chinese registry-mode scaffold.
+// score just as well as the Chinese registry-mode scaffold. The third stage keeps the skill's
+// own instruction file inside its size budget.
 async function runSelfCheck() {
   let dir;
   try {
@@ -173,11 +188,13 @@ async function runSelfCheck() {
     await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
     const scored = scoreHarness(await loadHarnessFiles(dir));
     const english = await scoreEnglishTrackerFixture(dir);
+    const budget = await checkSkillBudget();
     const minScore = Number(args.minSelfCheckScore || 90);
     return {
-      pass: scored.overall >= minScore && english.overall >= minScore,
+      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass,
       score: scored.overall,
       englishScore: english.overall,
+      budget,
       bottleneck: scored.bottleneck ?? english.bottleneck
     };
   } catch (error) {
@@ -185,6 +202,11 @@ async function runSelfCheck() {
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
   }
+}
+
+async function checkSkillBudget() {
+  const size = Buffer.byteLength(await readText(path.join(skillRoot, 'SKILL.md')), 'utf8');
+  return { pass: size <= SKILL_MD_MAX_BYTES, size, max: SKILL_MD_MAX_BYTES };
 }
 
 // Convert the scaffold in-place to an English tracker-mode harness: state lives in the
@@ -238,11 +260,14 @@ function recommend(harnessResult, evalResult) {
 }
 
 function renderBenchmarkHtml(report) {
+  const budgetLine = report.selfCheck?.budget
+    ? ` SKILL.md sits at ${report.selfCheck.budget.size}/${report.selfCheck.budget.max} bytes (${report.selfCheck.budget.pass ? 'within' : 'OVER'} budget).`
+    : '';
   const selfCheckSection = report.selfCheck?.skipped
     ? ''
     : `<section>
       <h2>Script Self-Check <span>${report.selfCheck.pass ? 'PASS' : 'FAIL'}</span></h2>
-      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100, plus an English tracker-mode fixture at ${report.selfCheck.englishScore ?? 0}/100 — confirms the bundled scripts run end-to-end and scoring is bilingual.${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
+      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100, plus an English tracker-mode fixture at ${report.selfCheck.englishScore ?? 0}/100 — confirms the bundled scripts run end-to-end and scoring is bilingual.${budgetLine}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
     </section>`;
   const evalHtml = htmlReport(report.harness, `Harness Benchmark: ${path.basename(report.target)}`)
     .replace('</main>', `${selfCheckSection}<section>

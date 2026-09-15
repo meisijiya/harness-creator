@@ -67,6 +67,26 @@ export async function copyTemplate(templateName, targetPath, replacements = {}, 
   return { path: targetPath, status: 'written' };
 }
 
+// The template's own H2 headings ARE the section contract: single source, no parallel list to
+// keep in sync. Nothing scores a target repo on this — pinning structure at the generation end
+// (verbatim copy) is the guarantee, and a title check would only reward empty headings
+// (counterexample #6).
+export function markdownSections(markdown) {
+  return markdown.split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^##\s+\S/.test(line));
+}
+
+// Sections the template carries that an existing instruction file does not. Used to REPORT a
+// merge gap, never to write one: a text match cannot tell whether the existing file already
+// covers the section in English or in another wording, so appending would produce two startup
+// paths — the drift references/matt-coexistence.md warns about.
+export function diffSections(templateMarkdown, existingMarkdown) {
+  const existing = existingMarkdown.toLowerCase();
+  return markdownSections(templateMarkdown)
+    .filter((section) => !existing.includes(section.replace(/^#+\s*/, '').toLowerCase()));
+}
+
 export function detectPackageManager(root, explicit) {
   if (explicit) return explicit;
   if (existsSync(path.join(root, 'bun.lockb')) || existsSync(path.join(root, 'bun.lock'))) return 'bun';

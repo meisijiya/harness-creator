@@ -6,9 +6,12 @@ import {
   detectAgentFile,
   detectPackageManager,
   detectProject,
+  diffSections,
   exists,
   initScriptFromCommands,
   parseArgs,
+  readText,
+  TEMPLATE_DIR,
   verificationCommands,
   writeText
 } from './lib/harness-utils.mjs';
@@ -31,6 +34,10 @@ are created lazily by matt's domain-modeling skill, so this script never scaffol
 --tracking records the one-time git-tracking alignment conclusion in the AGENTS.md
 "## 产物追踪策略" section. Omit it and the section is written as pending: harness-creator
 asks the question once and fills the conclusion in. See references/git-tracking-alignment.md.
+
+An existing AGENTS.md/CLAUDE.md is never rewritten (skip, or --force) — instead the harness
+sections it lacks are reported so the agent can merge them by hand, keeping third-party
+blocks such as matt's "## Agent skills". See references/matt-coexistence.md.
 
 Handoffs are a convention, not a repo file: write reference-style handoff docs
 to .scratch/handoff.md or the OS temp directory (see AGENTS.md, end-of-session).
@@ -60,6 +67,26 @@ const trackerMode = mode === 'tracker' || (mode === 'auto' && mattSetup);
 
 await mkdir(target, { recursive: true });
 
+// The repository-structure table is the one section that differs by mode: registry repos keep
+// state in feature_list.json + progress.md, tracker repos keep it in the ticket system and must
+// NOT be told a feature registry exists (that would be a second state source).
+const REPO_LAYOUT = {
+  registry: [
+    '| `.scratch/` | 临时材料 | 写任务材料时创建；任务完成或 worktree 关闭即删除，不进默认上下文 |',
+    '| `CONTEXT.md` | 领域语言 | 由 matt 的 `domain-modeling` 延迟创建（首个术语定稿时）；缺失属正常状态 |',
+    '| `docs/adr/` | 决策记录 | 同上，首个 ADR 需要时创建；只增不删 |',
+    '| `init.sh` | 可执行约束 | harness 创建；声称完成前必须运行 |',
+    '| `feature_list.json`、`progress.md` | 状态与证据 | harness 创建；每会话更新，`evidence` 必填 |'
+  ],
+  tracker: [
+    '| `.scratch/` | 临时材料 | 写任务材料时创建；任务完成或 worktree 关闭即删除，不进默认上下文 |',
+    '| `CONTEXT.md` | 领域语言 | 由 matt 的 `domain-modeling` 延迟创建（首个术语定稿时）；缺失属正常状态 |',
+    '| `docs/adr/` | 决策记录 | 同上，首个 ADR 需要时创建；只增不删 |',
+    '| `init.sh` | 可执行约束 | harness 创建；声称完成前必须运行 |',
+    '| 工单系统（仓外或本地） | 状态与依赖 | 工单即事实来源；仓内**不留** `feature_list.json`/`progress.md`，避免第二状态源 |'
+  ]
+};
+
 const replacements = {
   AGENT_FILE_NAME: agentFile,
   PROJECT_PURPOSE: project.stack === 'generic'
@@ -67,6 +94,7 @@ const replacements = {
     : `Project harness for reliable agent-assisted development in a ${project.stack} codebase.`,
   VERIFICATION_COMMANDS: commands.map((command) => `- \`${command}\``).join('\n'),
   PRIMARY_VERIFICATION_COMMAND: './init.sh',
+  REPO_LAYOUT: REPO_LAYOUT[trackerMode ? 'tracker' : 'registry'].join('\n'),
   // The tracking-alignment conclusion is filled by the one-time question harness-creator asks
   // before writing, or supplied up front with --tracking. Leaving it marked as pending is the
   // signal that the question has NOT been asked yet, so a later session asks it exactly once
@@ -77,7 +105,16 @@ const replacements = {
 };
 
 const results = [];
-results.push(await copyTemplate('agents.md', path.join(target, agentFile), replacements, { force }));
+const agentPath = path.join(target, agentFile);
+const agentResult = await copyTemplate('agents.md', agentPath, replacements, { force });
+results.push(agentResult);
+
+// Report, never write: a text-match append cannot tell whether the existing file already covers
+// a section in English or in another wording, and would add a second startup path — the shape
+// references/matt-coexistence.md warns about. Merging is the agent's call.
+const missingAgentSections = agentResult.status === 'skipped'
+  ? diffSections(await readText(path.join(TEMPLATE_DIR, 'agents.md')), await readText(agentPath))
+  : [];
 
 if (trackerMode) {
   for (const name of ['feature_list.json', 'progress.md']) {
@@ -110,6 +147,18 @@ for (const command of commands) {
 console.log('');
 for (const result of results) {
   console.log(`${result.status.toUpperCase()} ${path.relative(target, result.path)}${result.reason ? ` (${result.reason})` : ''}`);
+}
+
+if (missingAgentSections.length > 0) {
+  console.log('');
+  console.log(`${agentFile} already exists and was NOT written. Harness sections it lacks:`);
+  for (const section of missingAgentSections) {
+    console.log(`  - ${section}`);
+  }
+  console.log('  Merge them by hand: keep existing content and any third-party block');
+  console.log('  (matt setup owns "## Agent skills"), and do not add a second copy of a');
+  console.log('  section the file already covers in another language or wording.');
+  console.log('  Section ownership: references/matt-coexistence.md');
 }
 
 if (!args.tracking) {
