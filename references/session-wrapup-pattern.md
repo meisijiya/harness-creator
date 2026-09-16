@@ -110,6 +110,7 @@ node skills/harness-creator/scripts/scan-housekeeping.mjs --target . --session-r
 | 收尾时发现 harness 骨架缺失 | 报告缺失 + 建议走创建流程 | 只做与现有落点相容的收口，不建骨架 |
 | 用户实际想整理全仓 | 分流到整理，说明作用域差别 | 不静默扩大范围；两件事分两次做 |
 | 用户想「顺手优化一下」 | 收尾先完成，优化另起一轮（validate / benchmark） | 不把审计结果混进收尾报告 |
+| 清场删除后工作树非预期 | `git checkout -- <path>` 从最近提交恢复 | 未提交内容不可恢复——所以③的 🔴 CHECKPOINT 必须先列清单；确认丢失后如实告知，不静默掩盖 |
 
 ## 反例
 
