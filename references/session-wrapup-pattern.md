@@ -71,11 +71,17 @@ node skills/harness-creator/scripts/scan-housekeeping.mjs --target . --session-r
 
 ### ④ 记账（state）
 
-按目标仓库 `AGENTS.md` 的「会话结束」一节执行——**引用而不复制**，本流程不重抄那几条。
+**输入**：本会话推进的功能项；**输出**：状态文件里下一次会话可直接读到的证据。
 
-该节缺失时的最小动作：更新 `progress.md`（当前状态、证据、阻塞、下一步）→ 更新 `feature_list.json` 的状态与证据 → 记未解决的风险 → 干净提交。
+按目标仓库 `AGENTS.md` 的「会话结束」一节执行——**引用而不复制**，本流程不重抄那几条。该节缺失时的最小动作：更新 `progress.md`（当前状态、证据、阻塞、下一步）→ 更新 `feature_list.json` 的 `status` 与 `evidence` → 记未解决的风险 → 干净提交。
 
-- tracker 模式：状态在工单系统，仓内无状态文件即跳过本步，**不新建** `feature_list.json`。
+**本步完成判据（缺一即未完成，逐项核对）**：
+
+1. `progress.md` 的四类小节都按本次会话刷新过；
+2. 本会话推进了功能项 → `feature_list.json` **必须同步**：`status` 与 `evidence` 都已更新，`done` 必有证据——「提交了代码」不等于「记了账」；
+3. 阻塞与风险已落字（没有就写「无」，不留空段）。
+
+- tracker 模式：状态在工单系统，仓内无状态文件即跳过本步，**不新建** `feature_list.json`；上述判据改为「工单状态与证据链接已更新」。
 - 证据缺席不得标 `done`（反例 #3 的头号失败）。
 
 ### ⑤ 收口（close）
