@@ -43,14 +43,14 @@ license: MIT
 1. 检查已有内容：指令文件、功能/状态文件、验证命令、文档、`CONTEXT.md`/ADR/matt `docs/agents/`、包清单。→ 输出：现有产物清单。
 2. 判定模式：**有信号**按信号判；**无信号**（既无 `feature_list.json` 也无 `CONTEXT.md`/ADR/工单痕迹）→ 🔴 CHECKPOINT 询问仓库用途（产品形态、协作方式、有无工单系统），**得到答复前不写盘**；信号矛盾按最强信号判。→ 输出：模式判定结论。
 3. 判定 tracker 即默认用户已运行 `setup-matt-pocock-skills`：不调用、不询问安装、不提供仓内替代。matt 名下产物（`docs/agents/*`、`CONTEXT.md`、`docs/adr/`、`## Agent skills`）不代建，只落本方骨架，缺失项列待办并指引 setup。→ 输出：本轮产物清单。
-4. 优先最小化：仅当涉及跨会话记忆、权限安全、多代理协调或基准测试时，才加载对应参考并加产物；否则不加。其余缺失上下文仅在无法安全推断时询问。
+4. 优先最小化：仅当涉及跨会话记忆、权限安全、多代理协调或基准测试时，才加载对应参考并加产物。其余缺失上下文仅在无法安全推断时询问。
 5. 追踪对齐（一次性）：写盘前运行 `scripts/check-git-tracking.mjs`；🔴 CHECKPOINT 只问一次，`.gitignore` 命中即判「不跟踪」，结论落 AGENTS.md，其余 skill 只读不问。→ 输出：追踪策略表。
 
 ## 常见任务
 
 ### 创建 harness
 
-在本地仓库上使用随附脚本：
+使用随附脚本：
 
 ```bash
 node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
@@ -58,12 +58,7 @@ node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
 
 🔴 CHECKPOINT：写盘前先向用户展示将创建/跳过的产物清单，确认后再执行。
 
-选项：
-
-- `--agent-file CLAUDE.md` 面向 Claude 的项目。
-- `--package-manager npm|pnpm|yarn|bun` 自动检测不正确时用。
-- `--commands "a,b"` 自定义验证命令。
-- `--force` 覆盖已存在文件。🔴 CHECKPOINT：使用前**必须**获批并列出被覆盖文件；含第三方块的文件一律不用。
+选项：`--agent-file CLAUDE.md`（面向 Claude 的项目）、`--package-manager`、`--commands "a,b"`；其余见 `--help`。`--force` 覆盖已存在文件——🔴 CHECKPOINT：使用前**必须**获批并列出被覆盖文件；含第三方块的文件一律不用。
 
 脚本生成 registry 骨架；tracker 模式跳过 `feature_list.json`/`progress.md`（`--mode tracker` 或见 `docs/agents/`）。
 
@@ -105,7 +100,8 @@ node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project 
 - 任务委派与并行代理：`references/multi-agent-pattern.md`
 - 钩子、启动、长时间运行的工作：`references/lifecycle-bootstrap-pattern.md`
 - 不易察觉的失败模式：`references/gotchas.md`
-- 整理仓库（清账，用户显式触发）：`references/housekeeping-pattern.md`，扫描器 `scripts/scan-housekeeping.mjs`
+- 会话收尾（收尾意图，**仅本会话产出**）：`references/session-wrapup-pattern.md`，扫描器 `--session-only`
+- 整理仓库（**全仓**清账）：`references/housekeeping-pattern.md`，扫描器默认模式
 - 与 matt 生态共存（tracker 分区所有权）：`references/matt-coexistence.md`
 - 产物落点的 git 跟踪对齐（一次性询问）：`references/git-tracking-alignment.md`
 
@@ -123,7 +119,7 @@ node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project 
 - 交接文档由用户按需生成（matt handoff 或等价技能），代理不主动创建；格式引用而不复制。
 - 验证命令必须明确且可直接运行。
 - 状态文件追加/更新，不依赖聊天历史。
-- 整理（清账）只作用于状态落点：ADR 与 `CONTEXT.md` 永不清，删除前必经 🔴 CHECKPOINT 列清单获批准。
+- 三种收敛别混：**收尾**仅本会话产出，**整理**清全仓状态落点，**优化**才全仓审计。ADR、`CONTEXT.md` 永不清，删除前必经 🔴 CHECKPOINT 列清单获批准。
 
 ## 反例黑名单
 
@@ -150,10 +146,10 @@ harness 设计中不要做的事；交付前对照一次。
 
 **Registry 模式（基础）**
 
-- [ ] `AGENTS.md` 或 `CLAUDE.md`（含仓库结构与一次性追踪策略，并路由状态产物与 `CONTEXT.md`/ADR）
-- [ ] `feature_list.json` + `progress.md`（精简版：当前状态、证据、阻塞、下一步）
+- [ ] `AGENTS.md` 或 `CLAUDE.md`（含仓库结构与一次性追踪策略，路由状态产物与 `CONTEXT.md`/ADR）
+- [ ] `feature_list.json` + `progress.md`（精简版）
 - [ ] `init.sh`
-- [ ] 交接落点约定（`.scratch/handoff.md`）：用户按需生成，启动时若存在必读
+- [ ] 交接落点约定（`.scratch/handoff.md`，启动时若存在必读）
 
 **Tracker 模式（附加或替代）**
 
