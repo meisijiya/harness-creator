@@ -30,7 +30,7 @@ license: MIT
 
 ## 两种模式
 
-两种状态治理模式；用下表信号探测。**无信号时不得自行默认**——见「第一步」第 2 步，用户无法应答（未回复或表示不确定）才回落 registry：
+两种状态治理模式，按下表信号探测。**无信号不得自行默认**；用户未答复才回落 registry（见「第一步」第 2 步）：
 
 **Registry 模式（默认，自包含）**：状态事实来源在仓库内——`feature_list.json` 注册表 + 精简 `progress.md`。适用于无 issue tracker 的任意仓库与代理。
 
@@ -43,7 +43,7 @@ license: MIT
 1. 检查已有内容：指令文件、功能/状态文件、验证命令、文档、`CONTEXT.md`/ADR/matt `docs/agents/`、包清单。→ 输出：现有产物清单。
 2. 判定模式：**有信号**按信号判；**无信号**（见上节探测信号）→ 🔴 CHECKPOINT 询问仓库用途（产品形态、协作方式、有无工单系统），**得到答复前不写盘**；信号矛盾按最强信号判。→ 输出：模式判定结论。
 3. 判定 tracker 即默认用户已运行上游初始化 skill：不调用、不询问安装、不提供仓内替代。matt 名下产物不代建，只落本方骨架，缺失项列待办并指引安装。→ 输出：本轮产物清单。
-4. 优先最小化：仅当涉及跨会话记忆、权限安全、多代理协调或基准测试时，才加载对应参考并加产物。其余缺失上下文仅在无法安全推断时询问。
+4. 优先最小化：仅当涉及跨会话记忆、权限安全、多代理协调或基准测试时，才加载对应参考并加产物。其余缺失上下文可自行推断，**🔴 CHECKPOINT 除外**。
 5. 追踪对齐（一次性）：写盘前运行 `scripts/check-git-tracking.mjs`；🔴 CHECKPOINT 只问一次，`.gitignore` 命中即判「不跟踪」，结论落 AGENTS.md，其余 skill 只读不问。→ 输出：追踪策略表。
 
 ## 常见任务
@@ -64,7 +64,7 @@ node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
 
 **与 matt setup 共存**：单一写入者分区——matt 拥有 `docs/agents/*`、`## Agent skills`、`CONTEXT.md`/`docs/adr/`。**AGENTS.md 章节以 `templates/agents.md` 为唯一来源**（审计不校验结构）；已存在时脚本只报告缺失章节、不写盘，合并由代理执行并保留第三方块、不另建等价副本。分区表见 [Matt Coexistence](references/matt-coexistence.md)。
 
-输入：仓库路径与（可选）命令。输出：四个产物 + 创建说明。
+输入：仓库路径与（可选）命令。输出：产物清单 + 创建说明。
 
 ### 审计现有 harness
 
@@ -78,14 +78,14 @@ node skills/harness-creator/scripts/validate-harness.mjs --target /path/to/proje
 
 ### 生成报告
 
-需要可分享的评估结果时使用：
+需要可分享结果时使用：
 
 ```bash
 node skills/harness-creator/scripts/render-assessment-html.mjs --target /path/to/project
 node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project --html /path/to/report.html
 ```
 
-说明这是结构性基准测试（自检证明脚本可跑通，非有效性证明）；真实有效性靠前后对照会话。输出：JSON/HTML 报告。
+这是结构性基准测试（自检证明脚本可跑通，非有效性证明）；真实有效性靠前后对照会话。输出：JSON/HTML 报告。
 
 ## 何时阅读参考文档
 
@@ -106,7 +106,7 @@ node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project 
 
 ## 异常与边界条件
 
-创建与审计中的异常见 [Failure Modes](references/failure-modes.md)。以下任一情况**先读它再动手**：已有同名文件或第三方块、模式信号矛盾或缺失、追踪报 `stray`/`unknown`、第三方产物出落点、`validate` 低于阈值、环境无 Node。**第三方工具存在不构成模式信号**——无信号即走第 2 步的 🔴 CHECKPOINT。原则：先告知再执行，绝不静默跳过或降级。
+创建与审计中的异常见 [Failure Modes](references/failure-modes.md)。以下任一情况**先读它再动手**：已有同名文件或第三方块、模式信号矛盾或缺失、追踪报 `stray`/`unknown`、第三方产物出落点、`validate` 低于阈值、环境无 Node。**第三方工具存在不构成模式信号**——无信号即走第 2 步的 🔴 CHECKPOINT。原则：一般异常先告知再执行；**🔴 CHECKPOINT 必须先获批**，能推断不是跳过理由，无法询问就停在原地写出问题。绝不静默跳过或降级。
 
 ## 设计规则
 
