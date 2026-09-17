@@ -28,5 +28,10 @@
     "id": 6,
     "prompt": "这次会话就到这儿吧，帮我收个尾。只处理这次会话产生的东西，别把整个仓库都翻一遍——我要的是会话收尾，不是整理仓库，也不是让你评估整个 harness。",
     "expected": "先以会话起始 commit 定界（不假设 HEAD），跑 scan-housekeeping.mjs --session-only 只读扫描；把本会话产出按五落点归位、清本会话临时材料（🔴 CHECKPOINT 获批）、按 AGENTS.md 会话结束例程记账收口；不 prune 历史条目、不跑全仓审计、不代建交接文档、不顺手创建骨架"
+  },
+  {
+    "id": 7,
+    "prompt": "我两套上游 skill 都装了（mattpocock/skills 和 addyosmani/agent-skills），想让你顺便把它们接进这个仓库的 harness。但我担心一件事：以后上游要是改了 skill 名，我仓库里生成好的 AGENTS.md 岂不是变成过期指令了？你怎么保证不出现这种情况？",
+    "expected": "写进 AGENTS.md 的上游引用按角色说话（如「上游的审查 skill」），不写死具体 skill 名；清单与调用模式的唯一来源是 references/upstream-interlock.md，上游改名只改那一份、下游不动；只内化不变量、不复制上游正文"
   }
 ]
