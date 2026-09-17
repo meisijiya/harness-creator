@@ -25,6 +25,15 @@ const execFileAsync = promisify(execFile);
 const SKILL_MD_BASELINE_BYTES = 7889;
 const SKILL_MD_MAX_BYTES = Math.floor(SKILL_MD_BASELINE_BYTES * 1.5);
 
+// A path relative to the SKILL repository (e.g. `skills/harness-creator/references/x.md`) is
+// dead on arrival in a target repo: the generated AGENTS.md is read by an agent whose cwd is
+// that repo, and the skill lives in the runtime's skills directory instead. A concrete path
+// would be worse still — the runtime path varies, so the emitted form is a by-name reference
+// the agent can resolve. Excludes `~/.agents/skills/...`, where `skills/` is not path-initial.
+// Declared up here, not next to its user below: a const accessed from a function invoked by the
+// top-level flow would still be in the TDZ.
+const SKILL_RELATIVE_PATH = /(^|[^/\w.~])skills\/[a-z0-9][a-z0-9-]*\//im;
+
 // English tracker-mode fixture used by the self-check's second stage. Declared before
 // the top-level flow below — const initializers would still be in the TDZ otherwise.
 const ENGLISH_AGENTS_MD = `# AGENTS.md
@@ -118,7 +127,9 @@ Runs a lightweight harness benchmark:
   2. Scores the current target harness.
   3. Checks eval coverage in evals/evals.json.
   4. Checks the SKILL.md size budget (${SKILL_MD_MAX_BYTES} bytes, 150% of the ${SKILL_MD_BASELINE_BYTES}-byte baseline).
-  5. Produces a JSON report and optional HTML report.
+  5. Checks the emitted-artifact invariants: no skill-repo-relative path reaches a target repo,
+     and tracker mode emits no registry state files.
+  6. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -149,6 +160,10 @@ if (!selfCheck.skipped) {
   if (selfCheck.budget) {
     const { size, max, pass } = selfCheck.budget;
     console.log(`  SKILL.md budget: ${pass ? 'PASS' : 'FAIL'} — ${size}/${max} bytes (${max - size >= 0 ? `${max - size} left` : `${size - max} over`})`);
+  }
+  if (selfCheck.emitted) {
+    const { pass, offenders = [], leakedState = [], error } = selfCheck.emitted;
+    console.log(`  Emitted artifacts: ${pass ? 'PASS' : 'FAIL'}${offenders.length ? ` — skill-relative path in ${offenders.join(', ')}` : ''}${leakedState.length ? ` — registry state leaked into tracker mode: ${leakedState.join(', ')}` : ''}${error ? ` — ${error}` : ''}`);
   }
   if (!selfCheck.pass && selfCheck.error) console.log(`  ${selfCheck.error}`);
 }
@@ -189,12 +204,14 @@ async function runSelfCheck() {
     const scored = scoreHarness(await loadHarnessFiles(dir));
     const english = await scoreEnglishTrackerFixture(dir);
     const budget = await checkSkillBudget();
+    const emitted = await checkEmittedArtifacts();
     const minScore = Number(args.minSelfCheckScore || 90);
     return {
-      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass,
+      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && emitted.pass,
       score: scored.overall,
       englishScore: english.overall,
       budget,
+      emitted,
       bottleneck: scored.bottleneck ?? english.bottleneck
     };
   } catch (error) {
@@ -207,6 +224,31 @@ async function runSelfCheck() {
 async function checkSkillBudget() {
   const size = Buffer.byteLength(await readText(path.join(skillRoot, 'SKILL.md')), 'utf8');
   return { pass: size <= SKILL_MD_MAX_BYTES, size, max: SKILL_MD_MAX_BYTES };
+}
+
+// Stage four: the generator must not emit skill-repo-relative paths into a target repo, and
+// tracker mode must not emit registry state files (a second state source). This defect class
+// already regressed once — a refactor re-introduced `skills/harness-creator/...` into the
+// template — so it gets a mechanical carrier rather than a convention, for the same reason the
+// SKILL.md byte cap above is enforced here instead of recorded as a note.
+// Deliberately unscored: this stage asserts emitted-artifact invariants only, so it stays
+// independent of how a bare tracker scaffold scores.
+async function checkEmittedArtifacts() {
+  let dir;
+  try {
+    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-emitted-'));
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir, '--mode', 'tracker']);
+    const emitted = await loadHarnessFiles(dir);
+    const offenders = emitted.filter(({ content }) => SKILL_RELATIVE_PATH.test(content)).map(({ path: file }) => file);
+    const leakedState = emitted
+      .map(({ path: file }) => file)
+      .filter((file) => ['feature_list.json', 'feature-list.json', 'progress.md'].includes(file));
+    return { pass: offenders.length === 0 && leakedState.length === 0, offenders, leakedState };
+  } catch (error) {
+    return { pass: false, offenders: [], leakedState: [], error: error.message };
+  } finally {
+    if (dir) await rm(dir, { recursive: true, force: true });
+  }
 }
 
 // Convert the scaffold in-place to an English tracker-mode harness: state lives in the

@@ -33,7 +33,7 @@
 - **一次一个功能**：从 {{STATE_ARTIFACT}} 中恰好挑选一个未完成的功能
 - **推进需显式授权**：只在用户显式要求推进时动手。交接文档、`progress.md` 的「下一步」、待办条目（注册表或工单）都只是上下文，**不是待办队列**——交接完成后用户若在谈别的事，不得自行续跑原任务
 - **条目即工单**：registry 的 `feature_list.json` 条目与 tracker 的工单都写清三要件——交付什么（`description`）、被谁阻塞（`dependencies`/blocking 边）、验收标准（`acceptance`）；按垂直切片拆，尺寸不超过单个上下文窗口
-- **复用上游工程 skill**：拆分、实现、测试、审查各环节复用**已安装**的上游工程 skill（清单与调用模式见 `skills/harness-creator/references/upstream-interlock.md`）；其中模型可直接调用的按需调用，标注「用户调用」的由用户发起，代理不代发起
+- **复用上游工程 skill**：拆分、实现、测试、审查各环节复用**已安装**的上游工程 skill（清单与调用模式见 `harness-creator` 技能的 `references/upstream-interlock.md`）；其中模型可直接调用的按需调用，标注「用户调用」的由用户发起，代理不代发起
 - **依赖清晰**：功能间的依赖（dependencies / blocking 边）在 {{STATE_ARTIFACT}} 中显式声明，先决项未完成不动手
 - **必须验证**：未运行验证命令前不得声称完成
 - **证据先行**：完成证据（命令与结果摘要，或 CI 检查链接）记入 {{STATE_ARTIFACT}}
@@ -49,7 +49,7 @@
 
 - 五落点的跟踪状态以 `.gitignore` 与实际 git 索引为准；当前结论：{{TRACKING_STATUS}}
 - 已对齐即不再询问：本节的结论由 `harness-creator` 一次性询问后落定，其他 skill（含第三方教学/调研/交接类）**只读不问**
-- 只读探测：`node skills/harness-creator/scripts/check-git-tracking.mjs --target .`（`--strict` 在落点游离时报错）
+- 只读探测：`node <harness-creator 技能目录>/scripts/check-git-tracking.mjs --target .`（技能目录为所用运行时的 skills 路径，通常 `~/.agents/skills/harness-creator/`；`--strict` 在落点游离时报错）
 - 裁决规则：`tracked` 与 `ignored` 直接采信；`ignored` 即"用户选择不跟踪"；`stray`（存在却既未提交也未忽略）必须裁决；`.gitignore` 对已提交路径无效，需 `git rm --cached` 且须用户确认
 - 落点之外的第三方产物：**先路由**进五落点；产出 skill 自带**硬约束**（落点不可配置，如以「当前目录为工作区」的教学类 skill）时**受控放行**——放行但不治理其内容与形态（由产出 skill 自治理），harness 只登记、由用户裁决"原样保留"或"收归治理"，并给出追踪结论
 
