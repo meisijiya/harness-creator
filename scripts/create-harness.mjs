@@ -33,6 +33,12 @@ feature_list.json wins over those signals. The upstream tracker setup owns docs/
 docs/adr/ are created lazily upstream, so this script never scaffolds
 them. Skill names and invocation modes: references/upstream-interlock.md.
 
+--mode is required whenever nothing can be inferred. With no --mode (or with --mode auto) the
+script infers the mode from the signals above; if none are present it refuses to write and exits
+with code 1, printing what it probed. This is deliberate: an unasked mode question must not turn
+into a silent scaffold. Ask the user which mode the repo uses, then re-run with an explicit
+--mode registry or --mode tracker.
+
 --tracking records the one-time git-tracking alignment conclusion in the AGENTS.md
 "## 产物追踪策略" section. Omit it and the section is written as pending: harness-creator
 asks the question once and fills the conclusion in. See references/git-tracking-alignment.md.
@@ -68,13 +74,47 @@ const commands = args.commands
 // Two guards keep the wider net safe: an existing feature_list.json wins (flipping a working
 // registry repo would be the worse failure), and the signal that fired is always printed, so a
 // wrong detection shows up in the pre-write checklist instead of silently changing the shape.
-const mode = args.mode ? String(args.mode) : 'auto';
+// `--mode` is a decision, not a default. Omitting it lets the script infer a mode from observable
+// signals only; with no signal it refuses to write (see the guard below). Prose alone could not
+// hold this gate — in live testing every statement of "无信号不得自行默认" lost to a successful
+// write — so the refusal is the mechanical carrier for the mode CHECKPOINT in SKILL.md.
+// `--mode auto` is refused on the same terms: an explicit "auto" that still picks a mode would
+// just be the same bypass wearing a flag.
+const rawMode = args.mode === undefined || args.mode === true ? null : String(args.mode);
+if (rawMode !== null && !['auto', 'registry', 'tracker'].includes(rawMode)) {
+  console.error(`Invalid --mode "${rawMode}". Expected one of: auto, registry, tracker.`);
+  process.exit(2);
+}
 const trackerSignals = [];
 if (await exists(path.join(target, 'docs/agents/domain.md'))) trackerSignals.push('docs/agents/domain.md');
 if (await exists(path.join(target, 'docs/agents/issue-tracker.md'))) trackerSignals.push('docs/agents/issue-tracker.md');
 if (await exists(path.join(target, 'CONTEXT.md'))) trackerSignals.push('CONTEXT.md');
 if (await exists(path.join(target, 'docs/adr'))) trackerSignals.push('docs/adr/');
 const registryStateExists = await exists(path.join(target, 'feature_list.json'));
+
+// The guard: no observable signal plus no explicit decision means there is nothing to infer from.
+// Refuse before any write — including mkdir — so the omission surfaces as a visible failure
+// instead of a silent registry scaffold.
+if (
+  (rawMode === null || rawMode === 'auto') &&
+  trackerSignals.length === 0 &&
+  !registryStateExists
+) {
+  console.error(`Refusing to write: no governance mode could be determined for ${target}`);
+  console.error('');
+  console.error('Probed tracker signals (docs/agents/domain.md, docs/agents/issue-tracker.md,');
+  console.error('CONTEXT.md, docs/adr/) and registry state (feature_list.json): none present,');
+  console.error('and no explicit --mode was given, so there is nothing to infer the mode from.');
+  console.error('');
+  console.error('Ask which mode this repo uses, then re-run with an explicit --mode:');
+  console.error('  --mode registry   state lives in the repo: feature_list.json + progress.md');
+  console.error('  --mode tracker    state lives in an issue tracker; no in-repo registry');
+  console.error('');
+  console.error('No files were written.');
+  process.exit(1);
+}
+
+const mode = rawMode === null ? 'auto' : rawMode;
 const trackerMode = mode === 'tracker'
   || (mode === 'auto' && trackerSignals.length > 0 && !registryStateExists);
 const trackerReason = mode === 'tracker'

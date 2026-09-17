@@ -30,9 +30,9 @@ license: MIT
 
 ## 两种模式
 
-两种状态治理模式，按下表信号探测。**无信号不得自行默认**；用户未答复才回落 registry（见「第一步」第 2 步）：
+两种状态治理模式，按下表信号探测。**无信号不得自行默认**（见「第一步」第 2 步）：
 
-**Registry 模式（默认，自包含）**：状态事实来源在仓库内——`feature_list.json` 注册表 + 精简 `progress.md`。适用于无 issue tracker 的任意仓库与代理。
+**Registry 模式（自包含）**：状态事实来源在仓库内——`feature_list.json` 注册表 + 精简 `progress.md`。适用于无 issue tracker 的任意仓库与代理。
 
 **Tracker 模式（Matt 工程流）**：状态与依赖由工单系统承接，仓库只保留 `CONTEXT.md`（领域语言）与 ADR（决策史，只增不删），二者均由上游领域建模 skill **延迟创建**；`.scratch/` 承载任务级材料。探测信号：matt `docs/agents/`、`CONTEXT.md`、ADR 目录，或用户使用工单工作流——`.scratch/` **不算**信号。
 
@@ -41,7 +41,7 @@ license: MIT
 ## 第一步
 
 1. 检查已有内容：指令文件、功能/状态文件、验证命令、文档、`CONTEXT.md`/ADR/matt `docs/agents/`、包清单。→ 输出：现有产物清单。
-2. 判定模式：**有信号**按信号判；**无信号**（见上节探测信号）→ 🔴 CHECKPOINT 询问仓库用途（产品形态、协作方式、有无工单系统），**得到答复前不写盘**；信号矛盾按最强信号判。→ 输出：模式判定结论。
+2. 判定模式：**有信号**按信号判；**无信号** → 🔴 CHECKPOINT 询问仓库用途（用途、协作、有无工单），**得到答复前不写盘**；**已问过**未获答复才回落 registry；「无法询问」≠「用户未答复」，此时停住写出问题；信号矛盾按最强信号判。→ 输出：模式判定结论。
 3. 判定 tracker 即默认用户已运行上游初始化 skill：不调用、不询问安装、不提供仓内替代。matt 名下产物不代建，只落本方骨架，缺失项列待办并指引安装。→ 输出：本轮产物清单。
 4. 优先最小化：仅当涉及跨会话记忆、权限安全、多代理协调或基准测试时，才加载对应参考并加产物。其余缺失上下文可自行推断，**🔴 CHECKPOINT 除外**。
 5. 追踪对齐（一次性）：写盘前运行 `scripts/check-git-tracking.mjs`；🔴 CHECKPOINT 只问一次，`.gitignore` 命中即判「不跟踪」，结论落 AGENTS.md，其余 skill 只读不问。→ 输出：追踪策略表。
@@ -53,18 +53,18 @@ license: MIT
 使用随附脚本：
 
 ```bash
-node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
+node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project --mode registry|tracker
 ```
 
 🔴 CHECKPOINT：写盘前先向用户展示将创建/跳过的产物清单，确认后再执行。
 
 选项：`--agent-file CLAUDE.md`（面向 Claude 的项目）、`--package-manager`、`--commands "a,b"`；其余见 `--help`。`--force` 覆盖已存在文件——🔴 CHECKPOINT：使用前**必须**获批并列出被覆盖文件；含第三方块的文件一律不用。
 
-脚本生成 registry 骨架；tracker 模式跳过 `feature_list.json`/`progress.md`（`--mode tracker` 或见 `docs/agents/`）。
+模式必须显式：无信号且未传 `--mode` 时脚本拒写，不静默默认。
 
 **与 matt setup 共存**：单一写入者分区——matt 拥有 `docs/agents/*`、`## Agent skills`、`CONTEXT.md`/`docs/adr/`。**AGENTS.md 章节以 `templates/agents.md` 为唯一来源**（审计不校验结构）；已存在时脚本只报告缺失章节、不写盘，合并由代理执行并保留第三方块、不另建等价副本。分区表见 [Matt Coexistence](references/matt-coexistence.md)。
 
-输入：仓库路径与（可选）命令。输出：产物清单 + 创建说明。
+输出：产物清单 + 创建说明。
 
 ### 审计现有 harness
 

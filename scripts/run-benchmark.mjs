@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -129,7 +129,9 @@ Runs a lightweight harness benchmark:
   4. Checks the SKILL.md size budget (${SKILL_MD_MAX_BYTES} bytes, 150% of the ${SKILL_MD_BASELINE_BYTES}-byte baseline).
   5. Scores a tracker-mode scaffold and checks its emitted-artifact invariants: no skill-repo-relative
      path reaches a target repo, and no registry state file is emitted.
-  6. Produces a JSON report and optional HTML report.
+  6. Checks the mode gate: a signal-free target given no explicit --mode must refuse to write (exit 1,
+     zero files), while an explicit --mode or a detected signal must still scaffold.
+  7. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -164,6 +166,10 @@ if (!selfCheck.skipped) {
   if (selfCheck.tracker) {
     const { pass, score, offenders = [], leakedState = [], error } = selfCheck.tracker;
     console.log(`  Tracker scaffold: ${pass ? 'PASS' : 'FAIL'} — scored ${score}/100${offenders.length ? ` — skill-relative path in ${offenders.join(', ')}` : ''}${leakedState.length ? ` — registry state leaked into tracker mode: ${leakedState.join(', ')}` : ''}${error ? ` — ${error}` : ''}`);
+  }
+  if (selfCheck.gate) {
+    const { pass, refused, explicitOk, signalOk, wrote = [], error } = selfCheck.gate;
+    console.log(`  Mode gate: ${pass ? 'PASS' : 'FAIL'} — signal-free with no --mode refused: ${refused ? 'yes' : 'NO'}${wrote.length ? ` (but still wrote: ${wrote.join(', ')})` : ''}; explicit --mode registry: ${explicitOk ? 'ok' : 'NO'}; CONTEXT.md signal: ${signalOk ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (!selfCheck.pass && selfCheck.error) console.log(`  ${selfCheck.error}`);
 }
@@ -200,18 +206,24 @@ async function runSelfCheck() {
       path.join(dir, 'package.json'),
       JSON.stringify({ name: 'selfcheck', scripts: { check: 'tsc', test: 'vitest run', build: 'vite build' } })
     );
-    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
+    // --mode is explicit here on purpose: this fixture is signal-free, which is exactly the case the
+    // mode gate refuses. Before that gate existed this call was the bypass's own regression test —
+    // it scaffolded registry on a bare directory and called it a pass. The gate is asserted
+    // separately by checkModeGate().
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir, '--mode', 'registry']);
     const scored = scoreHarness(await loadHarnessFiles(dir));
     const english = await scoreEnglishTrackerFixture(dir);
     const budget = await checkSkillBudget();
     const minScore = Number(args.minSelfCheckScore || 90);
     const tracker = await checkTrackerScaffold(minScore);
+    const gate = await checkModeGate();
     return {
-      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && tracker.pass,
+      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && tracker.pass && gate.pass,
       score: scored.overall,
       englishScore: english.overall,
       budget,
       tracker,
+      gate,
       bottleneck: scored.bottleneck ?? english.bottleneck
     };
   } catch (error) {
@@ -250,6 +262,68 @@ async function checkTrackerScaffold(minScore) {
     return { pass: false, score: 0, offenders: [], leakedState: [], error: error.message };
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
+  }
+}
+
+// Stage five: the mode gate. The design says a repo with no mode signal must not get a silent
+// default — the mode is a decision the agent has to obtain from the user. That rule used to be
+// prose-only, and it lost every live test: agents scaffolded registry into bare directories and
+// moved on, because a successful write beats an instruction every time. So the gate became
+// mechanical (create-harness.mjs refuses to write when nothing can be inferred) and is asserted
+// here. Both failure directions matter equally: the signal-free case must NOT write, and the two
+// legitimate paths must NOT become collateral damage — a gate that blocks everything would sail
+// through a naive "did it refuse?" check.
+async function checkModeGate() {
+  let blank;
+  let signal;
+  try {
+    blank = await mkdtemp(path.join(os.tmpdir(), 'harness-gate-blank-'));
+    signal = await mkdtemp(path.join(os.tmpdir(), 'harness-gate-signal-'));
+
+    // 1. Signal-free with no --mode must refuse. execFile rejects on non-zero exit, so triggering
+    //    that rejection IS the assertion; catching it is the check, not an error path.
+    let refused = false;
+    try {
+      await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', blank]);
+    } catch (error) {
+      refused = error.code === 1;
+    }
+    const wrote = await listDir(blank);
+
+    // 2. An explicit --mode registry on that same signal-free directory must still scaffold.
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', blank, '--mode', 'registry']);
+    const explicitFiles = await listDir(blank);
+    const explicitOk = explicitFiles.includes('AGENTS.md') && explicitFiles.includes('feature_list.json');
+
+    // 3. A detected signal must still infer the mode with no --mode — and infer tracker, not
+    //    registry: landing here with a feature registry would be a second state source.
+    await writeText(path.join(signal, 'CONTEXT.md'), '# Context\n');
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', signal]);
+    const signalFiles = await listDir(signal);
+    const signalOk = signalFiles.includes('AGENTS.md') && !signalFiles.includes('feature_list.json');
+
+    return {
+      pass: refused && wrote.length === 0 && explicitOk && signalOk,
+      refused,
+      explicitOk,
+      signalOk,
+      wrote
+    };
+  } catch (error) {
+    return { pass: false, refused: false, explicitOk: false, signalOk: false, wrote: [], error: error.message };
+  } finally {
+    for (const dir of [blank, signal]) if (dir) await rm(dir, { recursive: true, force: true });
+  }
+}
+
+// A raw listing rather than loadHarnessFiles: the gate's claim is "no files were written", and a
+// known-name list would silently miss anything unexpected that did get written. A missing directory
+// is itself the strongest pass — it means even mkdir never ran.
+async function listDir(dir) {
+  try {
+    return await readdir(dir);
+  } catch {
+    return [];
   }
 }
 

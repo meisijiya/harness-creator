@@ -1,0 +1,218 @@
+{
+  "generatedAt": "2026-09-17T18:24:46.177Z",
+  "target": "D:\\26code\\harness-creator",
+  "selfCheck": {
+    "pass": true,
+    "score": 100,
+    "englishScore": 100,
+    "budget": {
+      "pass": true,
+      "size": 11809,
+      "max": 11833
+    },
+    "tracker": {
+      "pass": true,
+      "score": 100,
+      "offenders": [],
+      "leakedState": []
+    },
+    "gate": {
+      "pass": true,
+      "refused": true,
+      "explicitOk": true,
+      "signalOk": true,
+      "wrote": []
+    },
+    "bottleneck": null
+  },
+  "harness": {
+    "overall": 20,
+    "bottleneck": "instructions",
+    "subsystems": {
+      "instructions": {
+        "score": 1,
+        "passed": 0,
+        "total": 5,
+        "checks": [
+          {
+            "pass": false,
+            "message": "Agent instruction file exists"
+          },
+          {
+            "pass": false,
+            "message": "Startup workflow documented"
+          },
+          {
+            "pass": false,
+            "message": "Definition of done documented"
+          },
+          {
+            "pass": false,
+            "message": "Verification commands discoverable"
+          },
+          {
+            "pass": false,
+            "message": "State artifacts routed from instructions"
+          }
+        ]
+      },
+      "state": {
+        "score": 1,
+        "passed": 0,
+        "total": 5,
+        "checks": [
+          {
+            "pass": false,
+            "message": "State artifact exists (feature registry, CONTEXT.md, or tracker routing)"
+          },
+          {
+            "pass": false,
+            "message": "State artifact is structured (valid feature JSON, CONTEXT.md glossary, or tracker routing)"
+          },
+          {
+            "pass": false,
+            "message": "Continuity artifact exists (progress log, handoff file, or tracker-mode handoff convention)"
+          },
+          {
+            "pass": false,
+            "message": "Current state snapshot recorded"
+          },
+          {
+            "pass": false,
+            "message": "Blockers and next step captured"
+          }
+        ]
+      },
+      "verification": {
+        "score": 1,
+        "passed": 0,
+        "total": 5,
+        "checks": [
+          {
+            "pass": false,
+            "message": "Verification entrypoint exists"
+          },
+          {
+            "pass": false,
+            "message": "Verification fails fast"
+          },
+          {
+            "pass": false,
+            "message": "Test command documented"
+          },
+          {
+            "pass": false,
+            "message": "Static/build check documented"
+          },
+          {
+            "pass": false,
+            "message": "Verification evidence is recorded"
+          }
+        ]
+      },
+      "scope": {
+        "score": 1,
+        "passed": 0,
+        "total": 5,
+        "checks": [
+          {
+            "pass": false,
+            "message": "One-feature-at-a-time rule exists"
+          },
+          {
+            "pass": false,
+            "message": "Dependencies or blocking edges tracked"
+          },
+          {
+            "pass": false,
+            "message": "Feature status is explicit"
+          },
+          {
+            "pass": false,
+            "message": "Scope boundary documented"
+          },
+          {
+            "pass": false,
+            "message": "Completion gate limits scope closure"
+          }
+        ]
+      },
+      "lifecycle": {
+        "score": 1,
+        "passed": 0,
+        "total": 5,
+        "checks": [
+          {
+            "pass": false,
+            "message": "Startup script exists"
+          },
+          {
+            "pass": false,
+            "message": "End-of-session procedure exists"
+          },
+          {
+            "pass": false,
+            "message": "Handoff path documented (reference-style convention or file)"
+          },
+          {
+            "pass": false,
+            "message": "Session restart markers exist"
+          },
+          {
+            "pass": false,
+            "message": "Clean restart path documented"
+          }
+        ]
+      }
+    }
+  },
+  "evals": {
+    "score": 100,
+    "passed": 10,
+    "total": 10,
+    "cases": 19,
+    "checks": [
+      {
+        "pass": true,
+        "message": "At least 10 eval cases"
+      },
+      {
+        "pass": true,
+        "message": "Covers minimal harness creation"
+      },
+      {
+        "pass": true,
+        "message": "Covers session continuity"
+      },
+      {
+        "pass": true,
+        "message": "Covers harness assessment"
+      },
+      {
+        "pass": true,
+        "message": "Covers verification workflow"
+      },
+      {
+        "pass": true,
+        "message": "Covers memory taxonomy"
+      },
+      {
+        "pass": true,
+        "message": "Covers tool safety"
+      },
+      {
+        "pass": true,
+        "message": "Covers multi-agent coordination"
+      },
+      {
+        "pass": true,
+        "message": "Each eval has prompt, expected output, expectations"
+      },
+      {
+        "pass": true,
+        "message": "Each eval has at least three expectation checks"
+      }
+    ]
+  },
+  "recommendation": "Improve the instructions subsystem before benchmarking agent behavior."
+}
