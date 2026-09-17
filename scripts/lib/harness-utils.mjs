@@ -313,7 +313,12 @@ export function scoreHarness(files) {
   // "state" bottleneck and push users toward feature_list.json — the wrong mode. When tracker
   // mode is detected, the state/scope checks below read AGENTS.md too and accept tracker
   // vocabulary, and never require harness-shaped markers inside files matt owns.
-  const trackerMode = !featureList && Boolean(contextDoc || domainRouting || issueTracker || adrDir);
+  // Those files appear only once the upstream setup runs, which this skill deliberately does not
+  // do — so in the window right after `create-harness --mode tracker` the generated AGENTS.md is
+  // the only evidence of the mode. Read it too, keyed on the vocabulary a human reads there
+  // ("state lives in the ticket system"), never on a marker invented to satisfy the scorer.
+  const trackerStateVocab = structuredHas(agents, ['工单系统', 'issue tracker', 'ticket system'], '');
+  const trackerMode = !featureList && Boolean(contextDoc || domainRouting || issueTracker || adrDir || trackerStateVocab.pass);
   const stateScope = trackerMode ? `${stateDocs}\n${agents}` : stateDocs;
 
   const stateArtifactStructured = () => {
@@ -321,6 +326,10 @@ export function scoreHarness(files) {
     // The upstream tracker routing is a generated, structured spec — accept it as-is rather than
     // forcing a glossary heading that the upstream format never produces.
     if (issueTracker.trim().length > 0) return true;
+    // A tracker harness whose long-lived files do not exist yet is structured by construction:
+    // its AGENTS.md routes state to the ticket system and the repo is meant to hold no registry.
+    // Demanding a file here is what scored a correct tracker harness as a broken one.
+    if (trackerMode) return true;
     // CONTEXT.md: accept the upstream canonical format (## Language + **Term**: + _Avoid_) as well
     // as harness vocabulary, so an upstream-authored file scores without edits.
     return structuredHas(contextDoc, ['## Language', '## Terms', '术语', 'glossary', 'domain', '领域'], '').pass;
@@ -335,7 +344,9 @@ export function scoreHarness(files) {
       structuredHas(agents, ['feature_list.json', 'progress.md', 'CONTEXT.md', 'docs/agents/domain.md'], 'State artifacts routed from instructions')
     ],
     state: [
-      hasFile(byPath, ['feature_list.json', 'feature-list.json', 'CONTEXT.md', 'docs/agents/issue-tracker.md'], 'State artifact exists (feature registry, CONTEXT.md, or tracker routing)'),
+      trackerMode
+        ? { pass: true, message: 'State artifact exists (AGENTS.md routes state to the ticket system; no in-repo registry by design)' }
+        : hasFile(byPath, ['feature_list.json', 'feature-list.json', 'CONTEXT.md', 'docs/agents/issue-tracker.md'], 'State artifact exists (feature registry, CONTEXT.md, or tracker routing)'),
       { pass: stateArtifactStructured(), message: 'State artifact is structured (valid feature JSON, CONTEXT.md glossary, or tracker routing)' },
       {
         pass: trackerMode
