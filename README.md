@@ -93,7 +93,7 @@ node ~/.agents/skills/harness-creator/scripts/run-benchmark.mjs --target /path/t
 - `progress.md`（精简版：当前状态、证据、阻塞、下一步）
 - `init.sh`
 
-会话交接是约定而非仓库文件：引用式交接文档写在 `.scratch/handoff.md` 或临时目录。tracker 模式（`CONTEXT.md` + ADR + 工单系统承接状态，工单可本地可仓外）见 SKILL.md 的"两种模式"一节。与 matt setup 共存时按**单一写入者**分工：matt 拥有 `docs/agents/*`、`CONTEXT.md`、`docs/adr/`、`## Agent skills` 块（其中 `CONTEXT.md`/ADR 由 domain-modeling **延迟创建**），本技能不代建，只落自己的章节与 `init.sh`；详见 `references/matt-coexistence.md`。
+会话交接是约定而非仓库文件：引用式交接文档写在 `.scratch/handoff.md` 或临时目录。tracker 模式（`CONTEXT.md` + ADR + 工单系统承接状态，工单可本地可仓外）见 SKILL.md 的"两种模式"一节。与 matt setup 共存时按**单一写入者**分工：matt 拥有 `docs/agents/*`、`CONTEXT.md`、`docs/adr/`、`## Agent skills` 块（其中 `CONTEXT.md`/ADR 由上游领域建模 skill **延迟创建**），本技能不代建，只落自己的章节与 `init.sh`；详见 `references/matt-coexistence.md`。
 
 `create-harness.mjs` 可检测常见的项目类型与包管理器。在基础验证命令层面支持 Node/npm/pnpm/yarn/bun、Python、Go、Rust、Maven、Gradle 和 .NET。
 
@@ -121,26 +121,19 @@ node ~/.agents/skills/harness-creator/scripts/run-benchmark.mjs --target /path/t
 | `absent` | 尚未产生，按默认语义执行 | 不问 |
 | `unknown` | git 不可用或非仓库 | 🔴 问一次 |
 
-**询问职责唯一**：这次对齐由 harness-creator **独占处理，且每个项目只问一次**。结论有两处载体——`.gitignore`（机制）与 AGENTS.md 的「产物追踪策略」节（指针与不变量）；后者存在即表示已对齐，因此其他 skill（含 matt 的 `teach`）**只读不问**，避免同一策略被反复询问、结论分散成第二事实源。
+**询问职责唯一**：这次对齐由 harness-creator **独占处理，且每个项目只问一次**。结论有两处载体——`.gitignore`（机制）与 AGENTS.md 的「产物追踪策略」节（指针与不变量）；后者存在即表示已对齐，因此其他 skill（含上游教学 skill）**只读不问**，避免同一策略被反复询问、结论分散成第二事实源。
 
 第三条边界值得单独说：`.gitignore` **只对未跟踪路径有效**。已提交的路径即使写进 `.gitignore` 也仍被跟踪，探测器会报 `ineffective opt-out`——此时不能判为「不跟踪」，要么按跟踪处理，要么由用户决定 `git rm --cached`（本技能不代做）。
 
 覆盖范围不止五个落点，还包括会往仓库里写东西的第三方 skill。处理顺序是**先路由、再放行、最后拒绝**：
 
 1. **先路由**：产物落点可配置、可重定向 → 路由进五落点之一（多数情况）。
-2. **受控放行**：产出 skill 自带**硬约束**（落点由它自身规定、不可改造，如 `teach` 的「以当前目录为工作区」）→ 放行，但 harness **不治理**其内容与形态（由产出 skill 自治理），只**审视**：登记豁免清单、由用户裁决"原样保留"还是"收归治理"，并给出追踪结论。
+2. **受控放行**：产出 skill 自带**硬约束**（落点由它自身规定、不可改造，如上游教学 skill 的「以当前目录为工作区」）→ 放行，但 harness **不治理**其内容与形态（由产出 skill 自治理），只**审视**：登记豁免清单、由用户裁决"原样保留"还是"收归治理"，并给出追踪结论。
 3. **拒绝**：既路由不进、也援引不出硬约束 → 拒绝引入（反例 #9）。
 
 放行不是第六个落点，也**不是"不用管"**：门槛有三条（硬约束 / 该产物只服务 skill 自身会话 / 能一行登记），漏掉登记、裁决、追踪结论任何一项即回落为"拒绝引入"。豁免项一旦被代理当作项目知识读取（承担状态、决策或术语职责），立即收归五落点。
 
-| 来源 | 产物 | 路由 |
-|---|---|---|
-| matt `teach` | 教学工作区（原文：以**当前目录**为有状态工作区） | 首选软路由到 `.scratch/teach/`；不可重定向则受控放行（登记豁免 + 用户裁决 + 追踪结论） |
-| matt `research` / `prototype` / `improve-codebase-architecture` / `to-questionnaire` | 引用式 md、HTML 原型、HTML 报告、问卷 | `.scratch/` |
-| matt `wizard` | 交互式 bash 向导 | 需裁决（可提交则该跟踪） |
-| addyosmani `constraint-driven-development` | `CONSTRAINTS.md` | 约束进 `init.sh`/CI，文件只作指针；留在根目录即落点外，必问 |
-
-完整判定表、放行门槛、路由理由、反例与边界见 `references/git-tracking-alignment.md`。
+逐 skill 的产物落点表（谁写什么、该落在哪）只维护一份，见 [`references/upstream-interlock.md`](references/upstream-interlock.md) 的「产物落点视图」；判定顺序、放行门槛、路由理由、反例与边界见 [`references/git-tracking-alignment.md`](references/git-tracking-alignment.md)。
 
 ## 它会收尾什么
 
@@ -170,57 +163,31 @@ node ~/.agents/skills/harness-creator/scripts/scan-housekeeping.mjs --target /pa
 
 它只输出清单、不删任何东西：治理模式、五个落点的缺失项、`feature_list.json` 中「done 且有证据」（可清）／「done 无证据」（**不可清**，先补证据）／未完成的条目、`.scratch/` 的分级（current／stale／unverified），以及自 `--session-ref` 以来改动的文件（即本会话范围）。`--session-ref` 必须是**本会话起始 commit**，**不默认 `HEAD`**——省略时只有未提交改动算本会话，其余标为「无法判定」而非「陈旧」，以免把已提交的本会话内容误判为历史。
 
-清账的作用域**只有状态这一个落点**：ADR（只增不删）与 `CONTEXT.md`（持续更新）永不清；删除前必须列出「将删/将留」清单并经 🔴 CHECKPOINT 批准。沉淀按需进行——默认你已在需求对齐后用 matt/addyosmani 的沉淀 skill 完成，本技能只补缺口、不代调用他人 skill。完整流程见 `references/housekeeping-pattern.md`。
+清账的作用域**只有状态这一个落点**：ADR（只增不删）与 `CONTEXT.md`（持续更新）永不清；删除前必须列出「将删/将留」清单并经 🔴 CHECKPOINT 批准。沉淀按需进行——默认你已在需求对齐后用上游的沉淀 skill 完成，本技能只补缺口、不代调用他人 skill。完整流程见 `references/housekeeping-pattern.md`。
 
 ## 技能生态搭配
 
 harness-creator 管"产物落在哪、代理怎么启动、完成怎么验证"；怎么访谈、怎么拆工单、怎么写代码，交给专业 skill。
 
+**两套上游的联动清单（skill 名、调用模式、插拔规则、上游变更维护流程）集中在 [`references/upstream-interlock.md`](references/upstream-interlock.md)**；本节只讲分工与取舍，**不复述名单**——名单存两份必然分叉，而上游是活跃仓库。
+
 ### 主体系：[mattpocock/skills](https://github.com/mattpocock/skills)
 
-tracker 模式的默认搭配：
+tracker 模式的默认搭配：初始化工作区（用户自行运行）→ 需求访谈与领域建模 → spec 与拆单 → 实现与验证 → 交接。各环节由上游 skill 承接，产物落在本技能约定的五个落点内；其中部分 skill 由用户显式调用，代理不代发起。
 
-| 环节 | 技能 | 产物落点 |
-|---|---|---|
-| 初始化工单基础设施（用户自行运行） | `setup-matt-pocock-skills` | issue tracker、标签、领域文档布局 |
-| 需求访谈与领域建模 | `grill-me` / `grill-with-docs` | `CONTEXT.md` + ADR |
-| spec 与拆单 | `to-spec` / `to-tickets` | 工单（含 blocking 边） |
-| 实现与验证 | `implement` / `tdd` / `code-review` | 代码 + CI 证据 |
-| 会话交接 | `handoff` | `.scratch/handoff.md`（引用式） |
-| 教学与调研 | `teach` / `research` | `.scratch/teach/`、`.scratch/` |
-| 原型与报告 | `prototype` / `improve-codebase-architecture` | `.scratch/` |
-| 大块工作规划 | `wayfinder` | 工单决策地图 |
+上游的教学 skill 是这一层里最需要约定的一个：它把**当前目录**当作有状态教学工作区（这是它的硬约束，不可配置），直接在仓库根目录运行就会把教学状态倒进默认上下文。约定分两级——首选把工作目录重定向到 `.scratch/teach/`；确实无法重定向时**受控放行**：登记进 AGENTS.md 的豁免清单、由你裁决原样保留或收归治理，并明确其追踪状态。无论哪级，**它都不再自行询问**是否纳入版本控制——追踪策略已由 harness-creator 一次性对齐（见「它会对齐什么」）。
 
-`teach` 是这一层里最需要约定的一个：它把**当前目录**当作有状态教学工作区（这是它的硬约束，不可配置），直接在仓库根目录运行就会把教学状态倒进默认上下文。约定分两级——首选把工作目录重定向到 `.scratch/teach/`；确实无法重定向时**受控放行**：登记进 AGENTS.md 的豁免清单、由你裁决原样保留或收归治理，并明确其追踪状态。无论哪级，**它都不再自行询问**是否纳入版本控制——追踪策略已由 harness-creator 一次性对齐（见「它会对齐什么」）。
+无信号的新仓库：harness-creator 先问"仓库用来做什么"判定模式；判 tracker 即默认用户已自行运行初始化 skill（本技能不调用、不询问安装、不提供仓内替代），随后只落本方骨架，matt 名下产物列为待办。
 
-无信号的新仓库：harness-creator 先问"仓库用来做什么"判定模式；判 tracker 即默认用户已自行运行 `setup-matt-pocock-skills`（本技能不调用、不询问安装、不提供仓内替代），随后只落本方骨架，matt 名下产物列为待办。
-
-**为什么不复制 matt 的产物**：`setup-matt-pocock-skills` 创建 `docs/agents/*` 与 `## Agent skills` 块，而 `CONTEXT.md`/ADR 由 `domain-modeling` **延迟创建**（首个术语/决策定稿时才建）。若本技能也预建这些文件，就会出现两个写入者与两种方言（harness 的 `## 术语` vs matt 的 `## Language`）。因此规则是**单一写入者**：格式与创建时机归 matt，本技能引用而不复制。`create-harness.mjs` 同样遵循 matt 的互斥不变量——已有 `CLAUDE.md` 时不另建 `AGENTS.md`。完整分区、两个方向的顺序与反例见 `references/matt-coexistence.md`。
+**为什么不复制 matt 的产物**：上游的初始化 skill 创建 `docs/agents/*` 与 `## Agent skills` 块，而 `CONTEXT.md`/ADR 由上游的领域建模 skill **延迟创建**（首个术语/决策定稿时才建）。若本技能也预建这些文件，就会出现两个写入者与两种方言（harness 的 `## 术语` vs matt 的 `## Language`）。因此规则是**单一写入者**：格式与创建时机归 matt，本技能引用而不复制。`create-harness.mjs` 同样遵循 matt 的互斥不变量——已有 `CLAUDE.md` 时不另建 `AGENTS.md`。完整分区、两个方向的顺序与反例见 `references/matt-coexistence.md`。
 
 ### 补充：[addyosmani/agent-skills](https://github.com/addyosmani/agent-skills)（registry 模式的工作流层）
 
-不采用工单体系时，addyosmani 提供完整工作流层，状态骨架由 registry 模式承担：
-
-| 生命周期 | 技能 | 产物落点 |
-|---|---|---|
-| Define | `interview-me`、`idea-refine`、`spec-driven-development` | PRD/访谈结论 → `.scratch/` |
-| Define | `constraint-driven-development` | 约束 → `init.sh`/CI（CONSTRAINTS.md 只做指针） |
-| Plan | `planning-and-task-breakdown` | 拆解 → `feature_list.json`（features + dependencies） |
-| Build | `incremental-implementation`、`test-driven-development`、`source-driven` / `doubt-driven`、`frontend-ui-engineering`、`api-and-interface-design` | 代码 + evidence |
-| Verify | `browser-testing-with-devtools`、`debugging-and-error-recovery` | 证据 → `progress.md`/CI |
-| Review | `code-review-and-quality`、`code-simplification`、`security-and-hardening`、`performance-optimization` | 结论 → 注册表状态 |
-| Ship | `git-workflow-and-versioning`、`ci-cd-and-automation`、`deprecation-and-migration`、`observability-and-instrumentation`、`shipping-and-launch` | 门禁与发布检查 |
-
-与 matt 体系并存时的取舍：
-
-- **与 matt 重复（matt 为主时不引入；无 matt 时翻转为可用，即上表）**：`interview-me`、`planning-and-task-breakdown`、`test-driven-development`、`code-review-and-quality`、`debugging-and-error-recovery`
-- **无条件不引入**：`using-agent-skills`（与 `AGENTS.md` 路由双写）、`context-engineering`（与本技能本体双写）、`documentation-and-adrs`（行内文档标准 vs 代码即文档；其 ADR 部分可用）
-- **改造后用**：`spec-driven-development`（PRD 必须落 `.scratch/`）、`idea-refine`（限概念萌芽期）
-- **注意**：`test-driven-development` 的 80/15/5 配额与"只做重要逻辑测试"的克制原则冲突，与用哪套生态无关
+不采用工单体系时，addyosmani 提供完整工作流层（Define → Plan → Build → Verify → Review → Ship），状态骨架由 registry 模式承担。与 matt 体系并存时的**采纳取舍**（哪些与之重复、哪些无条件不引入、哪些改造后用）记在 [`references/upstream-interlock.md`](references/upstream-interlock.md) 的「采纳取舍」一节，本节不重复。
 
 模式回答"状态住哪"，技能生态回答"活怎么干"——两个正交维度，不因换生态而新增模式。
 
-**治理权归属**：两种模式下 AGENTS.md 的 harness 章节（启动工作流、工作规则、完成定义、验证命令等）都归本技能全权管理——模式切换只改变状态事实来源的位置，不改变治理权。第三方 skill（含 addyosmani 系）只在五个落点内产出，不制定规则；被无条件拒绝的三个（`using-agent-skills`、`context-engineering`、`documentation-and-adrs`）正是治理竞争者。AGENTS.md 文件可与第三方块共存（合并规则见 `references/matt-coexistence.md`：章节以 `templates/agents.md` 为唯一来源，已存在时脚本只报告缺失章节、合并由代理执行），但治理权威唯一。
+**治理权归属**：两种模式下 AGENTS.md 的 harness 章节（启动工作流、工作规则、完成定义、验证命令等）都归本技能全权管理——模式切换只改变状态事实来源的位置，不改变治理权。第三方 skill（含 addyosmani 系）只在五个落点内产出，不制定规则；被无条件拒绝的三项（名单见 [`references/upstream-interlock.md`](references/upstream-interlock.md) 的「采纳取舍」）正是治理竞争者。AGENTS.md 文件可与第三方块共存（合并规则见 `references/matt-coexistence.md`：章节以 `templates/agents.md` 为唯一来源，已存在时脚本只报告缺失章节、合并由代理执行），但治理权威唯一。
 
 ## 状态
 
@@ -234,7 +201,11 @@ tracker 模式的默认搭配：
 - [x] 整理仓库：只读清账扫描（`scan-housekeeping.mjs`）+ 按需沉淀（补齐为准）
 - [x] 会话收尾：仅作用于**本会话产出**的收敛流程（`--session-only`），与整理/优化按作用域分流
 - [x] 与 matt setup 共存：单一写入者分区（matt 拥有 `docs/agents/*` 与 `CONTEXT.md`/ADR 的格式及延迟创建）
-- [x] 产物落点的 git 跟踪对齐：只读探测（`check-git-tracking.mjs`）+ 每项目一次性询问，含 `teach` 等第三方产物
+- [x] 产物落点的 git 跟踪对齐：只读探测（`check-git-tracking.mjs`）+ 每项目一次性询问，含上游教学 skill 等第三方产物
+- [x] 上游联动抽离为**可插拔清单**：清单、调用模式、插拔规范与上游变更维护流程单一来源（`references/upstream-interlock.md`），下游按角色引用
+- [x] 非工单模式的任务推进：条目即工单（`acceptance` 字段 + 垂直切片/前沿/增量环规范）
+- [x] 交接后的会话边界：推进需**显式授权**，交接文档是上下文而非待办队列
+- [x] 模板模式中立：`AGENTS.md` 中随模式变化的小节由占位符填充，不泄漏另一模式的状态产物
 - [ ] 可选的真实前后对照代理会话回放
 
 ## 文件

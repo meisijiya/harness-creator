@@ -4,6 +4,11 @@
       "id": "feat-001",
       "name": "项目初始化",
       "description": "确认项目能从干净检出安装依赖、运行验证并启动",
+      "acceptance": [
+        "干净检出后依赖安装成功",
+        "验证命令全部通过",
+        "项目能从标准启动路径启动"
+      ],
       "dependencies": [],
       "status": "not-started",
       "evidence": ""
@@ -11,7 +16,12 @@
     {
       "id": "feat-002",
       "name": "第一个面向用户的功能",
-      "description": "用代理应实现的第一个具体行为替换此占位条目",
+      "description": "用代理应实现的第一个具体行为替换此占位条目；写成一条穿过所有层的垂直切片，尺寸不超过单个上下文窗口",
+      "acceptance": [
+        "用户能完成端到端的关键动作",
+        "该行为有对应的自动化测试",
+        "验证命令通过"
+      ],
       "dependencies": ["feat-001"],
       "status": "not-started",
       "evidence": ""
@@ -20,6 +30,11 @@
       "id": "feat-003",
       "name": "验证覆盖",
       "description": "为活动功能添加或确认测试、类型检查、lint 或手动验证",
+      "acceptance": [
+        "活动功能的公共接缝上有测试",
+        "测试先红后绿，不是事后补写的形状断言",
+        "类型检查与 lint 通过"
+      ],
       "dependencies": ["feat-002"],
       "status": "not-started",
       "evidence": ""
@@ -28,6 +43,10 @@
       "id": "feat-004",
       "name": "文档更新",
       "description": "更新受已实现功能影响的 README、架构说明或产品文档",
+      "acceptance": [
+        "受影响的文档已更新且与实现一致",
+        "可执行约束已转入门禁而非只写在文档里"
+      ],
       "dependencies": ["feat-003"],
       "status": "not-started",
       "evidence": ""
@@ -36,6 +55,11 @@
       "id": "feat-005",
       "name": "清理与交接",
       "description": "记录验证证据、更新 progress.md，按需写引用式交接文档（.scratch/handoff.md）",
+      "acceptance": [
+        "每条已完成条目的 evidence 非空",
+        "progress.md 的四类小节已刷新",
+        "仓库能从 ./init.sh 直接起跑"
+      ],
       "dependencies": ["feat-004"],
       "status": "not-started",
       "evidence": ""

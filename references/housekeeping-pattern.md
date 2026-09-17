@@ -48,9 +48,9 @@ node skills/harness-creator/scripts/scan-housekeeping.mjs --target /path/to/proj
 
 ### ③ 补齐（precipitate，按需）
 
-**默认用户已在需求对齐后用 matt/addyosmani 的沉淀 skill 完成沉淀**，本技能只补缺口：
+**默认用户已在需求对齐后用上游的沉淀 skill 完成沉淀**，本技能只补缺口：
 
-- 沿用「本技能不调用他人 skill」的委托原则：查漏后**提示**用户运行对应沉淀 skill（`grill-with-docs` / `to-spec` / `to-tickets` 等），不代调用。
+- 沿用「本技能不调用他人 skill」的委托原则：查漏后**提示**用户运行对应的上游沉淀 skill（需求对齐 / 规格化 / 拆分那一类，清单见 [Upstream Interlock](./upstream-interlock.md)），不代调用。
 - 未覆盖的落点由本技能直接补齐（写 ADR、补 `CONTEXT.md`、把约束写进 `init.sh`/CI 本就是本技能的职责）。
 - **以补齐为准**：已沉淀的不重复写——重复即双写（反例 #1）。
 
@@ -74,7 +74,7 @@ node skills/harness-creator/scripts/scan-housekeeping.mjs --target /path/to/proj
 | 1 | 自动触发整理 | 删除不可逆，用户没要求就动仓库是越界 | 仅用户显式请求时执行 |
 | 2 | 清掉 ADR 或 `CONTEXT.md` | 二者是长期资产（只增不删／持续更新），清了就断了决策史与领域语言 | 整理的作用域只有「状态」落点 |
 | 3 | 删掉「done 但无证据」的条目 | 抹掉「无证据声称完成」的痕迹，等于掩盖头号失败 | 先补 `evidence`；确需弃用才删 |
-| 4 | 本技能直接调用 matt/addyosmani 的沉淀 skill | 技能无法可靠自调用另一技能，会退化成隐式依赖 | 提示用户运行，或由本技能补未覆盖落点 |
+| 4 | 本技能直接调用上游的沉淀 skill | 技能无法可靠自调用另一技能，会退化成隐式依赖 | 提示用户运行，或由本技能补未覆盖落点 |
 | 5 | 沉淀时重复写已有内容 | 制造双写与漂移源 | 补齐为准——已存在的落点不再写 |
 
 ## 与会话收尾的边界
@@ -97,3 +97,4 @@ node skills/harness-creator/scripts/scan-housekeeping.mjs --target /path/to/proj
 - 反例 #1（状态双写）：清账与补齐都朝「每个事实只剩一个落点」收敛。
 - 反例 #2（交接常驻）：`.scratch/` 中陈旧交接由清账删除。
 - 交接所有权：handoff 由用户按需生成；整理**不创建**交接，只清理过期的。
+- 与任务推进的分工（[Task Advancement](./task-advancement-pattern.md)）：整理管**收敛**（材料归位、清场、补齐），推进管**把一条 feature 做完**——整理不推进，推进不整理。

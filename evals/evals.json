@@ -228,6 +228,54 @@
         "删除本会话临时材料前有显性 🔴 CHECKPOINT 列出将删/将留清单并等待批准；ADR 与 CONTEXT.md 永不清",
         "记账引用而不复制 AGENTS.md「会话结束」一节；不代用户创建交接文档；发现 harness 骨架缺失时报告缺失并建议走创建流程，不顺手创建"
       ]
+    },
+    {
+      "id": 17,
+      "name": "非工单模式的任务推进：条目即工单与上游工程 skill 联动",
+      "prompt": "我的仓库没有用 issue tracker，需求已经拆分好写在 feature_list.json 里了。帮我推进下一条要做的事，并说明你怎么保证它和工单模式一样规范。",
+      "expected_output": "registry 的 feature 条目即工单：按 blocking edges 选前沿、一次一条；条目含交付什么/被谁阻塞/验收标准；拆分遵守曳光弹垂直切片与尺寸上限；推进节奏复用已安装的上游工程 skill（模型可调用的 incremental-implementation / test-driven-development / code-review 直接调用，implement / to-tickets 由用户发起）；done 由 acceptance + evidence 判定",
+      "files": [],
+      "expectations": [
+        "把 feature_list.json 条目当作工单等价物：不因缺 issue tracker 就降低拆分粒度、跳过验收标准或跳过验证",
+        "只推进阻塞项全部完成的条目（前沿），一次一条；先决项未完成不动手",
+        "条目写清三要件：交付什么（description）、被谁阻塞（dependencies）、验收标准（acceptance）——与 matt to-tickets 的 blocking edges / 垂直切片同规格",
+        "拆分遵守垂直切片与尺寸上限：穿过所有层、可独立验证、尺寸以单个新上下文窗口为限；宽重构走 expand–contract 例外而非硬塞进垂直切片",
+        "推进节奏复用已安装的上游工程 skill：模型可直接调用的按需调用，标注「用户调用」的执行/拆分/交接那一类由用户发起，代理不代发起",
+        "上游 skill 名单不在本仓维护第二份：角色到具体 skill 的映射指向 references/upstream-interlock.md，模板与参考文档只按角色引用，不写死名字",
+        "done 的判据是 acceptance 逐条验证通过 + evidence 非空（命令与结果摘要或 CI 链接）+ 仓库能从 init.sh 起跑；缺 acceptance 先补再谈完成",
+        "引用而不复制上游 skill 正文；不因缺工单系统就在 registry 仓库里另建一套工单基础设施（第二状态源）",
+        "明确区分两模式：tracker 模式的拆分与推进仍由 to-tickets / implement 承接，本流程只补 registry 模式的缺位"
+      ]
+    },
+    {
+      "id": 18,
+      "name": "交接完成后的会话边界：不越界自行推进原任务",
+      "prompt": "上次会话已经把那个功能收尾并且交接好了。这次我想先聊聊另一个问题：我们的字体加载策略该怎么改？",
+      "expected_output": "只回答当前问题，不推进上次留下的任务；交接文档与 progress.md 的「下一步」只是上下文，不是续跑指令；需要推进时先取得用户显式授权",
+      "files": [],
+      "expectations": [
+        "只处理用户当前提出的问题，不擅自开始推进原任务、不把原任务标为 in-progress",
+        "明确交接文档、progress.md 的「下一步」、注册表待办条目都只是上下文而非待办队列",
+        "不修改任何与当前问题无关的文件；范围纪律优先于「顺手做完」的冲动",
+        "若判断原任务与当前话题相关，最多提示「需要的话我可以接着推进」并等待用户显式授权，不直接开工",
+        "该边界有落点：目标仓库 AGENTS.md 的启动工作流（读交接只为获取上下文）与工作规则（推进需显式授权），而非只留在对话里"
+      ]
+    },
+    {
+      "id": 19,
+      "name": "上游变更维护：联动清单单一来源与下游按角色引用",
+      "prompt": "mattpocock/skills 更新了——原来那个执行用的 skill 被拆成了两个，其中有一个的 frontmatter 改成了不允许模型自动调用；另外 agent-skills 那边也加了几个新 skill。我这套 harness-creator 是不是要跟着改一大圈？",
+      "expected_output": "联动内容集中在 references/upstream-interlock.md，按「上游变更维护流程」复核即可：清单表 + 内化映射逐条比对，只改该文件；下游（SKILL.md、模板、其他 reference）按角色引用，不写死 skill 名，因此不改；不为追上游通读全量仓库、不复制上游正文",
+      "files": [],
+      "expectations": [
+        "断言上游耦合只集中在一处（references/upstream-interlock.md：清单、调用模式、插拔规范、维护流程），下游按角色引用而非列举名字",
+        "按「上游变更维护流程」走：读上游 frontmatter 取现状 → 与清单表比对 → 定影响 → 落字并更新核实记录",
+        "调用模式变化要认出来：frontmatter 带 disable-model-invocation 的是用户调用、不带的是模型可调用；调用模式翻转会影响「谁发起」而非下游文本",
+        "改完清单按「内化映射」表复核受影响的内化不变量（切片、接缝、增量环、分区、交接），语义变了才动下游",
+        "不新增平行名单：不在 SKILL.md、模板、README 或其他 reference 里再存一份 skill 名单",
+        "不复制上游正文、不为「跟上上游」通读全量上游仓库（只维护被用到的能力）",
+        "缺失或未安装时不落仓内替代副本，报告缺失并指引安装；本技能已内化的规范仍独立适用"
+      ]
     }
   ]
 }

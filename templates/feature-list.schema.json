@@ -20,7 +20,14 @@
           },
           "description": {
             "type": "string",
-            "description": "该功能做什么"
+            "description": "该功能做什么：交付什么端到端行为，而非逐层实现清单"
+          },
+          "acceptance": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "验收标准：本条完成时必须逐条验证通过的判据。拆条目时写，不留到声称完成时补——缺它就无法判断 done（见 references/task-advancement-pattern.md）"
           },
           "dependencies": {
             "type": "array",

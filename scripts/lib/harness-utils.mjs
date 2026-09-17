@@ -298,8 +298,8 @@ export function scoreHarness(files) {
   const legacyHandoff = byPath.get('session-handoff.md') || '';
   const scratchHandoff = byPath.get('.scratch/handoff.md') || '';
   const contextDoc = byPath.get('CONTEXT.md') || '';
-  // matt's setup-matt-pocock-skills owns docs/agents/* and creates CONTEXT.md/ADRs only
-  // lazily (via domain-modeling). Either artifact therefore proves tracker mode on its own:
+  // The upstream setup skill owns docs/agents/* and creates CONTEXT.md/ADRs only
+  // lazily. Either artifact therefore proves tracker mode on its own:
   // a repo where setup ran before harness-creator has docs/agents/ but no CONTEXT.md yet.
   const domainRouting = byPath.get('docs/agents/domain.md') || '';
   const issueTracker = byPath.get('docs/agents/issue-tracker.md') || '';
@@ -318,11 +318,11 @@ export function scoreHarness(files) {
 
   const stateArtifactStructured = () => {
     if (jsonFeatureList(featureList, '').pass) return true;
-    // matt's tracker routing is a generated, structured spec — accept it as-is rather than
-    // forcing a glossary heading that matt's CONTEXT-FORMAT never produces.
+    // The upstream tracker routing is a generated, structured spec — accept it as-is rather than
+    // forcing a glossary heading that the upstream format never produces.
     if (issueTracker.trim().length > 0) return true;
-    // CONTEXT.md: accept matt's canonical format (## Language + **Term**: + _Avoid_) as well
-    // as harness vocabulary, so a domain-modeling-authored file scores without edits.
+    // CONTEXT.md: accept the upstream canonical format (## Language + **Term**: + _Avoid_) as well
+    // as harness vocabulary, so an upstream-authored file scores without edits.
     return structuredHas(contextDoc, ['## Language', '## Terms', '术语', 'glossary', 'domain', '领域'], '').pass;
   };
 
@@ -447,7 +447,7 @@ function jsonFeatureList(text, message) {
   }
 }
 
-// matt's setup-matt-pocock-skills edits CLAUDE.md when it exists and treats AGENTS.md and
+// The upstream setup skill edits CLAUDE.md when it exists and treats AGENTS.md and
 // CLAUDE.md as mutually exclusive ("never create AGENTS.md when CLAUDE.md already exists").
 // harness-creator follows the same invariant so the two skills never end up maintaining
 // divergent instruction files in one repo.

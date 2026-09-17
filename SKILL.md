@@ -34,15 +34,15 @@ license: MIT
 
 **Registry 模式（默认，自包含）**：状态事实来源在仓库内——`feature_list.json` 注册表 + 精简 `progress.md`。适用于无 issue tracker 的任意仓库与代理。
 
-**Tracker 模式（Matt 工程流）**：状态与依赖由工单系统承接（本地或仓外），仓库只保留 `CONTEXT.md`（领域语言）与 ADR（决策史，只增不删），二者均由 matt 的 `domain-modeling` **延迟创建**；`.scratch/` 承载任务级材料。探测信号：matt `docs/agents/`、`CONTEXT.md`、ADR 目录，或用户使用工单工作流——`.scratch/` **不算**信号。
+**Tracker 模式（Matt 工程流）**：状态与依赖由工单系统承接，仓库只保留 `CONTEXT.md`（领域语言）与 ADR（决策史，只增不删），二者均由上游领域建模 skill **延迟创建**；`.scratch/` 承载任务级材料。探测信号：matt `docs/agents/`、`CONTEXT.md`、ADR 目录，或用户使用工单工作流——`.scratch/` **不算**信号。
 
 两模式共享骨架：`AGENTS.md` 路由、验证门禁、范围规则、引用式交接；区别只在状态来源位置。
 
 ## 第一步
 
 1. 检查已有内容：指令文件、功能/状态文件、验证命令、文档、`CONTEXT.md`/ADR/matt `docs/agents/`、包清单。→ 输出：现有产物清单。
-2. 判定模式：**有信号**按信号判；**无信号**（既无 `feature_list.json` 也无 `CONTEXT.md`/ADR/工单痕迹）→ 🔴 CHECKPOINT 询问仓库用途（产品形态、协作方式、有无工单系统），**得到答复前不写盘**；信号矛盾按最强信号判。→ 输出：模式判定结论。
-3. 判定 tracker 即默认用户已运行 `setup-matt-pocock-skills`：不调用、不询问安装、不提供仓内替代。matt 名下产物（`docs/agents/*`、`CONTEXT.md`、`docs/adr/`、`## Agent skills`）不代建，只落本方骨架，缺失项列待办并指引 setup。→ 输出：本轮产物清单。
+2. 判定模式：**有信号**按信号判；**无信号**（见上节探测信号）→ 🔴 CHECKPOINT 询问仓库用途（产品形态、协作方式、有无工单系统），**得到答复前不写盘**；信号矛盾按最强信号判。→ 输出：模式判定结论。
+3. 判定 tracker 即默认用户已运行上游初始化 skill：不调用、不询问安装、不提供仓内替代。matt 名下产物不代建，只落本方骨架，缺失项列待办并指引安装。→ 输出：本轮产物清单。
 4. 优先最小化：仅当涉及跨会话记忆、权限安全、多代理协调或基准测试时，才加载对应参考并加产物。其余缺失上下文仅在无法安全推断时询问。
 5. 追踪对齐（一次性）：写盘前运行 `scripts/check-git-tracking.mjs`；🔴 CHECKPOINT 只问一次，`.gitignore` 命中即判「不跟踪」，结论落 AGENTS.md，其余 skill 只读不问。→ 输出：追踪策略表。
 
@@ -62,7 +62,7 @@ node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
 
 脚本生成 registry 骨架；tracker 模式跳过 `feature_list.json`/`progress.md`（`--mode tracker` 或见 `docs/agents/`）。
 
-**与 matt setup 共存**：单一写入者分区——matt 拥有 `docs/agents/*`、`## Agent skills`、`CONTEXT.md`/`docs/adr/` 的格式与延迟创建。**AGENTS.md 章节以 `templates/agents.md` 为唯一来源**（生成端即固定，审计不校验结构）；已存在时脚本只报告缺失章节、不写盘，合并由代理执行：保留第三方块，不为已有章节另建等价副本。反例见 [Matt Coexistence](references/matt-coexistence.md)。
+**与 matt setup 共存**：单一写入者分区——matt 拥有 `docs/agents/*`、`## Agent skills`、`CONTEXT.md`/`docs/adr/`。**AGENTS.md 章节以 `templates/agents.md` 为唯一来源**（审计不校验结构）；已存在时脚本只报告缺失章节、不写盘，合并由代理执行并保留第三方块、不另建等价副本。分区表见 [Matt Coexistence](references/matt-coexistence.md)。
 
 输入：仓库路径与（可选）命令。输出：四个产物 + 创建说明。
 
@@ -75,8 +75,6 @@ node skills/harness-creator/scripts/validate-harness.mjs --target /path/to/proje
 ```
 
 报告五子系统得分与前 2-3 项改动建议；两模式与中英文产物同标准。最低分只是候选瓶颈，先确认因果再改。
-
-输入：目标仓库。输出：五子系统得分、候选瓶颈、前 2-3 项改动。
 
 ### 生成报告
 
@@ -102,21 +100,22 @@ node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project 
 - 不易察觉的失败模式：`references/gotchas.md`
 - 会话收尾（收尾意图，**仅本会话产出**）：`references/session-wrapup-pattern.md`，扫描器 `--session-only`
 - 整理仓库（**全仓**清账）：`references/housekeeping-pattern.md`，扫描器默认模式
-- 与 matt 生态共存（tracker 分区所有权）：`references/matt-coexistence.md`
+- 非工单模式的任务推进（条目即工单）：`references/task-advancement-pattern.md`
+- 上游联动（清单、调用模式、插拔与维护）：`references/upstream-interlock.md`；matt 分区所有权见 `references/matt-coexistence.md`
 - 产物落点的 git 跟踪对齐（一次性询问）：`references/git-tracking-alignment.md`
 
 ## 异常与边界条件
 
-创建与审计中的异常见 [Failure Modes](references/failure-modes.md)。以下任一情况**先读它再动手**：已有同名文件或第三方块、模式信号矛盾或缺失、追踪报 `stray`/`unknown`、第三方产物出落点（含 `teach`）、`validate` 低于阈值、环境无 Node。**第三方工具存在不构成模式信号**——无信号即走第 2 步的 🔴 CHECKPOINT。原则：先告知再执行，绝不静默跳过或降级。
+创建与审计中的异常见 [Failure Modes](references/failure-modes.md)。以下任一情况**先读它再动手**：已有同名文件或第三方块、模式信号矛盾或缺失、追踪报 `stray`/`unknown`、第三方产物出落点、`validate` 低于阈值、环境无 Node。**第三方工具存在不构成模式信号**——无信号即走第 2 步的 🔴 CHECKPOINT。原则：先告知再执行，绝不静默跳过或降级。
 
 ## 设计规则
 
 - 根指令文件保持简短：只做路由与不变量，不做完整手册。
-- `CONTEXT.md` 承载领域语言：与代码互补、不重复代码已表达的内容；格式归 matt（`## Language` + `_Avoid_`），本技能引用不复制。
+- `CONTEXT.md` 承载领域语言：与代码互补、不重复代码已表达的内容；格式归上游，本技能引用不复制。
 - 决策进 ADR，不进进度日志；进度日志只留当前状态、证据、阻塞、下一步。
 - 项目文档（`design.md`、`docs/`）纳入治理：约束进门禁、术语进 `CONTEXT.md`、决策进 ADR、活文档指定 owner；与代码重复视为双写，过时即归档。
 - 任务级材料（spec 草稿、调研笔记）放 `.scratch/`，任务完成或 worktree 关闭即删。
-- 交接文档由用户按需生成（matt handoff 或等价技能），代理不主动创建；格式引用而不复制。
+- 交接文档由用户按需生成（上游交接 skill 或等价技能），代理不主动创建；格式引用而不复制。交接是上下文、不是待办队列：用户未显式推进时不续跑原任务。
 - 验证命令必须明确且可直接运行。
 - 状态文件追加/更新，不依赖聊天历史。
 - 三种收敛别混：**收尾**仅本会话产出，**整理**清全仓状态落点，**优化**才全仓审计。ADR、`CONTEXT.md` 永不清，删除前必经 🔴 CHECKPOINT 列清单获批准。

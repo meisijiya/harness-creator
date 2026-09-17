@@ -173,8 +173,8 @@ if (
 // Prove the bundled scripts actually work end-to-end: scaffold a harness into a throwaway
 // directory, then score it. A structural eval-coverage check can't catch a broken
 // create-harness.mjs — this can. Failure here means the skill ships broken, not just thin.
-// The second stage guards bilingual scoring: Matt-style toolchains (to-spec, handoff,
-// grill-with-docs) produce English artifacts, so an English tracker-mode harness must
+// The second stage guards bilingual scoring: upstream toolchains
+// produce English artifacts, so an English tracker-mode harness must
 // score just as well as the Chinese registry-mode scaffold. The third stage keeps the skill's
 // own instruction file inside its size budget.
 async function runSelfCheck() {

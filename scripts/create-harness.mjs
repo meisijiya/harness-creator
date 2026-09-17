@@ -29,9 +29,9 @@ Creates a minimal production harness:
 Tracker mode (--mode tracker, or auto-detected from docs/agents/*, CONTEXT.md or docs/adr/)
 skips the registry state files: state lives in the ticket system, so writing
 feature_list.json/progress.md there would create a second state source. An existing
-feature_list.json wins over those signals. matt setup owns docs/agents/*; CONTEXT.md and
-docs/adr/ are created lazily by matt's domain-modeling skill, so this script never scaffolds
-them.
+feature_list.json wins over those signals. The upstream tracker setup owns docs/agents/*; CONTEXT.md and
+docs/adr/ are created lazily upstream, so this script never scaffolds
+them. Skill names and invocation modes: references/upstream-interlock.md.
 
 --tracking records the one-time git-tracking alignment conclusion in the AGENTS.md
 "## 产物追踪策略" section. Omit it and the section is written as pending: harness-creator
@@ -49,7 +49,7 @@ Existing files are skipped unless --force is set.`);
 }
 
 const target = path.resolve(args.target || args._[0] || process.cwd());
-// CLAUDE.md wins when it already exists, matching setup-matt-pocock-skills; --agent-file overrides.
+// CLAUDE.md wins when it already exists, matching the upstream setup skill; --agent-file overrides.
 const agentFile = await detectAgentFile(target, args.agentFile);
 const force = Boolean(args.force);
 const project = await detectProject(target);
@@ -89,19 +89,44 @@ await mkdir(target, { recursive: true });
 const REPO_LAYOUT = {
   registry: [
     '| `.scratch/` | 临时材料 | 写任务材料时创建；任务完成或 worktree 关闭即删除，不进默认上下文 |',
-    '| `CONTEXT.md` | 领域语言 | 由 matt 的 `domain-modeling` 延迟创建（首个术语定稿时）；缺失属正常状态 |',
+    '| `CONTEXT.md` | 领域语言 | 由上游领域建模 skill 延迟创建（首个术语定稿时）；缺失属正常状态 |',
     '| `docs/adr/` | 决策记录 | 同上，首个 ADR 需要时创建；只增不删 |',
     '| `init.sh` | 可执行约束 | harness 创建；声称完成前必须运行 |',
     '| `feature_list.json`、`progress.md` | 状态与证据 | harness 创建；每会话更新，`evidence` 必填 |'
   ],
   tracker: [
     '| `.scratch/` | 临时材料 | 写任务材料时创建；任务完成或 worktree 关闭即删除，不进默认上下文 |',
-    '| `CONTEXT.md` | 领域语言 | 由 matt 的 `domain-modeling` 延迟创建（首个术语定稿时）；缺失属正常状态 |',
+    '| `CONTEXT.md` | 领域语言 | 由上游领域建模 skill 延迟创建（首个术语定稿时）；缺失属正常状态 |',
     '| `docs/adr/` | 决策记录 | 同上，首个 ADR 需要时创建；只增不删 |',
     '| `init.sh` | 可执行约束 | harness 创建；声称完成前必须运行 |',
     '| 工单系统（仓外或本地） | 状态与依赖 | 工单即事实来源；仓内**不留** `feature_list.json`/`progress.md`，避免第二状态源 |'
   ]
 };
+
+// Mode-aware template fillers. The AGENTS.md template is shared by both modes, so any section
+// that names the state artifact has to be filled per mode: leaving registry names in a tracker
+// harness contradicts the repo-layout table ("仓内不留 feature_list.json") inside the same file
+// — two state facts in one instruction file, the drift this skill exists to prevent.
+const STATE_ARTIFACT = {
+  registry: '`feature_list.json` 与 `progress.md`',
+  tracker: '工单系统'
+};
+const REQUIRED_ARTIFACTS = {
+  registry: [
+    '- `feature_list.json` —— 功能状态与证据的事实来源（条目 = 工单：交付 / 阻塞 / 验收标准）',
+    '- `progress.md` —— 精简日志：当前状态、完成证据、阻塞、下一步',
+    '- `init.sh` —— 标准启动与验证路径',
+    '- `CONTEXT.md` + ADR —— 可选长期资产：领域语言与决策史',
+    '- `.scratch/` —— 可选任务级暂存区：spec 草稿与交接文档，随任务删除'
+  ],
+  tracker: [
+    '- 工单系统（仓外或本地）—— 状态与证据的事实来源；仓内**不留** `feature_list.json`/`progress.md`',
+    '- `init.sh` —— 标准启动与验证路径',
+    '- `CONTEXT.md` + ADR —— 长期资产：领域语言与决策史（格式与创建时机归 `docs/agents/*` 的配置）',
+    '- `.scratch/` —— 任务级暂存区：spec 草稿与交接文档，随任务/worktree 删除'
+  ]
+};
+const modeKey = trackerMode ? 'tracker' : 'registry';
 
 const replacements = {
   AGENT_FILE_NAME: agentFile,
@@ -110,7 +135,9 @@ const replacements = {
     : `Project harness for reliable agent-assisted development in a ${project.stack} codebase.`,
   VERIFICATION_COMMANDS: commands.map((command) => `- \`${command}\``).join('\n'),
   PRIMARY_VERIFICATION_COMMAND: './init.sh',
-  REPO_LAYOUT: REPO_LAYOUT[trackerMode ? 'tracker' : 'registry'].join('\n'),
+  REPO_LAYOUT: REPO_LAYOUT[modeKey].join('\n'),
+  REQUIRED_ARTIFACTS: REQUIRED_ARTIFACTS[modeKey].join('\n'),
+  STATE_ARTIFACT: STATE_ARTIFACT[modeKey],
   // The tracking-alignment conclusion is filled by the one-time question harness-creator asks
   // before writing, or supplied up front with --tracking. Leaving it marked as pending is the
   // signal that the question has NOT been asked yet, so a later session asks it exactly once

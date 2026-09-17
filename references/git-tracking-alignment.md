@@ -8,17 +8,17 @@
 
 - 有的**必须跟踪**：`CONTEXT.md`、ADR、`init.sh`/CI 门禁、registry 状态文件。
 - 有的**通常不该跟踪**：`.scratch/`（随任务/worktree 删除）。
-- 第三方 skill 会把自己的产物倒进仓库，且**不区分追踪语义**。最典型的是 matt 的 `teach`——它明确"以当前目录作为有状态教学工作区"，在项目根目录直接运行，教学状态就落进了仓库。
-- 有的产物**搬不动**：落点是 skill 自身的硬性规定（`teach` 的「当前目录」不可配置），改造他人 skill 不现实——硬拒只会让用户绕开 harness，问题照旧存在。
+- 第三方 skill 会把自己的产物倒进仓库，且**不区分追踪语义**。最典型的是上游的教学 skill——它明确"以当前目录作为有状态教学工作区"，在项目根目录直接运行，教学状态就落进了仓库。
+- 有的产物**搬不动**：落点是 skill 自身的硬性规定（教学 skill 的「当前目录」不可配置），改造他人 skill 不现实——硬拒只会让用户绕开 harness，问题照旧存在。
 
-真正的风险不是"跟不跟踪"本身，而是**没有唯一裁决者**：teach 问一次、handoff 问一次、每个 skill 各问一次，结论分散、互相矛盾，于是同一个事实有了多个家（反例 #1 的变体）。
+真正的风险不是"跟不跟踪"本身，而是**没有唯一裁决者**：教学 skill 问一次、交接 skill 问一次、每个 skill 各问一次，结论分散、互相矛盾，于是同一个事实有了多个家（反例 #1 的变体）。
 
 ## 职责归属
 
 | 角色 | 动作 |
 |---|---|
 | harness-creator | **独占**询问：探测 → 只问一次 → 落结论（`.gitignore` 为机制，AGENTS.md 为指针） |
-| 其他 skill（matt `teach`/`research`/`handoff`、addyosmani 系列等） | **不询问**，读结论；产物按下方路由表落点 |
+| 其他 skill（上游系列，清单见 [Upstream Interlock](./upstream-interlock.md)） | **不询问**，读结论；产物落点见该文件的「产物落点视图」 |
 
 ## 五落点的默认追踪语义
 
@@ -96,21 +96,13 @@ node skills/harness-creator/scripts/check-git-tracking.mjs --target /path/to/pro
 
 **放行不是第六个落点**，也不放宽"每个事实只有一个家"——它只承认"skill 自用的私有工作区"可以停在落点之外，且必须登记、必须裁决、必须有追踪结论。
 
-| 来源 skill | 产物 | 路由 |
-|---|---|---|
-| matt `teach` | 教学工作区（原文：以**当前目录**为有状态工作区） | 首选软路由：以 `.scratch/teach/` 为 cwd；约束不可重定向时走受控放行并登记豁免 |
-| matt `research` | 仓库内引用式 Markdown | `.scratch/`（落点一） |
-| matt `improve-codebase-architecture` | 可视化 HTML 报告 | `.scratch/`（落点一） |
-| matt `prototype` | 可分享 HTML 原型 | `.scratch/`（落点一） |
-| matt `to-questionnaire` | Markdown 问卷 | `.scratch/`（落点一） |
-| matt `handoff` | 交接文档 | `.scratch/handoff.md`（落点一，已有约定） |
-| matt `wizard` | 交互式 bash 向导脚本 | 需裁决：可提交则跟踪，一次性则 `.scratch/` |
-| matt `to-spec` / `to-tickets` | spec、本地工单文件 / 工单系统条目 | 落点五（状态与依赖） |
-| matt `grill-with-docs` / `domain-modeling` | `CONTEXT.md`、ADR | 落点二 / 三；格式归 matt，本技能引用不复制 |
-| addyosmani `constraint-driven-development` | `CONSTRAINTS.md` | 可执行约束应进 `init.sh`/CI（落点四）；文件本体只作指针或转 `.scratch/`。留在根目录即落点外，必问 |
-| addyosmani `spec-driven-development` | PRD / 规格文档 | 落点五（工单）或 `.scratch/` |
-| addyosmani `documentation-and-adrs` | ADR | 落点三 |
-| addyosmani `code-review-and-quality` 等 | 无持久产物（仅评审意见） | 无需落点 |
+逐 skill 的**产物与落点映射**见 [Upstream Interlock](./upstream-interlock.md) 的「产物落点视图」——**名单只在那一处维护**，上游增删 skill 时改那里即可，本节不复述。本节只管判定顺序与放行机制。
+
+三条通用规则（与具体 skill 无关，故留在本节）：
+
+- 落点**可配置**的一律先路由；**能进 `init.sh`/CI 的约束**不留在仓库文件里，文件本体只作指针。
+- 落在仓库**根目录且不属于任何落点**的产物必问一次，不静默放过（`CONSTRAINTS.md` 是典型）。
+- **无持久产物**的 skill（只产出评审意见、对话结论）不需要落点，不要为它建文件。
 
 ## 受控放行（skill 自带硬约束时）
 
