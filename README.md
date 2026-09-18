@@ -20,7 +20,7 @@
 | `init.sh` / CI | 可执行约束（测试、Schema、门禁） | 长期：违反即报错 |
 | 工单 / `feature_list.json` | 状态与依赖 | tracker 模式用工单系统（本地或仓外）；registry 模式用仓内注册表 |
 
-第三方 skill 的产物落不进五个落点之一，**拒绝引入**——他人的 skill 无法改造，只能选或拒。
+第三方 skill 的产物先**路由**进五个落点之一；路由不进、而产出 skill 自带**硬约束**（落点由它自身规定、不可改造）时**受控放行**；两者都不成立才**拒绝引入**。三步的判定门槛见「它会对齐什么」。
 
 ### 文档产物：项目文档层
 
@@ -72,13 +72,14 @@ npx skills remove harness-creator
 
 ```bash
 # 从仓库根运行：使用仓库内的 scripts/
-node scripts/create-harness.mjs --target /path/to/project
+node scripts/create-harness.mjs --target /path/to/project --mode registry --dry-run
+node scripts/create-harness.mjs --target /path/to/project --mode registry
 node scripts/validate-harness.mjs --target /path/to/project
 node scripts/check-git-tracking.mjs --target /path/to/project
 node scripts/run-benchmark.mjs --target /path/to/project --html /path/to/report.html
 
 # 从技能目录运行：使用已安装的 scripts/
-node ~/.agents/skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
+node ~/.agents/skills/harness-creator/scripts/create-harness.mjs --target /path/to/project --mode registry
 node ~/.agents/skills/harness-creator/scripts/validate-harness.mjs --target /path/to/project
 node ~/.agents/skills/harness-creator/scripts/check-git-tracking.mjs --target /path/to/project
 node ~/.agents/skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project --html /path/to/report.html
@@ -86,12 +87,20 @@ node ~/.agents/skills/harness-creator/scripts/run-benchmark.mjs --target /path/t
 
 这些脚本仅使用 Node.js 内置模块，不需要额外安装依赖。
 
+### 写入前的两道闸门
+
+`create-harness.mjs` 是唯一会往目标仓库写文件的脚本，它有两道**机械**闸门——不靠提示词约束，靠退出码：
+
+1. **模式必须显式**。`--mode` 缺省且仓库里探测不到任何模式信号时，脚本**拒写并退出码 1**，只打印探测到的东西，不创建任何文件。理由是模式决定写哪套文件，而模式选择属于用户：问清楚仓库用途，再用 `--mode registry` 或 `--mode tracker` 重跑。显式写 `--mode auto` 同样是推断，不会绕过这道闸门。
+2. **先预演再落地**。`--dry-run` 打印真写将要执行的那份计划（每个产物标注 written 或 skipped），**不创建目标目录、不写任何文件、退出码 0**。计划不是静态模板清单——真写之后再预演，已存在的产物会如实报 `SKIPPED`，因此预演与随后的真写逐字一致，可以直接作为写盘前 🔴 CHECKPOINT 的批准对象。
+
+已有文件默认跳过；`--force` 会覆盖，用前须列出将被覆盖的文件并获批。含第三方块的文件（如 matt 的 `## Agent skills`）一律不用 `--force`。
+
 ## 它会创建什么
 
 - `AGENTS.md` 或 `CLAUDE.md`（含「仓库结构」与「产物追踪策略」两节，见下）
-- `feature_list.json`
-- `progress.md`（精简版：当前状态、证据、阻塞、下一步）
 - `init.sh`
+- `feature_list.json` 与 `progress.md`（精简版：当前状态、证据、阻塞、下一步）——**仅 registry 模式**；tracker 模式的状态在工单系统，写出这两个文件会制造第二状态源，因此脚本在该模式下跳过它们
 
 会话交接是约定而非仓库文件：引用式交接文档写在 `.scratch/handoff.md` 或临时目录。tracker 模式（`CONTEXT.md` + ADR + 工单系统承接状态，工单可本地可仓外）见 SKILL.md 的"两种模式"一节。与 matt setup 共存时按**单一写入者**分工：matt 拥有 `docs/agents/*`、`CONTEXT.md`、`docs/adr/`、`## Agent skills` 块（其中 `CONTEXT.md`/ADR 由上游领域建模 skill **延迟创建**），本技能不代建，只落自己的章节与 `init.sh`；详见 `references/matt-coexistence.md`。
 
@@ -108,6 +117,22 @@ node ~/.agents/skills/harness-creator/scripts/run-benchmark.mjs --target /path/t
 5. 生命周期
 
 得分是结构性的。它告诉你 harness 是否存在且自洽；不能替代真实的前后对照代理会话测试。
+
+报告会给出得分最低的子系统——**并列最低时全部列出**，不会从并列里挑一个当成"瓶颈"：单点结论只在某个子系统确实弱于其余时才成立。最低分只是候选瓶颈，改动前先确认因果。
+
+`run-benchmark.mjs` 在此之上先跑一遍**工具链自检**，八道关，任一 FAIL 都会让脚本以退出码 1 结束。这些关卡守的是技能自己的不变量：
+
+| 关卡 | 守住什么 |
+|---|---|
+| 脚手架 + 双语打分 | 脚本端到端可跑；生成的骨架能过五子系统评分；英文 tracker 骨架与中文 registry 骨架同标准 |
+| 字节上限 | `SKILL.md` 不超基线 150%，按 **LF 归一化**计量——同一 commit 在 CRLF 检出上不该多算出每行 1 字节的余量 |
+| 产物护栏 | 生成物不含只在技能仓内才解析的技能仓相对路径；tracker 模式不吐 registry 状态文件；tracker 骨架得分不低于阈值 |
+| 模式闸门 | 无信号且未显式 `--mode` 时必须拒写（同时断言两条合法路径不被误伤） |
+| `--dry-run` | 零副作用；计划反映目标真实状态；计划与真写逐字一致 |
+| 自引用可达性 | 技能打印的每条命令都能在目标仓直接跑起来 |
+| 审计瓶颈 | 并列最低须列全、唯一最低仍点名一个、全部满分须报「无」 |
+
+带 `--html` 时这些结果一并进报告——关卡结论若只出现在控制台，在事后复盘的产物里就等于不存在。格式守卫本身也该有守卫：每道关卡都配了反证测试（把旧行为塞回去，关卡必须 FAIL 并点名）。
 
 ## 它会对齐什么（只问一次）
 
@@ -206,6 +231,10 @@ tracker 模式的默认搭配：初始化工作区（用户自行运行）→ �
 - [x] 非工单模式的任务推进：条目即工单（`acceptance` 字段 + 垂直切片/前沿/增量环规范）
 - [x] 交接后的会话边界：推进需**显式授权**，交接文档是上下文而非待办队列
 - [x] 模板模式中立：`AGENTS.md` 中随模式变化的小节由占位符填充，不泄漏另一模式的状态产物
+- [x] 写入前的机械闸门：无信号且未显式 `--mode` 时拒写（退出码 1、零文件）；`--dry-run` 预演零副作用且与真写逐字一致
+- [x] 生成物护栏：目标仓库里不出现只在技能仓内才解析的指针；tracker 模式不吐 registry 状态产物
+- [x] 工具链自检八关（每关附反证）：脚本可跑、双语打分、字节上限、产物护栏、模式闸门、`--dry-run` 一致性、自引用可达性、审计瓶颈并列
+- [x] 决策权交回用户：该问的拒写而非静默默认；审计结论不虚构排名（并列全部列出，不从并列里挑一个）
 - [ ] 可选的真实前后对照代理会话回放
 
 ## 文件
