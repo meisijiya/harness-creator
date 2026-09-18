@@ -117,7 +117,7 @@ if (
   console.error('CONTEXT.md, docs/adr/) and registry state (feature_list.json): none present,');
   console.error('and no explicit --mode was given, so there is nothing to infer the mode from.');
   console.error('');
-  console.error('Ask which mode this repo uses, then re-run with an explicit --mode:');
+  console.error('Mode choice belongs to the user: ask them, then re-run with --mode:');
   console.error('  --mode registry   state lives in the repo: feature_list.json + progress.md');
   console.error('  --mode tracker    state lives in an issue tracker; no in-repo registry');
   console.error('');

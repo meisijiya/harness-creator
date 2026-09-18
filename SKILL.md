@@ -16,6 +16,8 @@ license: MIT
 
 不适用于模型选择、孤立的提示词调优、聊天 UI 设计或通用应用架构。
 
+本技能常态是 harness 的**维护者**：**用户是 harness 的领导，harness 是 AI 的领导**——模式、追踪这类决策权归用户，代理只给建议不拍板。
+
 ## 核心模型
 
 每个 harness 都包含五个子系统：
@@ -30,18 +32,18 @@ license: MIT
 
 ## 两种模式
 
-两种状态治理模式，按下表信号探测。**无信号不得自行默认**（见「第一步」第 2 步）：
+两种状态治理模式按信号探测，**无信号不得自行默认**（见「第一步」第 2 步）：
 
 **Registry 模式（自包含）**：状态事实来源在仓库内——`feature_list.json` 注册表 + 精简 `progress.md`。适用于无 issue tracker 的任意仓库与代理。
 
-**Tracker 模式（Matt 工程流）**：状态与依赖由工单系统承接，仓库只保留 `CONTEXT.md`（领域语言）与 ADR（决策史，只增不删），二者均由上游领域建模 skill **延迟创建**；`.scratch/` 承载任务级材料。探测信号：matt `docs/agents/`、`CONTEXT.md`、ADR 目录，或用户使用工单工作流——`.scratch/` **不算**信号。
+**Tracker 模式（Matt 工程流）**：状态与依赖由工单系统承接，仓库只保留 `CONTEXT.md`（领域语言）与 ADR（决策史，只增不删），二者均由上游领域建模 skill **延迟创建**；`.scratch/` 承载任务级材料。探测信号：matt `docs/agents/`、`CONTEXT.md`、ADR 目录或用工单工作流——`.scratch/` **不算**信号。
 
-两模式共享骨架：`AGENTS.md` 路由、验证门禁、范围规则、引用式交接；区别只在状态来源位置。
+两模式共享骨架，区别只在状态来源位置。
 
 ## 第一步
 
 1. 检查已有内容：指令文件、功能/状态文件、验证命令、文档、`CONTEXT.md`/ADR/matt `docs/agents/`、包清单。→ 输出：现有产物清单。
-2. 判定模式：**有信号**按信号判；**无信号** → 🔴 CHECKPOINT 询问仓库用途（用途、协作、有无工单），**得到答复前不写盘**；**已问过**未获答复才回落 registry；「无法询问」≠「用户未答复」，此时停住写出问题；信号矛盾按最强信号判。→ 输出：模式判定结论。
+2. 判定模式：**有信号**按信号判；**无信号** → 🔴 CHECKPOINT 询问仓库用途（用途、协作、有无工单），**得到答复前不写盘**，也不得自行传 `--mode` 越过拒写闸门；**已问过**未获答复才回落 registry；「无法询问」≠「用户未答复」，此时停住写出问题；信号矛盾按最强信号判。→ 输出：模式判定结论。
 3. 判定 tracker 即默认用户已运行上游初始化 skill：不调用、不询问安装、不提供仓内替代。matt 名下产物不代建，只落本方骨架，缺失项列待办并指引安装。→ 输出：本轮产物清单。
 4. 优先最小化：仅当涉及跨会话记忆、权限安全、多代理协调或基准测试时，才加载对应参考并加产物。其余缺失上下文可自行推断，**🔴 CHECKPOINT 除外**。
 5. 追踪对齐（一次性）：写盘前运行 `scripts/check-git-tracking.mjs`；🔴 CHECKPOINT 只问一次，`.gitignore` 命中即判「不跟踪」，结论落 AGENTS.md，其余 skill 只读不问。→ 输出：追踪策略表。
@@ -58,11 +60,11 @@ node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
 
 🔴 CHECKPOINT：先跑 `--dry-run`，把将创建/跳过的产物清单展示给用户，确认后再真正执行。
 
-选项：`--agent-file CLAUDE.md`（面向 Claude 的项目）、`--package-manager`、`--commands "a,b"`；其余见 `--help`。`--force` 覆盖已存在文件——🔴 CHECKPOINT：使用前**必须**获批并列出被覆盖文件；含第三方块的文件一律不用。
+选项：`--agent-file CLAUDE.md`、`--package-manager`、`--commands "a,b"`；其余见 `--help`。`--force` 覆盖已存在文件——🔴 CHECKPOINT：使用前**必须**获批并列出被覆盖文件；含第三方块的文件一律不用。
 
 模式必须显式：无信号且未传 `--mode` 时脚本拒写，不静默默认。
 
-**与 matt setup 共存**：单一写入者分区——matt 拥有 `docs/agents/*`、`## Agent skills`、`CONTEXT.md`/`docs/adr/`。**AGENTS.md 章节以 `templates/agents.md` 为唯一来源**（审计不校验结构）；已存在时脚本只报告缺失章节、不写盘，合并由代理执行并保留第三方块、不另建等价副本。分区表见 [Matt Coexistence](references/matt-coexistence.md)。
+**与 matt setup 共存**：单一写入者分区见 [Matt Coexistence](references/matt-coexistence.md)。**AGENTS.md 章节以 `templates/agents.md` 为唯一来源**（审计不校验结构）；已存在时脚本只报告缺失章节、不写盘，合并由代理执行并保留第三方块、不另建等价副本。
 
 输出：产物清单 + 创建说明。
 
@@ -85,7 +87,7 @@ node skills/harness-creator/scripts/render-assessment-html.mjs --target /path/to
 node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project --html /path/to/report.html
 ```
 
-这是结构性基准测试（自检证明脚本可跑通，非有效性证明）；真实有效性靠前后对照会话。输出：JSON/HTML 报告。
+结构性基准测试（证明脚本可跑通，非有效性证明）；真实有效性靠前后对照会话。
 
 ## 何时阅读参考文档
 
@@ -106,7 +108,7 @@ node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project 
 
 ## 异常与边界条件
 
-创建与审计中的异常见 [Failure Modes](references/failure-modes.md)。以下任一情况**先读它再动手**：已有同名文件或第三方块、模式信号矛盾或缺失、追踪报 `stray`/`unknown`、第三方产物出落点、`validate` 低于阈值、环境无 Node。**第三方工具存在不构成模式信号**——无信号即走第 2 步的 🔴 CHECKPOINT。原则：一般异常先告知再执行；**🔴 CHECKPOINT 必须先获批**，能推断不是跳过理由，无法询问就停在原地写出问题。绝不静默跳过或降级。
+创建与审计中的异常见 [Failure Modes](references/failure-modes.md)。以下任一情况**先读它再动手**：同名文件或第三方块、模式信号矛盾或缺失、`stray`/`unknown`、产物出落点、`validate` 低于阈值、无 Node。**第三方工具存在不构成模式信号**——无信号即走第 2 步的 🔴 CHECKPOINT。原则：一般异常先告知再执行；**🔴 CHECKPOINT 必须先获批**，能推断不是跳过理由，无法询问就停在原地写出问题。绝不静默跳过或降级。
 
 ## 设计规则
 
