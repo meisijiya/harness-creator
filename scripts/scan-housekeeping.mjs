@@ -10,13 +10,13 @@
 import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { exists, listFiles, parseArgs, readJson } from './lib/harness-utils.mjs';
+import { exists, listFiles, parseArgs, readJson, scriptCommand } from './lib/harness-utils.mjs';
 
 const execFileAsync = promisify(execFile);
 const args = parseArgs(process.argv.slice(2));
 
 if (args.help) {
-  console.log(`Usage: node scripts/scan-housekeeping.mjs [--target DIR] [--session-ref REF] [--session-only] [--json]
+  console.log(`Usage: ${scriptCommand('scan-housekeeping.mjs')} [--target DIR] [--session-ref REF] [--session-only] [--json]
 
 Read-only scan. One invariant: it never writes, moves or deletes anything.
 

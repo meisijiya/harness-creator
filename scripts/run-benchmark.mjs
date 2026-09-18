@@ -13,6 +13,7 @@ import {
   readJson,
   readText,
   scoreHarness,
+  scriptCommand,
   writeText
 } from './lib/harness-utils.mjs';
 
@@ -24,6 +25,11 @@ const execFileAsync = promisify(execFile);
 // skill tells everyone else to fix. Editing SKILL.md near the cap means de-duplicating first.
 const SKILL_MD_BASELINE_BYTES = 7889;
 const SKILL_MD_MAX_BYTES = Math.floor(SKILL_MD_BASELINE_BYTES * 1.5);
+
+// Declared at module scope, ahead of the runSelfCheck() call: a const sitting next to the function
+// that reads it would still be in its temporal dead zone at that call site.
+const SELFTEXT_EXEMPT = new Set(['README.md']);
+const RELATIVE_SELF_REFERENCE = /(?:node\s+scripts\/[a-z0-9-]+\.mjs|skills\/harness-creator\/scripts\/)/;
 
 // A path relative to the SKILL repository (e.g. `skills/harness-creator/references/x.md`) is
 // dead on arrival in a target repo: the generated AGENTS.md is read by an agent whose cwd is
@@ -119,7 +125,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const skillRoot = path.resolve(scriptDir, '..');
 
 if (args.help) {
-  console.log(`Usage: node scripts/run-benchmark.mjs [--target DIR] [--output FILE] [--html FILE] [--no-self-check]
+  console.log(`Usage: ${scriptCommand('run-benchmark.mjs')} [--target DIR] [--output FILE] [--html FILE] [--no-self-check]
 
 Runs a lightweight harness benchmark:
   1. Self-check: scaffold a throwaway harness and confirm it validates, then score an English
@@ -133,7 +139,9 @@ Runs a lightweight harness benchmark:
      zero files), while an explicit --mode or a detected signal must still scaffold.
   7. Checks --dry-run: it must change nothing, plan real artifacts rather than recite a template
      list, and agree with the write that follows it.
-  8. Produces a JSON report and optional HTML report.
+  8. Checks the skill's own shipped files: no command it prints may use a script path that only
+     resolves from the skill directory (the agent's cwd is the target repo).
+  9. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -177,6 +185,10 @@ if (!selfCheck.skipped) {
     const { pass, changesNothing, previewedFiles, reflectsState, planMatchesRun, wrote = [], error } = selfCheck.dryRun;
     console.log(`  Dry run: ${pass ? 'PASS' : 'FAIL'} — writes nothing: ${changesNothing ? 'ok' : `NO (still wrote ${wrote.join(', ') || 'files'})`}; plans artifacts: ${previewedFiles ? 'ok' : 'NO'}; reflects existing state: ${reflectsState ? 'ok' : 'NO'}; plan matches the real run: ${planMatchesRun ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.selfRefs) {
+    const { pass, offenders = [], checked, error } = selfCheck.selfRefs;
+    console.log(`  Self-reference paths: ${pass ? 'PASS' : 'FAIL'} — ${checked} shipped file(s) checked${offenders.length ? `; relative script path in ${offenders.join(', ')}` : ''}${error ? ` — ${error}` : ''}`);
+  }
   if (!selfCheck.pass && selfCheck.error) console.log(`  ${selfCheck.error}`);
 }
 console.log(formatScoreReport(harnessResult, target));
@@ -203,7 +215,8 @@ if (
 // The second stage guards bilingual scoring: upstream toolchains
 // produce English artifacts, so an English tracker-mode harness must
 // score just as well as the Chinese registry-mode scaffold. The third stage keeps the skill's
-// own instruction file inside its size budget.
+// own instruction file inside its size budget, and the last one keeps every command the skill
+// prints runnable from the target repo (the failure that silently disabled the mode gate).
 async function runSelfCheck() {
   let dir;
   try {
@@ -224,14 +237,16 @@ async function runSelfCheck() {
     const tracker = await checkTrackerScaffold(minScore);
     const gate = await checkModeGate();
     const dryRun = await checkDryRun();
+    const selfRefs = await checkSelfReferencePaths();
     return {
-      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && tracker.pass && gate.pass && dryRun.pass,
+      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && tracker.pass && gate.pass && dryRun.pass && selfRefs.pass,
       score: scored.overall,
       englishScore: english.overall,
       budget,
       tracker,
       gate,
       dryRun,
+      selfRefs,
       bottleneck: scored.bottleneck ?? english.bottleneck
     };
   } catch (error) {
@@ -263,6 +278,35 @@ async function checkSkillBudget() {
     crlfCount,
     lineEndingInvariant
   };
+}
+
+// The skill's own shipped files are checked here too. Every command it prints has to be runnable
+// from where the agent actually stands: the scripts live under the runtime's skills directory, but
+// the agent's cwd is the target repo — so a printed `node scripts/<name>.mjs` dies with MODULE_NOT_FOUND,
+// and the gate the agent was told to run silently never runs. That is how the mode gate got
+// bypassed in practice, so the rule gets a machine check instead of another sentence. README.md is
+// exempt on purpose: one of its two blocks is the contributor's "from the repo root" invocation,
+// where the relative form is correct.
+async function checkSelfReferencePaths() {
+  const collect = async (dir, prefix, keep) => (await readdir(path.join(skillRoot, dir), { withFileTypes: true }))
+    .filter((entry) => entry.isFile() && keep(entry.name))
+    .map((entry) => `${prefix}${entry.name}`);
+  const files = [
+    'SKILL.md',
+    ...await collect('references', 'references/', (name) => name.endsWith('.md')),
+    ...await collect('scripts', 'scripts/', (name) => name.endsWith('.mjs')),
+    ...await collect('scripts/lib', 'scripts/lib/', (name) => name.endsWith('.mjs')),
+    ...await collect('templates', 'templates/', () => true)
+  ];
+  const offenders = [];
+  let checked = 0;
+  for (const file of files) {
+    if (SELFTEXT_EXEMPT.has(file)) continue;
+    checked += 1;
+    const text = await readText(path.join(skillRoot, file));
+    if (RELATIVE_SELF_REFERENCE.test(text)) offenders.push(file);
+  }
+  return { pass: offenders.length === 0, offenders, checked };
 }
 
 // Stage four: the tracker-mode template is a separate rendering path from the registry scaffold

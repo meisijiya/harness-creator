@@ -6,13 +6,14 @@ import {
   loadHarnessFiles,
   parseArgs,
   scoreHarness,
+  scriptCommand,
   writeText
 } from './lib/harness-utils.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 
 if (args.help) {
-  console.log(`Usage: node scripts/validate-harness.mjs [--target DIR] [--json] [--html FILE]
+  console.log(`Usage: ${scriptCommand('validate-harness.mjs')} [--target DIR] [--json] [--html FILE]
 
 Scores a project harness across five subsystems:
   instructions, state, verification, scope, lifecycle

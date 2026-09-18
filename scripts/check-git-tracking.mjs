@@ -19,7 +19,7 @@ import { access } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { parseArgs } from './lib/harness-utils.mjs';
+import { parseArgs, scriptCommand } from './lib/harness-utils.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -142,7 +142,7 @@ function verdictFor(landingPoint) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
-    console.log(`Usage: node scripts/check-git-tracking.mjs [--target DIR] [--paths "a,b"] [--strict] [--json]
+    console.log(`Usage: ${scriptCommand('check-git-tracking.mjs')} [--target DIR] [--paths "a,b"] [--strict] [--json]
 
 Read-only. Reports, for each of the five artifact landing points, whether git tracks it:
   tracked | ignored | stray | absent | unknown

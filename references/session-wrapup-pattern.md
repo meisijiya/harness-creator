@@ -38,7 +38,7 @@
 ### ① 定界（scope）
 
 ```bash
-node skills/harness-creator/scripts/scan-housekeeping.mjs --target . --session-ref <会话起始 commit> --session-only
+node <技能目录>/scripts/scan-housekeeping.mjs --target . --session-ref <会话起始 commit> --session-only
 ```
 
 只读扫描，输出三类信息：本会话产出按落点的归类、`.scratch/` 中属本次会话、待裁决的材料、以及落在五落点之外的会话产出（候选未归位材料）。

@@ -5,13 +5,14 @@ import {
   loadHarnessFiles,
   parseArgs,
   scoreHarness,
+  scriptCommand,
   writeText
 } from './lib/harness-utils.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 
 if (args.help) {
-  console.log(`Usage: node scripts/render-assessment-html.mjs [--target DIR] [--output FILE]
+  console.log(`Usage: ${scriptCommand('render-assessment-html.mjs')} [--target DIR] [--output FILE]
 
 Renders the five-subsystem harness assessment as a standalone HTML file.`);
   process.exit(0);

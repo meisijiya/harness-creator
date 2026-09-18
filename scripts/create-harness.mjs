@@ -11,6 +11,7 @@ import {
   initScriptFromCommands,
   parseArgs,
   readText,
+  scriptCommand,
   TEMPLATE_DIR,
   verificationCommands,
   writeText
@@ -19,7 +20,7 @@ import {
 const args = parseArgs(process.argv.slice(2));
 
 if (args.help) {
-  console.log(`Usage: node scripts/create-harness.mjs [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--mode auto|registry|tracker] [--tracking "CONCLUSION"] [--commands "a,b"] [--force] [--dry-run]
+  console.log(`Usage: ${scriptCommand('create-harness.mjs')} [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--mode auto|registry|tracker] [--tracking "CONCLUSION"] [--commands "a,b"] [--force] [--dry-run]
 
 Creates a minimal production harness:
   AGENTS.md or CLAUDE.md (an existing CLAUDE.md is kept and preferred)
@@ -271,7 +272,7 @@ if (missingAgentSections.length > 0) {
 if (!args.tracking) {
   console.log('');
   console.log('Git tracking alignment: pending.');
-  console.log('  Run: node scripts/check-git-tracking.mjs --target ' + target);
+  console.log('  Run: ' + scriptCommand('check-git-tracking.mjs') + ' --target ' + target);
   console.log('  Then ask ONCE which landing points stay untracked (.gitignore match = opt-out)');
   console.log(`  and record the conclusion in ${agentFile} → "## 产物追踪策略".`);
 }

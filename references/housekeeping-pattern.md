@@ -16,7 +16,7 @@
 先跑只读扫描，拿到「将删 / 将留」候选：
 
 ```bash
-node skills/harness-creator/scripts/scan-housekeeping.mjs --target /path/to/project --session-ref <会话起始 commit>
+node <技能目录>/scripts/scan-housekeeping.mjs --target /path/to/project --session-ref <会话起始 commit>
 ```
 
 - `--session-ref` **不默认 `HEAD`**：必须传**会话开始时的 commit**。未提供时扫描器不假设 `HEAD`——否则会把**已提交的**本会话内容误判为历史并过度标记为可清；此时只把「未提交改动」当作确定属于本会话，其余一律标为「无法判定」。git 不可用时同样降级为全量人工复核。

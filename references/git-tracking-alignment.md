@@ -35,7 +35,7 @@
 ### ① 探测（只读）
 
 ```bash
-node skills/harness-creator/scripts/check-git-tracking.mjs --target /path/to/project --paths "CONSTRAINTS.md"
+node <技能目录>/scripts/check-git-tracking.mjs --target /path/to/project --paths "CONSTRAINTS.md"
 ```
 
 `--paths` 用于带上本次出现的落点外产物。脚本**不写盘**，输出五种状态：

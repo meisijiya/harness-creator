@@ -5,6 +5,14 @@ import { fileURLToPath } from 'node:url';
 
 export const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const TEMPLATE_DIR = path.join(SKILL_ROOT, 'templates');
+
+// Help text has to print a command the reader can actually paste. A bare `scripts/x.mjs` only
+// resolves from the skill directory, but the agent's cwd is the target repo it is working on —
+// so the printed line died with MODULE_NOT_FOUND, and the gate it was meant to invoke never ran.
+// SKILL_ROOT is this script's real location; forward slashes keep the line pasteable in bash.
+export function scriptCommand(scriptName) {
+  return `node ${SKILL_ROOT.replaceAll('\\', '/')}/scripts/${scriptName}`;
+}
 export const SUBSYSTEMS = ['instructions', 'state', 'verification', 'scope', 'lifecycle'];
 
 export function parseArgs(argv) {

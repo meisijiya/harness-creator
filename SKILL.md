@@ -46,11 +46,11 @@ license: MIT
 2. 判定模式：**有信号**按信号判；**无信号** → 🔴 CHECKPOINT 询问仓库用途（用途、协作、有无工单），**得到答复前不写盘**，也不得自行传 `--mode` 越过拒写闸门；**已问过**未获答复才回落 registry；「无法询问」≠「用户未答复」，此时停住写出问题；信号矛盾按最强信号判。→ 输出：模式判定结论。
 3. 判定 tracker 即默认用户已运行上游初始化 skill：不调用、不询问安装、不提供仓内替代。matt 名下产物不代建，只落本方骨架，缺失项列待办并指引安装。→ 输出：本轮产物清单。
 4. 优先最小化：仅当涉及跨会话记忆、权限安全、多代理协调或基准测试时，才加载对应参考并加产物。其余缺失上下文可自行推断，**🔴 CHECKPOINT 除外**。
-5. 追踪对齐（一次性）：写盘前运行 `scripts/check-git-tracking.mjs`；🔴 CHECKPOINT 只问一次，`.gitignore` 命中即判「不跟踪」，结论落 AGENTS.md，其余 skill 只读不问。→ 输出：追踪策略表。
+5. 追踪对齐（一次性）：写盘前运行 `node <技能目录>/scripts/check-git-tracking.mjs --target .`；🔴 CHECKPOINT 只问一次，`.gitignore` 命中即判「不跟踪」，结论落 AGENTS.md，其余 skill 只读不问。→ 输出：追踪策略表。
 
 ## 常见任务
 
-本节的 `<技能目录>` 指技能安装目录（通常 `~/.agents/skills/harness-creator/`）。**不要用相对路径**——目标仓没有 `skills/` 且代理的 cwd 在目标仓，必然解析失败（实测退出码 1、MODULE_NOT_FOUND）。
+本节的 `<技能目录>` 指技能安装目录（如 `~/.agents/skills/harness-creator/`）。**不要用相对路径**——cwd 在目标仓时必然解析失败（实测退出码 1）。
 
 ### 创建 harness
 
