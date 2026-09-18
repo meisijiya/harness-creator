@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import {
   bottleneckLabel,
+  exists,
   formatScoreReport,
   htmlReport,
   loadHarnessFiles,
@@ -154,7 +155,10 @@ Runs a lightweight harness benchmark:
      than stack-derived text, and a supplied blueprint must reach AGENTS.md verbatim.
  13. Checks the entry template: a fresh registry scaffold must not ship project-shaped feature
      entries, and must state the alignment rule before any entry may be added.
- 14. Produces a JSON report and optional HTML report.
+ 14. Checks the instruction-file invariant: an existing CLAUDE.md must not get a second AGENTS.md
+     beside it, and an existing instruction file must stay byte-identical while its missing
+     harness sections are still reported.
+ 15. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -222,6 +226,10 @@ if (!selfCheck.skipped) {
     const { pass, count, atMostExample, alignmentRuleStated, error } = selfCheck.entries;
     console.log(`  Entry restraint: ${pass ? 'PASS' : 'FAIL'} — no project-shaped entries at scaffold time (${count} entry/entries): ${atMostExample ? 'ok' : 'NO'}; alignment rule stated in feature_list.json and AGENTS.md: ${alignmentRuleStated ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.agentFile) {
+    const { pass, noSecondFile, choseClaude, untouched, missingReported, error } = selfCheck.agentFile;
+    console.log(`  Agent-file invariant: ${pass ? 'PASS' : 'FAIL'} — existing CLAUDE.md means no AGENTS.md is created: ${noSecondFile && choseClaude ? 'ok' : 'NO'}; existing instruction file left byte-identical: ${untouched ? 'ok' : 'NO'}; missing sections still reported: ${missingReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+  }
   if (!selfCheck.pass && selfCheck.error) console.log(`  ${selfCheck.error}`);
 }
 console.log(formatScoreReport(harnessResult, target));
@@ -277,8 +285,9 @@ async function runSelfCheck() {
     const handoff = await checkHandoffRecognition();
     const blueprint = await checkBlueprintSlot();
     const entries = await checkEntryTemplateRestraint();
+    const agentFile = await checkAgentFileInvariant();
     return {
-      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && tracker.pass && gate.pass && dryRun.pass && selfRefs.pass && bottleneckTies.pass && blankGate.pass && handoff.pass && blueprint.pass && entries.pass,
+      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && tracker.pass && gate.pass && dryRun.pass && selfRefs.pass && bottleneckTies.pass && blankGate.pass && handoff.pass && blueprint.pass && entries.pass && agentFile.pass,
       score: scored.overall,
       englishScore: english.overall,
       budget,
@@ -291,6 +300,7 @@ async function runSelfCheck() {
       handoff,
       blueprint,
       entries,
+      agentFile,
       bottleneck: scored.bottleneck ?? english.bottleneck,
       bottlenecks: scored.bottlenecks.length ? scored.bottlenecks : english.bottlenecks
     };
@@ -686,6 +696,54 @@ async function checkEntryTemplateRestraint() {
   }
 }
 
+// Stage thirteen: the instruction-file choice invariant and the report-don't-write contract.
+// The rule (shared with matt, so the two never drift) is: edit CLAUDE.md when it exists, otherwise
+// AGENTS.md — and NEVER create AGENTS.md beside an existing CLAUDE.md. Two instruction files in one
+// repo is the failure the partition exists to prevent: an agent reads two contradictory routing
+// tables. It shipped ungated: `detectAgentFile()` had implementation but no assertion, and the only
+// "coverage" was a prose expectation in evals.json, which no run mechanically enforces.
+// The second half is the merge contract, split because each half fails differently: an existing
+// instruction file must come out byte-identical (writing clobbers the user's own content), AND the
+// run must still name the harness sections that file lacks (silently skipping leaves the agent with
+// no idea what is absent). Asserting only "not written" would pass a script that skips everything.
+async function checkAgentFileInvariant() {
+  let claudeDir;
+  let agentsDir;
+  try {
+    const script = path.join(scriptDir, 'create-harness.mjs');
+
+    claudeDir = await mkdtemp(path.join(os.tmpdir(), 'harness-agentfile-claude-'));
+    await writeText(path.join(claudeDir, 'CLAUDE.md'), '# Claude\n\n## Startup workflow\n\nExisting content.\n');
+    const claudeRun = await execFileAsync('node', [script, '--target', claudeDir, '--mode', 'registry']);
+    // The absence of AGENTS.md is the invariant; the report naming CLAUDE.md is what proves the
+    // choice was made deliberately rather than by never writing an instruction file at all.
+    const noSecondFile = !(await exists(path.join(claudeDir, 'AGENTS.md')));
+    const choseClaude = /CLAUDE\.md/.test(claudeRun.stdout) && (await exists(path.join(claudeDir, 'CLAUDE.md')));
+
+    agentsDir = await mkdtemp(path.join(os.tmpdir(), 'harness-agentfile-agents-'));
+    const existing = '# AGENTS.md\n\n## Agent skills\n\nThird-party block that must survive.\n';
+    const agentsPath = path.join(agentsDir, 'AGENTS.md');
+    await writeText(agentsPath, existing);
+    const agentsRun = await execFileAsync('node', [script, '--target', agentsDir, '--mode', 'registry']);
+    const untouched = (await readText(agentsPath)) === existing;
+    // At least one missing section heading must be listed; keying on the literal names would break
+    // every time a section is renamed, while "lists nothing" is the actual defect.
+    const missingReported = /\n\s*-\s*##\s/.test(agentsRun.stdout);
+
+    return {
+      pass: noSecondFile && choseClaude && untouched && missingReported,
+      noSecondFile,
+      choseClaude,
+      untouched,
+      missingReported
+    };
+  } catch (error) {
+    return { pass: false, noSecondFile: false, choseClaude: false, untouched: false, missingReported: false, error: error.message };
+  } finally {
+    for (const target of [claudeDir, agentsDir]) if (target) await rm(target, { recursive: true, force: true });
+  }
+}
+
 function recommend(harnessResult, evalResult) {  if (harnessResult.overall >= 85 && evalResult.score >= 90) {
     return 'Ready for realistic before/after agent-session benchmarking.';
   }
@@ -734,11 +792,16 @@ function renderBenchmarkHtml(report) {
   const entryLine = report.selfCheck?.entries
     ? ` A freshly scaffolded registry ships no project-shaped feature entries, and states the alignment rule before any entry may be added (${report.selfCheck.entries.pass ? 'verified' : 'FAILED'}).`
     : '';
+  // The instruction-file invariant decides whether a repo ends up with two contradictory routing
+  // tables, so it is surfaced alongside the other shipped-behaviour checks.
+  const agentFileLine = report.selfCheck?.agentFile
+    ? ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${report.selfCheck.agentFile.pass ? 'verified' : 'FAILED'}).`
+    : '';
   const selfCheckSection = report.selfCheck?.skipped
     ? ''
     : `<section>
       <h2>Script Self-Check <span>${report.selfCheck.pass ? 'PASS' : 'FAIL'}</span></h2>
-      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100, plus an English tracker-mode fixture at ${report.selfCheck.englishScore ?? 0}/100 — confirms the bundled scripts run end-to-end and scoring is bilingual.${budgetLine}${selfRefLine}${bottleneckTieLine}${blankGateLine}${handoffLine}${blueprintLine}${entryLine}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
+      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100, plus an English tracker-mode fixture at ${report.selfCheck.englishScore ?? 0}/100 — confirms the bundled scripts run end-to-end and scoring is bilingual.${budgetLine}${selfRefLine}${bottleneckTieLine}${blankGateLine}${handoffLine}${blueprintLine}${entryLine}${agentFileLine}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
     </section>`;
   const evalHtml = htmlReport(report.harness, `Harness Benchmark: ${path.basename(report.target)}`)
     .replace('</main>', `${selfCheckSection}<section>
