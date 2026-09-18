@@ -162,8 +162,8 @@ console.log('');
 if (!selfCheck.skipped) {
   console.log(`Self-check: ${selfCheck.pass ? 'PASS' : 'FAIL'} — scaffolded harness scored ${selfCheck.score}/100, English tracker fixture scored ${selfCheck.englishScore ?? 0}/100`);
   if (selfCheck.budget) {
-    const { size, max, pass } = selfCheck.budget;
-    console.log(`  SKILL.md budget: ${pass ? 'PASS' : 'FAIL'} — ${size}/${max} bytes (${max - size >= 0 ? `${max - size} left` : `${size - max} over`})`);
+    const { size, max, pass, rawSize, crlfCount, lineEndingInvariant } = selfCheck.budget;
+    console.log(`  SKILL.md budget: ${pass ? 'PASS' : 'FAIL'} — ${size}/${max} bytes LF-normalized (${max - size >= 0 ? `${max - size} left` : `${size - max} over`})${crlfCount ? `; checkout is CRLF (${crlfCount} lines → raw ${rawSize})` : ''}; line-ending invariant: ${lineEndingInvariant ? 'ok' : 'NO'}`);
   }
   if (selfCheck.tracker) {
     const { pass, score, offenders = [], leakedState = [], error } = selfCheck.tracker;
@@ -241,9 +241,28 @@ async function runSelfCheck() {
   }
 }
 
+// The budget measures content, not checkout artifacts. git stores LF, but with core.autocrlf=true
+// the file is checked out as CRLF, so the same commit measures one extra byte per line. A cap that
+// flips with line endings is a cap with a platform-shaped hole: a Windows contributor would be
+// forced to delete real content to satisfy an artifact of their checkout, while the identical
+// content passes on Linux/macOS. Size is therefore measured LF-normalized, and the invariant is
+// asserted (not assumed) so that a revert to raw bytes fails loudly instead of silently.
 async function checkSkillBudget() {
-  const size = Buffer.byteLength(await readText(path.join(skillRoot, 'SKILL.md')), 'utf8');
-  return { pass: size <= SKILL_MD_MAX_BYTES, size, max: SKILL_MD_MAX_BYTES };
+  const raw = await readText(path.join(skillRoot, 'SKILL.md'));
+  const size = Buffer.byteLength(raw.replace(/\r\n/g, '\n'), 'utf8');
+  const rawSize = Buffer.byteLength(raw, 'utf8');
+  const crlfCount = (raw.match(/\r\n/g) || []).length;
+  // Holds only when the reported size differs from the raw size by exactly the CRLF overhead —
+  // i.e. normalization happened and no other byte was dropped along the way.
+  const lineEndingInvariant = rawSize - size === crlfCount;
+  return {
+    pass: size <= SKILL_MD_MAX_BYTES && lineEndingInvariant,
+    size,
+    max: SKILL_MD_MAX_BYTES,
+    rawSize,
+    crlfCount,
+    lineEndingInvariant
+  };
 }
 
 // Stage four: the tracker-mode template is a separate rendering path from the registry scaffold

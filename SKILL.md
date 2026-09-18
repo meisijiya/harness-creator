@@ -50,12 +50,14 @@ license: MIT
 
 ## 常见任务
 
+本节的 `<技能目录>` 指技能安装目录（通常 `~/.agents/skills/harness-creator/`）。**不要用相对路径**——目标仓没有 `skills/` 且代理的 cwd 在目标仓，必然解析失败（实测退出码 1、MODULE_NOT_FOUND）。
+
 ### 创建 harness
 
 使用随附脚本：
 
 ```bash
-node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project --mode registry|tracker
+node <技能目录>/scripts/create-harness.mjs --target /path/to/project --mode registry|tracker
 ```
 
 🔴 CHECKPOINT：先跑 `--dry-run`，把将创建/跳过的产物清单展示给用户，确认后再真正执行。
@@ -73,7 +75,7 @@ node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project
 运行：
 
 ```bash
-node skills/harness-creator/scripts/validate-harness.mjs --target /path/to/project
+node <技能目录>/scripts/validate-harness.mjs --target /path/to/project
 ```
 
 报告五子系统得分与前 2-3 项改动建议；两模式与中英文产物同标准。最低分只是候选瓶颈，先确认因果再改。
@@ -83,8 +85,8 @@ node skills/harness-creator/scripts/validate-harness.mjs --target /path/to/proje
 需要可分享结果时使用：
 
 ```bash
-node skills/harness-creator/scripts/render-assessment-html.mjs --target /path/to/project
-node skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project --html /path/to/report.html
+node <技能目录>/scripts/render-assessment-html.mjs --target /path/to/project
+node <技能目录>/scripts/run-benchmark.mjs --target /path/to/project --html /path/to/report.html
 ```
 
 结构性基准测试（证明脚本可跑通，非有效性证明）；真实有效性靠前后对照会话。
