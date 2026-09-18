@@ -501,11 +501,17 @@ function renderBenchmarkHtml(report) {
   const budgetLine = report.selfCheck?.budget
     ? ` SKILL.md sits at ${report.selfCheck.budget.size}/${report.selfCheck.budget.max} bytes (${report.selfCheck.budget.pass ? 'within' : 'OVER'} budget).`
     : '';
+  // The new stage has to surface in the shareable report too. A check whose result never reaches
+  // the artifact people actually read is half a carrier: the gate would pass in the console and
+  // be invisible where the round gets reviewed later.
+  const selfRefLine = report.selfCheck?.selfRefs
+    ? ` ${report.selfCheck.selfRefs.checked} shipped file(s) checked for command reachability from a target repo (${report.selfCheck.selfRefs.pass ? 'all runnable' : `relative self-reference in ${(report.selfCheck.selfRefs.offenders || []).join(', ')}`}).`
+    : '';
   const selfCheckSection = report.selfCheck?.skipped
     ? ''
     : `<section>
       <h2>Script Self-Check <span>${report.selfCheck.pass ? 'PASS' : 'FAIL'}</span></h2>
-      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100, plus an English tracker-mode fixture at ${report.selfCheck.englishScore ?? 0}/100 — confirms the bundled scripts run end-to-end and scoring is bilingual.${budgetLine}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
+      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100, plus an English tracker-mode fixture at ${report.selfCheck.englishScore ?? 0}/100 — confirms the bundled scripts run end-to-end and scoring is bilingual.${budgetLine}${selfRefLine}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
     </section>`;
   const evalHtml = htmlReport(report.harness, `Harness Benchmark: ${path.basename(report.target)}`)
     .replace('</main>', `${selfCheckSection}<section>
