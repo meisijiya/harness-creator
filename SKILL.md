@@ -46,7 +46,7 @@ license: MIT
 2. 判定模式：**有信号**按信号判；**无信号** → 🔴 CHECKPOINT 询问仓库用途（用途、协作、有无工单），**得到答复前不写盘**，也不得自行传 `--mode` 越过拒写闸门；**已问过**未获答复才回落 registry；「无法询问」≠「用户未答复」，此时停住写出问题。→ 输出：模式判定结论。
 3. 判定 tracker 即默认用户已运行上游初始化 skill：不调用、不询问安装、不提供仓内替代；上游名下产物缺失即列待办并指引安装。→ 输出：本轮产物清单。
 4. 优先最小化：仅当涉及跨会话记忆、权限安全、多代理协调或基准测试时，才加载对应参考并加产物。其余缺失上下文可自行推断，**🔴 CHECKPOINT 除外**。
-5. 追踪对齐（一次性）：写盘前运行 `node <技能目录>/scripts/check-git-tracking.mjs --target .`；`.gitignore` 命中即判「不跟踪」，结论落 AGENTS.md。**本询问由本技能独占**——其他 skill 只读不问；`stray`/`unknown` 或与默认相反项才 🔴 CHECKPOINT 问一次，`.gitignore` **不得代改**（给确切行，获批后由用户改）。→ 输出：追踪策略。
+5. 追踪对齐（一次性）：写盘前跑 `node <技能目录>/scripts/check-git-tracking.mjs --target .`，`.gitignore` 命中即判「不跟踪」，结论落 AGENTS.md。**本技能独占此询问**，其他 skill 只读不问；`stray`/`unknown` 或与默认相左项才 🔴 CHECKPOINT 问一次；`.gitignore` **不得代改**（给确切行，获批后用户改）。→ 输出：追踪策略。
 6. 蓝图：把用户**已陈述**的「项目是什么、交付什么」转写成一行，用 `--blueprint` 带入 AGENTS.md；未陈述即留「待补」并列待确认项，不得由技术栈推断代填。→ 输出：蓝图一行或待补。
 
 ## 常见任务
@@ -86,7 +86,7 @@ node <技能目录>/scripts/run-benchmark.mjs --target /path/to/project --html /
 
 ## 何时阅读参考文档
 
-仅加载解决当前问题所需的参考文档：
+仅加载解决当前问题所需的参考文档（位于 `references/`）：
 
 - 跨会话记忆：`memory-persistence-pattern.md`
 - 可复用工作流（技能形式）：`skill-runtime-pattern.md`
@@ -101,17 +101,14 @@ node <技能目录>/scripts/run-benchmark.mjs --target /path/to/project --html /
 - 上游联动（清单、调用模式、插拔与维护）：`upstream-interlock.md`；matt 分区所有权见 `matt-coexistence.md`
 - 产物落点的 git 跟踪对齐（一次性询问）：`git-tracking-alignment.md`
 
-以上均位于 `references/` 目录。
-
 ## 异常与边界条件
 
-创建与审计中的异常见 [Failure Modes](references/failure-modes.md)。以下任一情况**先读它再动手**：同名文件或第三方块、模式信号矛盾或缺失、`stray`/`unknown`、产物出落点、`validate` 低于阈值、无 Node。**第三方工具存在不构成模式信号**——无信号即走第 2 步的 🔴 CHECKPOINT。绝不静默跳过或降级。
+创建与审计中的异常见 [Failure Modes](references/failure-modes.md)——同名文件或第三方块、模式信号矛盾或缺失、`stray`/`unknown`、产物出落点、`validate` 低于阈值、无 Node，任一命中**先读它再动手**。**第三方工具存在不构成模式信号**：无信号即走第 2 步的 🔴 CHECKPOINT。绝不静默跳过或降级。
 
 ## 设计规则
 
 - 根指令文件保持简短：只做路由与不变量，不做完整手册。
-- `CONTEXT.md` 承载领域语言：与代码互补、不重复代码已表达的内容；格式归上游，本技能引用不复制。
-- 决策进 ADR，不进进度日志；进度日志只留当前状态、证据、阻塞、下一步。
+- 事实各归其位：领域语言进 `CONTEXT.md`（与代码互补、不重复代码；格式归上游，引用不复制），决策进 ADR（不进进度日志），进度日志只留状态/证据/阻塞/下一步。
 - 项目文档（`design.md`、`docs/`）纳入治理：约束进门禁、术语进 `CONTEXT.md`、决策进 ADR、活文档指定 owner；与代码重复视为双写，过时即归档。
 - 任务级材料（spec 草稿、调研笔记）放 `.scratch/`，任务完成或 worktree 关闭即删。
 - 交接文档由用户按需生成（上游交接 skill 或等价技能），代理不主动创建；格式引用而不复制。交接是上下文、不是待办队列：用户未显式推进时不续跑原任务。
