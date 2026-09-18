@@ -158,7 +158,10 @@ Runs a lightweight harness benchmark:
  14. Checks the instruction-file invariant: an existing CLAUDE.md must not get a second AGENTS.md
      beside it, and an existing instruction file must stay byte-identical while its missing
      harness sections are still reported.
- 15. Produces a JSON report and optional HTML report.
+ 15. Checks the housekeeping scanner: it must change nothing, must not treat history as prunable
+     when no --session-ref is given, must still mark history when one is, and must never prune a
+     done-without-evidence entry.
+ 16. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -230,6 +233,10 @@ if (!selfCheck.skipped) {
     const { pass, noSecondFile, choseClaude, untouched, missingReported, error } = selfCheck.agentFile;
     console.log(`  Agent-file invariant: ${pass ? 'PASS' : 'FAIL'} — existing CLAUDE.md means no AGENTS.md is created: ${noSecondFile && choseClaude ? 'ok' : 'NO'}; existing instruction file left byte-identical: ${untouched ? 'ok' : 'NO'}; missing sections still reported: ${missingReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.housekeeping) {
+    const { pass, readOnly, noRefMeansUnverified, refMarksHistory, pruneActive, pruneSuppressed, noEvidenceNeverPruned, porcelainPathIntact, error } = selfCheck.housekeeping;
+    console.log(`  Housekeeping safety: ${pass ? 'PASS' : 'FAIL'} — scan changes nothing: ${readOnly ? 'ok' : 'NO'}; no --session-ref means unverified, not stale: ${noRefMeansUnverified ? 'ok' : 'NO'}; a ref still marks history: ${refMarksHistory ? 'ok' : 'NO'}; housekeeping still emits prune candidates: ${pruneActive ? 'ok' : 'NO'}; wrap-up suppresses prune: ${pruneSuppressed ? 'ok' : 'NO'}; done-without-evidence never pruned: ${noEvidenceNeverPruned ? 'ok' : 'NO'}; porcelain path keeps its first character: ${porcelainPathIntact ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+  }
   if (!selfCheck.pass && selfCheck.error) console.log(`  ${selfCheck.error}`);
 }
 console.log(formatScoreReport(harnessResult, target));
@@ -286,8 +293,9 @@ async function runSelfCheck() {
     const blueprint = await checkBlueprintSlot();
     const entries = await checkEntryTemplateRestraint();
     const agentFile = await checkAgentFileInvariant();
+    const housekeeping = await checkHousekeepingSafety();
     return {
-      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && tracker.pass && gate.pass && dryRun.pass && selfRefs.pass && bottleneckTies.pass && blankGate.pass && handoff.pass && blueprint.pass && entries.pass && agentFile.pass,
+      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && tracker.pass && gate.pass && dryRun.pass && selfRefs.pass && bottleneckTies.pass && blankGate.pass && handoff.pass && blueprint.pass && entries.pass && agentFile.pass && housekeeping.pass,
       score: scored.overall,
       englishScore: english.overall,
       budget,
@@ -301,6 +309,7 @@ async function runSelfCheck() {
       blueprint,
       entries,
       agentFile,
+      housekeeping,
       bottleneck: scored.bottleneck ?? english.bottleneck,
       bottlenecks: scored.bottlenecks.length ? scored.bottlenecks : english.bottlenecks
     };
@@ -744,6 +753,140 @@ async function checkAgentFileInvariant() {
   }
 }
 
+// Stage fifteen: the housekeeping scanner's safety invariants. `scan-housekeeping.mjs` is the one
+// script allowed to look at artefacts with deletion in mind, and every guardrail around it lived in
+// prose — "扫描器均只读", "不删 done 无 evidence 条目", "--session-ref 不默认 HEAD", "收尾不 prune
+// 历史". None had a mechanical carrier, so all four could be reverted in a single commit with every
+// gate still green. The failure is asymmetric: a scanner that reports too little gets noticed, a
+// scanner that quietly widens its own delete scope does not.
+// Both directions are asserted, because a suppression that can never be lifted is its own defect:
+// given a ref the scanner MUST be able to identify history (stale) and MUST emit prune candidates;
+// without one it must refuse both. Asserting only the refusal would pass a scanner that never prunes
+// anything — the "会拦下一切的闸门是最没用的闸门" trap.
+async function checkHousekeepingSafety() {
+  const fixtures = [];
+  const buildFixture = async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'harness-housekeep-'));
+    fixtures.push(dir);
+    await mkdir(path.join(dir, '.scratch'), { recursive: true });
+    await mkdir(path.join(dir, 'scripts', 'deep'), { recursive: true });
+    await writeText(path.join(dir, '.scratch', 'old-note.md'), '# Old note\n');
+    await writeText(path.join(dir, 'scripts', 'deep', 'tool.mjs'), 'export const v = 1;\n');
+    await writeText(path.join(dir, 'feature_list.json'), JSON.stringify({
+      features: [
+        { id: 'f1', name: 'shipped', status: 'done', evidence: 'npm test passes' },
+        { id: 'f2', name: 'noproof', status: 'done' },
+        { id: 'f3', name: 'pending', status: 'in_progress' }
+      ]
+    }, null, 2));
+    const git = (rest) => execFileAsync('git', rest, { cwd: dir });
+    const who = ['-c', 'user.email=bench@local', '-c', 'user.name=bench'];
+    await git(['init', '-q']);
+    await git([...who, 'add', '-A']);
+    await git([...who, 'commit', '-q', '-m', 'fixture']);
+    // An uncommitted edit below the repo root. `git status --porcelain` renders it ` M scripts/...`,
+    // so the scanner must drop the two status columns AND their separating space. Trimming first
+    // eats the separator and shaves the path's leading character, which then reads as "not in this
+    // session" — live work marked for deletion because of a whitespace bug.
+    await writeText(path.join(dir, 'scripts', 'deep', 'tool.mjs'), 'export const v = 2;\n');
+    return dir;
+  };
+
+  // .git/ is skipped deliberately: `git status` may rewrite the index, which is git bookkeeping
+  // rather than the scanner touching the user's files.
+  const snapshot = async (root) => {
+    const files = {};
+    const walk = async (relative) => {
+      for (const entry of await readdir(path.join(root, relative), { withFileTypes: true })) {
+        if (entry.name === '.git') continue;
+        const child = relative ? `${relative}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) await walk(child);
+        else files[child] = await readText(path.join(root, child));
+      }
+    };
+    await walk('');
+    return files;
+  };
+  const unchanged = (before, after) => {
+    const keys = Object.keys(before);
+    return keys.length === Object.keys(after).length && keys.every((key) => after[key] === before[key]);
+  };
+
+  const scan = async (dir, extra) => {
+    const { stdout } = await execFileAsync('node', [
+      path.join(scriptDir, 'scan-housekeeping.mjs'), '--target', dir, '--json', ...extra
+    ]);
+    return JSON.parse(stdout.slice(stdout.indexOf('{')));
+  };
+
+  const scratchState = (report) => report.scratch.find((entry) => entry.path === '.scratch/old-note.md')?.state;
+  const DONE_WITH_EVIDENCE = 'f1 shipped';
+  const DONE_WITHOUT_EVIDENCE = 'f2 noproof';
+
+  try {
+    const arms = [];
+    const arm = async (extra) => {
+      const dir = await buildFixture();
+      const before = await snapshot(dir);
+      const report = await scan(dir, extra);
+      arms.push({ report, readOnly: unchanged(before, await snapshot(dir)) });
+      return report;
+    };
+
+    const plain = await arm([]);
+    const withRef = await arm(['--session-ref', 'HEAD']);
+    const wrapupNoRef = await arm(['--session-only']);
+    const wrapupWithRef = await arm(['--session-ref', 'HEAD', '--session-only']);
+
+    const readOnly = arms.every(({ readOnly: ok }) => ok);
+    // Without a ref nothing outside uncommitted work is verifiable, and "unverified" must not be
+    // rounded up to "stale" — that is the whole distance between reporting and marking for deletion.
+    const noRefMeansUnverified = scratchState(plain) === 'unverified' && scratchState(wrapupNoRef) === 'unverified';
+    // A ref lifts it, and wrap-up refuses to judge history at all (out-of-scope) — a deliberately
+    // different verdict from stale.
+    const refMarksHistory = scratchState(withRef) === 'stale' && scratchState(wrapupWithRef) === 'out-of-scope';
+    const pruneActive = plain.featureList.prune.includes(DONE_WITH_EVIDENCE)
+      && withRef.featureList.prune.includes(DONE_WITH_EVIDENCE);
+    const pruneSuppressed = wrapupNoRef.featureList.pruneSuppressed === true
+      && wrapupWithRef.featureList.pruneSuppressed === true
+      && wrapupNoRef.featureList.prune.length === 0
+      && wrapupWithRef.featureList.prune.length === 0;
+    // done-without-evidence is never deletable in any mode: the missing evidence is the defect, and
+    // deleting the entry would erase the only record of it.
+    const noEvidenceNeverPruned = arms.every(({ report }) => !report.featureList.prune.includes(DONE_WITHOUT_EVIDENCE)
+      && report.featureList.doneWithoutEvidence.includes(DONE_WITHOUT_EVIDENCE));
+    const porcelainPathIntact = [plain, wrapupNoRef].every(
+      (report) => report.session.uncommitted.includes('scripts/deep/tool.mjs')
+    );
+
+    return {
+      pass: readOnly && noRefMeansUnverified && refMarksHistory && pruneActive
+        && pruneSuppressed && noEvidenceNeverPruned && porcelainPathIntact,
+      readOnly,
+      noRefMeansUnverified,
+      refMarksHistory,
+      pruneActive,
+      pruneSuppressed,
+      noEvidenceNeverPruned,
+      porcelainPathIntact
+    };
+  } catch (error) {
+    return {
+      pass: false,
+      readOnly: false,
+      noRefMeansUnverified: false,
+      refMarksHistory: false,
+      pruneActive: false,
+      pruneSuppressed: false,
+      noEvidenceNeverPruned: false,
+      porcelainPathIntact: false,
+      error: error.message
+    };
+  } finally {
+    for (const dir of fixtures) await rm(dir, { recursive: true, force: true });
+  }
+}
+
 function recommend(harnessResult, evalResult) {  if (harnessResult.overall >= 85 && evalResult.score >= 90) {
     return 'Ready for realistic before/after agent-session benchmarking.';
   }
@@ -797,11 +940,16 @@ function renderBenchmarkHtml(report) {
   const agentFileLine = report.selfCheck?.agentFile
     ? ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${report.selfCheck.agentFile.pass ? 'verified' : 'FAILED'}).`
     : '';
+  // The scanner is the only component with deletion in mind, and its guardrails are invisible in
+  // any ordinary run — a regression would look like a normal scan until something was pruned.
+  const housekeepingLine = report.selfCheck?.housekeeping
+    ? ` The housekeeping scanner changes nothing, refuses to call uncommitted history stale without a --session-ref (and still marks history when given one), suppresses pruning during wrap-up, and never prunes a done-without-evidence entry (${report.selfCheck.housekeeping.pass ? 'verified' : 'FAILED'}).`
+    : '';
   const selfCheckSection = report.selfCheck?.skipped
     ? ''
     : `<section>
       <h2>Script Self-Check <span>${report.selfCheck.pass ? 'PASS' : 'FAIL'}</span></h2>
-      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100, plus an English tracker-mode fixture at ${report.selfCheck.englishScore ?? 0}/100 — confirms the bundled scripts run end-to-end and scoring is bilingual.${budgetLine}${selfRefLine}${bottleneckTieLine}${blankGateLine}${handoffLine}${blueprintLine}${entryLine}${agentFileLine}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
+      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100, plus an English tracker-mode fixture at ${report.selfCheck.englishScore ?? 0}/100 — confirms the bundled scripts run end-to-end and scoring is bilingual.${budgetLine}${selfRefLine}${bottleneckTieLine}${blankGateLine}${handoffLine}${blueprintLine}${entryLine}${agentFileLine}${housekeepingLine}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
     </section>`;
   const evalHtml = htmlReport(report.harness, `Harness Benchmark: ${path.basename(report.target)}`)
     .replace('</main>', `${selfCheckSection}<section>
