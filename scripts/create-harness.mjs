@@ -19,7 +19,7 @@ import {
 const args = parseArgs(process.argv.slice(2));
 
 if (args.help) {
-  console.log(`Usage: node scripts/create-harness.mjs [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--mode auto|registry|tracker] [--tracking "CONCLUSION"] [--commands "a,b"] [--force]
+  console.log(`Usage: node scripts/create-harness.mjs [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--mode auto|registry|tracker] [--tracking "CONCLUSION"] [--commands "a,b"] [--force] [--dry-run]
 
 Creates a minimal production harness:
   AGENTS.md or CLAUDE.md (an existing CLAUDE.md is kept and preferred)
@@ -38,6 +38,12 @@ script infers the mode from the signals above; if none are present it refuses to
 with code 1, printing what it probed. This is deliberate: an unasked mode question must not turn
 into a silent scaffold. Ask the user which mode the repo uses, then re-run with an explicit
 --mode registry or --mode tracker.
+
+--dry-run prints the same plan the real run would execute (each artifact marked written or
+skipped) and exits 0 without creating the target directory or writing any file. Run it before the
+pre-write CHECKPOINT: that plan is what the user approves. It is exact rather than approximate —
+every status depends only on --force and the file's current state, so a dry run cannot drift from
+the real run that follows it.
 
 --tracking records the one-time git-tracking alignment conclusion in the AGENTS.md
 "## 产物追踪策略" section. Omit it and the section is written as pending: harness-creator
@@ -58,6 +64,11 @@ const target = path.resolve(args.target || args._[0] || process.cwd());
 // CLAUDE.md wins when it already exists, matching the upstream setup skill; --agent-file overrides.
 const agentFile = await detectAgentFile(target, args.agentFile);
 const force = Boolean(args.force);
+// --dry-run: compute and print the exact plan (which files would be written vs skipped) without
+// touching the filesystem. SKILL.md's pre-write CHECKPOINT asks for the artifact list *before*
+// approval, which this script could not previously produce — it wrote as it went and printed the
+// list afterwards, so that gate was unsatisfiable by construction.
+const dryRun = Boolean(args.dryRun);
 const project = await detectProject(target);
 project.packageManager = detectPackageManager(target, args.packageManager);
 const commands = args.commands
@@ -121,7 +132,9 @@ const trackerReason = mode === 'tracker'
   ? 'tracker mode (--mode tracker)'
   : `tracker mode (signals: ${trackerSignals.join(', ')})`;
 
-await mkdir(target, { recursive: true });
+// Skipped under --dry-run: a preview must not change the filesystem, and creating the target
+// directory counts as a change. The existence probes above already tolerate a missing path.
+if (!dryRun) await mkdir(target, { recursive: true });
 
 // The repository-structure table is the one section that differs by mode: registry repos keep
 // state in feature_list.json + progress.md, tracker repos keep it in the ticket system and must
@@ -189,7 +202,7 @@ const replacements = {
 
 const results = [];
 const agentPath = path.join(target, agentFile);
-const agentResult = await copyTemplate('agents.md', agentPath, replacements, { force });
+const agentResult = await copyTemplate('agents.md', agentPath, replacements, { force, dryRun });
 results.push(agentResult);
 
 // Report, never write: a text-match append cannot tell whether the existing file already covers
@@ -208,20 +221,28 @@ if (trackerMode) {
     });
   }
 } else {
-  results.push(await copyTemplate('feature-list.json', path.join(target, 'feature_list.json'), {}, { force }));
-  results.push(await copyTemplate('progress.md', path.join(target, 'progress.md'), {}, { force }));
+  results.push(await copyTemplate('feature-list.json', path.join(target, 'feature_list.json'), {}, { force, dryRun }));
+  results.push(await copyTemplate('progress.md', path.join(target, 'progress.md'), {}, { force, dryRun }));
 }
 
 const initPath = path.join(target, 'init.sh');
 if (force || !await exists(initPath)) {
-  await writeText(initPath, initScriptFromCommands(commands));
-  await chmod(initPath, 0o755);
+  if (!dryRun) {
+    await writeText(initPath, initScriptFromCommands(commands));
+    await chmod(initPath, 0o755);
+  }
   results.push({ path: initPath, status: 'written' });
 } else {
   results.push({ path: initPath, status: 'skipped', reason: 'exists' });
 }
 
-console.log(`Created harness for ${target}`);
+// A dry run must not claim it created anything — not writing is the entire point. "DRY RUN" leads
+// the line rather than trailing it so it survives being skimmed.
+if (dryRun) {
+  console.log(`DRY RUN — no files were written. Plan for ${target}:`);
+} else {
+  console.log(`Created harness for ${target}`);
+}
 console.log(`Detected stack: ${project.stack}`);
 if (mode === 'auto' && trackerSignals.length > 0 && registryStateExists) {
   console.log(`Mode: registry — tracker signals present (${trackerSignals.join(', ')}) but feature_list.json exists; pass --mode tracker to override.`);

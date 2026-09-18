@@ -56,7 +56,7 @@ license: MIT
 node skills/harness-creator/scripts/create-harness.mjs --target /path/to/project --mode registry|tracker
 ```
 
-🔴 CHECKPOINT：写盘前先向用户展示将创建/跳过的产物清单，确认后再执行。
+🔴 CHECKPOINT：先跑 `--dry-run`，把将创建/跳过的产物清单展示给用户，确认后再真正执行。
 
 选项：`--agent-file CLAUDE.md`（面向 Claude 的项目）、`--package-manager`、`--commands "a,b"`；其余见 `--help`。`--force` 覆盖已存在文件——🔴 CHECKPOINT：使用前**必须**获批并列出被覆盖文件；含第三方块的文件一律不用。
 

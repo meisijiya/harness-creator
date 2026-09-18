@@ -51,18 +51,25 @@ export async function writeText(filePath, contents) {
   await writeFile(filePath, contents, 'utf8');
 }
 
-export async function copyTemplate(templateName, targetPath, replacements = {}, { force = false } = {}) {
+export async function copyTemplate(templateName, targetPath, replacements = {}, { force = false, dryRun = false } = {}) {
   if (!force && await exists(targetPath)) {
     return { path: targetPath, status: 'skipped', reason: 'exists' };
   }
 
+  // dryRun decides the same status and stops before touching the filesystem. The plan it reports
+  // stays faithful to a following real run because every status here depends only on `force` and on
+  // the file's state *now* — never on an earlier write in the same run — so the two cannot disagree.
+  // The template is still read under dryRun on purpose: a missing or unreadable template should fail
+  // during the preview, not surface for the first time on the real write.
   let contents = await readText(path.join(TEMPLATE_DIR, templateName));
   for (const [key, value] of Object.entries(replacements)) {
     contents = contents.split(`{{${key}}}`).join(value);
   }
-  await writeText(targetPath, contents);
-  if (templateName.endsWith('.sh')) {
-    await chmod(targetPath, 0o755);
+  if (!dryRun) {
+    await writeText(targetPath, contents);
+    if (templateName.endsWith('.sh')) {
+      await chmod(targetPath, 0o755);
+    }
   }
   return { path: targetPath, status: 'written' };
 }

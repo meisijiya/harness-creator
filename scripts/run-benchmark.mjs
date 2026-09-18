@@ -131,7 +131,9 @@ Runs a lightweight harness benchmark:
      path reaches a target repo, and no registry state file is emitted.
   6. Checks the mode gate: a signal-free target given no explicit --mode must refuse to write (exit 1,
      zero files), while an explicit --mode or a detected signal must still scaffold.
-  7. Produces a JSON report and optional HTML report.
+  7. Checks --dry-run: it must change nothing, plan real artifacts rather than recite a template
+     list, and agree with the write that follows it.
+  8. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -170,6 +172,10 @@ if (!selfCheck.skipped) {
   if (selfCheck.gate) {
     const { pass, refused, explicitOk, signalOk, wrote = [], error } = selfCheck.gate;
     console.log(`  Mode gate: ${pass ? 'PASS' : 'FAIL'} — signal-free with no --mode refused: ${refused ? 'yes' : 'NO'}${wrote.length ? ` (but still wrote: ${wrote.join(', ')})` : ''}; explicit --mode registry: ${explicitOk ? 'ok' : 'NO'}; CONTEXT.md signal: ${signalOk ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+  }
+  if (selfCheck.dryRun) {
+    const { pass, changesNothing, previewedFiles, reflectsState, planMatchesRun, wrote = [], error } = selfCheck.dryRun;
+    console.log(`  Dry run: ${pass ? 'PASS' : 'FAIL'} — writes nothing: ${changesNothing ? 'ok' : `NO (still wrote ${wrote.join(', ') || 'files'})`}; plans artifacts: ${previewedFiles ? 'ok' : 'NO'}; reflects existing state: ${reflectsState ? 'ok' : 'NO'}; plan matches the real run: ${planMatchesRun ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (!selfCheck.pass && selfCheck.error) console.log(`  ${selfCheck.error}`);
 }
@@ -217,13 +223,15 @@ async function runSelfCheck() {
     const minScore = Number(args.minSelfCheckScore || 90);
     const tracker = await checkTrackerScaffold(minScore);
     const gate = await checkModeGate();
+    const dryRun = await checkDryRun();
     return {
-      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && tracker.pass && gate.pass,
+      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && tracker.pass && gate.pass && dryRun.pass,
       score: scored.overall,
       englishScore: english.overall,
       budget,
       tracker,
       gate,
+      dryRun,
       bottleneck: scored.bottleneck ?? english.bottleneck
     };
   } catch (error) {
@@ -324,6 +332,55 @@ async function listDir(dir) {
     return await readdir(dir);
   } catch {
     return [];
+  }
+}
+
+// Stage six: --dry-run. SKILL.md's pre-write CHECKPOINT asks the agent to show the artifact list
+// and get approval *before* anything is written; the generator used to write as it went and print
+// the list afterwards, so that gate was unsatisfiable — the prose demanded an order the tool could
+// not produce. --dry-run supplies the missing order. A preview can fail in three independent ways,
+// so all three are asserted: it can write anyway, it can recite a static template list that ignores
+// the target's real state, or it can disagree with the run it previews.
+async function checkDryRun() {
+  let dir;
+  let pair;
+  try {
+    const script = path.join(scriptDir, 'create-harness.mjs');
+    const capture = async (extra) => (await execFileAsync('node', [script, ...extra])).stdout;
+    const planLines = (out) => out.split('\n').filter((line) => /^(WRITTEN|SKIPPED) /.test(line)).sort().join('\n');
+
+    // 1. A preview on an empty target must change nothing — not even the target directory itself.
+    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-dryrun-'));
+    const preview = await capture(['--target', dir, '--mode', 'registry', '--dry-run']);
+    const wrote = await listDir(dir);
+    const changesNothing = wrote.length === 0;
+    const previewedFiles = /^WRITTEN /m.test(preview);
+
+    // 2. The preview is a plan, not a recital. After a real run every artifact exists, so the next
+    //    preview must report SKIPPED — a static list would still claim WRITTEN here.
+    await execFileAsync('node', [script, '--target', dir, '--mode', 'registry']);
+    const second = await capture(['--target', dir, '--mode', 'registry', '--dry-run']);
+    const reflectsState = /^SKIPPED /m.test(second) && !/^WRITTEN /m.test(second);
+
+    // 3. The plan must equal the run it previews, or the user approves a different action than the
+    //    one that executes. Both runs target the same fresh directory, so the comparison is exact.
+    pair = await mkdtemp(path.join(os.tmpdir(), 'harness-dryrun-pair-'));
+    const plan = await capture(['--target', pair, '--mode', 'registry', '--dry-run']);
+    const real = await capture(['--target', pair, '--mode', 'registry']);
+    const planMatchesRun = planLines(plan) === planLines(real) && planLines(plan).length > 0;
+
+    return {
+      pass: changesNothing && previewedFiles && reflectsState && planMatchesRun,
+      changesNothing,
+      previewedFiles,
+      reflectsState,
+      planMatchesRun,
+      wrote
+    };
+  } catch (error) {
+    return { pass: false, changesNothing: false, previewedFiles: false, reflectsState: false, planMatchesRun: false, wrote: [], error: error.message };
+  } finally {
+    for (const target of [dir, pair]) if (target) await rm(target, { recursive: true, force: true });
   }
 }
 
