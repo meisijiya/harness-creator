@@ -36,7 +36,7 @@ license: MIT
 
 **Registry 模式（自包含）**：状态事实来源在仓库内——`feature_list.json` 注册表 + 精简 `progress.md`。适用于无 issue tracker 的任意仓库与代理。
 
-**Tracker 模式（Matt 工程流）**：状态与依赖由工单系统承接，仓库只保留 `CONTEXT.md`（领域语言）与 ADR（决策史，只增不删），二者均由上游领域建模 skill **延迟创建**；`.scratch/` 承载任务级材料。探测信号：matt `docs/agents/`、`CONTEXT.md`、ADR 目录或用工单工作流——`.scratch/` **不算**信号。
+**Tracker 模式（Matt 工程流）**：状态与依赖由工单系统承接，仓库只保留 `CONTEXT.md`（领域语言）与 ADR（决策史，只增不删），二者由上游**延迟创建**；`.scratch/` 承载任务级材料。探测信号：`docs/agents/`、`CONTEXT.md`、ADR 目录或工单工作流——`.scratch/` 与第三方工具都不算信号。
 
 两模式共享骨架，区别只在状态来源位置。
 
@@ -44,9 +44,9 @@ license: MIT
 
 1. 检查已有内容：指令文件、功能/状态文件、验证命令、文档、`CONTEXT.md`/ADR/matt `docs/agents/`、包清单。→ 输出：现有产物清单。
 2. 判定模式：**有信号**按信号判；**无信号** → 🔴 CHECKPOINT 询问仓库用途（用途、协作、有无工单），**得到答复前不写盘**，也不得自行传 `--mode` 越过拒写闸门；**已问过**未获答复才回落 registry；「无法询问」≠「用户未答复」，此时停住写出问题；信号矛盾按最强信号判。→ 输出：模式判定结论。
-3. 判定 tracker 即默认用户已运行上游初始化 skill：不调用、不询问安装、不提供仓内替代。matt 名下产物不代建，只落本方骨架，缺失项列待办并指引安装。→ 输出：本轮产物清单。
+3. 判定 tracker 即默认用户已运行上游初始化 skill：不调用、不询问安装、不提供仓内替代；上游名下产物缺失即列待办并指引安装。→ 输出：本轮产物清单。
 4. 优先最小化：仅当涉及跨会话记忆、权限安全、多代理协调或基准测试时，才加载对应参考并加产物。其余缺失上下文可自行推断，**🔴 CHECKPOINT 除外**。
-5. 追踪对齐（一次性）：写盘前运行 `node <技能目录>/scripts/check-git-tracking.mjs --target .`；🔴 CHECKPOINT 只问一次，`.gitignore` 命中即判「不跟踪」，结论落 AGENTS.md，其余 skill 只读不问。→ 输出：追踪策略表。
+5. 追踪对齐（一次性）：写盘前运行 `node <技能目录>/scripts/check-git-tracking.mjs --target .`；`.gitignore` 命中即判「不跟踪」，结论落 AGENTS.md。**本询问由本技能独占**——其他 skill 只读不问；`stray`/`unknown` 或与默认相反项才 🔴 CHECKPOINT 问一次，`.gitignore` **不得代改**（给确切行，获批后由用户改）。→ 输出：追踪策略表。
 
 ## 常见任务
 
@@ -64,9 +64,9 @@ node <技能目录>/scripts/create-harness.mjs --target /path/to/project --mode 
 
 选项：`--agent-file CLAUDE.md`、`--package-manager`、`--commands "a,b"`；其余见 `--help`。`--force` 覆盖已存在文件——🔴 CHECKPOINT：使用前**必须**获批并列出被覆盖文件；含第三方块的文件一律不用。
 
-模式必须显式：无信号且未传 `--mode` 时脚本拒写，不静默默认。
+模式必须显式：无信号且未传 `--mode` 时脚本拒写。
 
-**与 matt setup 共存**：单一写入者分区见 [Matt Coexistence](references/matt-coexistence.md)。**AGENTS.md 章节以 `templates/agents.md` 为唯一来源**（审计不校验结构）；已存在时脚本只报告缺失章节、不写盘，合并由代理执行并保留第三方块、不另建等价副本。
+**与 matt setup 共存**：单一写入者分区见 [Matt Coexistence](references/matt-coexistence.md)。**AGENTS.md 章节以 `templates/agents.md` 为唯一来源**；已存在时脚本只报告缺失章节，合并由代理执行。
 
 输出：产物清单 + 创建说明。
 
@@ -141,7 +141,7 @@ harness 设计中不要做的事；交付前对照一次。
 | 7 | 静默覆盖已有文件、静默跳过异常 | 破坏用户工作且无法追溯 | 默认跳过+告知；`--force` 走 🔴 CHECKPOINT；异常按 failure-modes 处理 |
 | 8 | 把文字说明当约束的唯一载体 | 代理可能没读到或误解说明 | 能写成测试/Schema/门禁的约束一律进 `init.sh`/CI，文字只是指针 |
 | 9 | 引入产物落在五个落点之外的第三方 skill | 制造第六个事实来源；他人 skill 无法改造 | 先路由回落点；skill 自带硬约束时**受控放行**（放行不治理、登记豁免、用户裁决、追踪有结论），其余拒绝 |
-| 10 | 让第三方 skill 自行询问产物追踪策略 | 重复询问，结论分散成第二事实源 | 本技能独占询问一次；结论落 AGENTS.md，其余 skill 只读不问 |
+| 10 | 让第三方 skill 自行询问产物追踪策略 | 重复询问，结论分散成第二事实源 | 见第一步第 5 条 |
 
 ## 交付清单
 
@@ -151,8 +151,8 @@ harness 设计中不要做的事；交付前对照一次。
 
 - [ ] `AGENTS.md` 或 `CLAUDE.md`（含仓库结构与一次性追踪策略，路由状态产物与 `CONTEXT.md`/ADR）
 - [ ] `feature_list.json` + `progress.md`（精简版）
-- [ ] `init.sh`
-- [ ] 交接落点约定（`.scratch/handoff.md`，启动时若存在必读）
+- [ ] `init.sh`（空项目下**必然失败**：占位验证带 `exit 1`，须替换为真实命令）
+- [ ] 交接落点约定（`.scratch/` 下；生成方默认写到别处时改写到那里）
 
 **Tracker 模式（附加或替代）**
 

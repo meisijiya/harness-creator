@@ -256,7 +256,7 @@ echo ""
 echo "Next steps:"
 echo "1. Read feature_list.json to see current feature state"
 echo "2. Read progress.md for current status, blockers and next steps"
-echo "3. Read .scratch/handoff.md if a handoff exists"
+echo "3. Read a handoff doc in .scratch/ if one exists"
 echo "4. Pick ONE unfinished feature to work on"
 echo "5. Implement only that feature"
 echo "6. Re-run verification before claiming done"
@@ -264,10 +264,29 @@ echo "6. Re-run verification before claiming done"
 }
 
 const INSTALL_STEP = /^(?:npm|pnpm|yarn|bun) (?:install|ci|i)$/;
+// The generator's own placeholder for "no manifest detected". Matched as a substring so the
+// scripted probe in run-benchmark.mjs can hand the real sentence in and get the real branch,
+// rather than restating this code's output and testing its own copy of the string.
+const PLACEHOLDER_VERIFICATION = /No package manifest detected; replace this line/;
 const SCRIPT_STEP = /^(?:npm|pnpm|yarn|bun) (?:run )?([\w:.-]+)$/;
 const NON_SCRIPT_ARGS = new Set(['install', 'ci', 'i', 'exec', 'dlx', 'create']);
 
-function renderVerificationStep(command) {
+export function renderVerificationStep(command) {
+  // An empty project has nothing to verify yet, so the generator can only leave a placeholder.
+  // Executing that placeholder as a plain echo would exit 0 and make ./init.sh report success
+  // while verifying nothing — the harness would ship a gate that cannot fail, and "no feature
+  // may be marked done without evidence" becomes structurally unreachable on a blank repo.
+  // The step therefore exits non-zero until it is replaced: the gate opens exactly when the
+  // byte-identical placeholder disappears. Its exit status is the honest answer to
+  // "was any baseline verified?" — no. Deleting the line is not a bypass; replacing it is the fix.
+  if (PLACEHOLDER_VERIFICATION.test(command)) {
+    return `echo "=== ${escapeForEcho(command)} ==="
+echo "ERROR: this is an unreplaced placeholder — nothing is being verified."
+echo "Replace this step in ./init.sh with the project's real verification command."
+echo "Until then ./init.sh MUST fail: a gate that cannot fail is not a gate."
+exit 1`;
+  }
+
   if (INSTALL_STEP.test(command)) {
     return `if [ -d node_modules ]; then
   echo "SKIP: ${escapeForEcho(command)} (node_modules already present)"
@@ -511,6 +530,24 @@ export async function detectAgentFile(root, explicit) {
   return 'AGENTS.md';
 }
 
+// A handoff doc is identified by what it is, not by one hardcoded filename. The scaffolding
+// writes `.scratch/handoff.md`, but the doc is produced later by a different skill at the user's
+// request, and it may be timestamped or renamed. Keying on the name alone would mark a repo that
+// holds a perfectly good handoff as having none — and worse, the startup checklist would never
+// read it. Landing point is still enforced: only `.scratch/` is scanned, because the repo root
+// and `docs/` are not landing points (see the five-landing-point rule).
+async function handoffCandidates(root) {
+  let entries = [];
+  try {
+    entries = await readdir(path.join(root, '.scratch'), { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => entry.isFile() && /\.(md|markdown)$/i.test(entry.name))
+    .map((entry) => `.scratch/${entry.name}`);
+}
+
 export async function loadHarnessFiles(root) {
   const candidates = [
     'AGENTS.md',
@@ -523,7 +560,11 @@ export async function loadHarnessFiles(root) {
     'session-handoff.md',
     'docs/agents/domain.md',
     'docs/agents/issue-tracker.md',
-    'init.sh'
+    'init.sh',
+    // Handoff docs a conforming producer may write under .scratch/ with any name (upstream's
+    // handoff skill defaults to `docs/handoff-<timestamp>.md` or the repo root, neither of which
+    // is a landing point here; the convention on this side is ".scratch/, name it what you like").
+    ...await handoffCandidates(root)
   ];
   const files = [];
   for (const candidate of candidates) {

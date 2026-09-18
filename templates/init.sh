@@ -81,7 +81,10 @@ elif ls *.csproj *.sln >/dev/null 2>&1; then
   dotnet test
 else
   echo "No recognized package manifest detected."
-  echo "Replace this section with the project's verification commands."
+  echo "ERROR: this is an unreplaced placeholder — nothing is being verified."
+  echo "Replace this section with the project's real verification commands."
+  echo "Until then ./init.sh MUST fail: a gate that cannot fail is not a gate."
+  exit 1
 fi
 
 echo "=== Verification Complete ==="
@@ -89,7 +92,7 @@ echo ""
 echo "Next steps:"
 echo "1. Read feature_list.json to see current feature state"
 echo "2. Read progress.md for current status, blockers and next steps"
-echo "3. Read .scratch/handoff.md if a handoff exists"
+echo "3. Read a handoff doc in .scratch/ if one exists"
 echo "4. Pick ONE unfinished feature to work on"
 echo "5. Implement only that feature"
 echo "6. Re-run verification before claiming done"

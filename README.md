@@ -102,7 +102,7 @@ node ~/.agents/skills/harness-creator/scripts/run-benchmark.mjs --target /path/t
 - `init.sh`
 - `feature_list.json` 与 `progress.md`（精简版：当前状态、证据、阻塞、下一步）——**仅 registry 模式**；tracker 模式的状态在工单系统，写出这两个文件会制造第二状态源，因此脚本在该模式下跳过它们
 
-会话交接是约定而非仓库文件：引用式交接文档写在 `.scratch/handoff.md` 或临时目录。tracker 模式（`CONTEXT.md` + ADR + 工单系统承接状态，工单可本地可仓外）见 SKILL.md 的"两种模式"一节。与 matt setup 共存时按**单一写入者**分工：matt 拥有 `docs/agents/*`、`CONTEXT.md`、`docs/adr/`、`## Agent skills` 块（其中 `CONTEXT.md`/ADR 由上游领域建模 skill **延迟创建**），本技能不代建，只落自己的章节与 `init.sh`；详见 `references/matt-coexistence.md`。
+会话交接是**落点规则而非固定文件名**：引用式交接文档落在 `.scratch/` 下（文件名随意，`handoff.md`、带时间戳的都行）——仓根与 `docs/` 都不是五个落点之一，生成方若默认写到那里，改写到 `.scratch/` 即可。tracker 模式（`CONTEXT.md` + ADR + 工单系统承接状态，工单可本地可仓外）见 SKILL.md 的"两种模式"一节。与 matt setup 共存时按**单一写入者**分工：matt 拥有 `docs/agents/*`、`CONTEXT.md`、`docs/adr/`、`## Agent skills` 块（其中 `CONTEXT.md`/ADR 由上游领域建模 skill **延迟创建**），本技能不代建，只落自己的章节与 `init.sh`；详见 `references/matt-coexistence.md`。
 
 `create-harness.mjs` 可检测常见的项目类型与包管理器。在基础验证命令层面支持 Node/npm/pnpm/yarn/bun、Python、Go、Rust、Maven、Gradle 和 .NET。
 
@@ -120,7 +120,7 @@ node ~/.agents/skills/harness-creator/scripts/run-benchmark.mjs --target /path/t
 
 报告会给出得分最低的子系统——**并列最低时全部列出**，不会从并列里挑一个当成"瓶颈"：单点结论只在某个子系统确实弱于其余时才成立。最低分只是候选瓶颈，改动前先确认因果。
 
-`run-benchmark.mjs` 在此之上先跑一遍**工具链自检**，八道关，任一 FAIL 都会让脚本以退出码 1 结束。这些关卡守的是技能自己的不变量：
+`run-benchmark.mjs` 在此之上先跑一遍**工具链自检**，十道关，任一 FAIL 都会让脚本以退出码 1 结束。这些关卡守的是技能自己的不变量：
 
 | 关卡 | 守住什么 |
 |---|---|
@@ -131,6 +131,8 @@ node ~/.agents/skills/harness-creator/scripts/run-benchmark.mjs --target /path/t
 | `--dry-run` | 零副作用；计划反映目标真实状态；计划与真写逐字一致 |
 | 自引用可达性 | 技能打印的每条命令都能在目标仓直接跑起来 |
 | 审计瓶颈 | 并列最低须列全、唯一最低仍点名一个、全部满分须报「无」 |
+| 空项目门禁 | 空项目下的占位验证步骤必须以非 0 退出（**永不失败的门禁不是门禁**），同时断言真实命令仍照常运行 |
+| 交接识别 | `.scratch/` 下带时间戳等任意文件名的交接文档必须被识别，而落在五落点之外的交接文档必须被忽略 |
 
 带 `--html` 时这些结果一并进报告——关卡结论若只出现在控制台，在事后复盘的产物里就等于不存在。格式守卫本身也该有守卫：每道关卡都配了反证测试（把旧行为塞回去，关卡必须 FAIL 并点名）。
 
@@ -233,7 +235,7 @@ tracker 模式的默认搭配：初始化工作区（用户自行运行）→ �
 - [x] 模板模式中立：`AGENTS.md` 中随模式变化的小节由占位符填充，不泄漏另一模式的状态产物
 - [x] 写入前的机械闸门：无信号且未显式 `--mode` 时拒写（退出码 1、零文件）；`--dry-run` 预演零副作用且与真写逐字一致
 - [x] 生成物护栏：目标仓库里不出现只在技能仓内才解析的指针；tracker 模式不吐 registry 状态产物
-- [x] 工具链自检八关（每关附反证）：脚本可跑、双语打分、字节上限、产物护栏、模式闸门、`--dry-run` 一致性、自引用可达性、审计瓶颈并列
+- [x] 工具链自检十关（每关附反证）：脚本可跑、双语打分、字节上限、产物护栏、模式闸门、`--dry-run` 一致性、自引用可达性、审计瓶颈并列、空项目门禁、交接识别
 - [x] 决策权交回用户：该问的拒写而非静默默认；审计结论不虚构排名（并列全部列出，不从并列里挑一个）
 - [ ] 可选的真实前后对照代理会话回放
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process';
-import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -14,6 +14,7 @@ import {
   pickBottlenecks,
   readJson,
   readText,
+  renderVerificationStep,
   scoreHarness,
   scriptCommand,
   writeText
@@ -55,7 +56,7 @@ Before writing code:
 1. Read this file in full
 2. Read \`CONTEXT.md\` for domain vocabulary and recent ADRs in \`docs/adr/\`
 3. Run \`./init.sh\` to verify the environment
-4. Read \`.scratch/handoff.md\` if a handoff exists
+4. Read any handoff doc under \`.scratch/\` if one exists
 5. Check the issue tracker for ticket status and blocking edges
 
 ## Working rules
@@ -80,7 +81,7 @@ Before writing code:
 
 ## End of session
 
-1. Write a reference-style handoff to \`.scratch/handoff.md\`: goal, current status, recommended next step; reference specs, ADRs and commits by path, never copy their content
+1. Write a reference-style handoff under \`.scratch/\` (any filename): goal, current status, recommended next step; reference specs, ADRs and commits by path, never copy their content
 2. Record unresolved risks or blockers
 3. Commit with a descriptive message and leave the repo clean
 `;
@@ -143,7 +144,13 @@ Runs a lightweight harness benchmark:
      list, and agree with the write that follows it.
   8. Checks the skill's own shipped files: no command it prints may use a script path that only
      resolves from the skill directory (the agent's cwd is the target repo).
-  9. Produces a JSON report and optional HTML report.
+  9. Checks the bottleneck headline: a tie must name every tied subsystem, a unique minimum must
+     name one, and a complete harness must report none.
+ 10. Checks the blank-project gate: the placeholder verification step must exit non-zero, while a
+     real command must still run — a gate that cannot fail is not a gate.
+ 11. Checks handoff recognition: a doc under .scratch/ is recognised by what it is, not by one
+     filename, while a doc outside the landing points is ignored.
+ 12. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -194,6 +201,14 @@ if (!selfCheck.skipped) {
   if (selfCheck.bottleneckTies) {
     const { pass, tieCount, uniqueCount, noneCount, tieLabel } = selfCheck.bottleneckTies;
     console.log(`  Bottleneck ties: ${pass ? 'PASS' : 'FAIL'} — 5-way tie names all 5: ${tieCount === 5 ? 'ok' : `NO (${tieCount})`}; unique minimum names one: ${uniqueCount === 1 ? 'ok' : `NO (${uniqueCount})`}; complete harness reports none: ${noneCount === 0 ? 'ok' : `NO (${noneCount})`} — ${tieLabel}`);
+  }
+  if (selfCheck.blankGate) {
+    const { pass, placeholderFails, realRuns } = selfCheck.blankGate;
+    console.log(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}`);
+  }
+  if (selfCheck.handoff) {
+    const { pass, recognized, strayIgnored, error } = selfCheck.handoff;
+    console.log(`  Handoff recognition: ${pass ? 'PASS' : 'FAIL'} — timestamped doc under .scratch/ recognised: ${recognized ? 'ok' : 'NO'}; doc outside the landing points ignored: ${strayIgnored ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (!selfCheck.pass && selfCheck.error) console.log(`  ${selfCheck.error}`);
 }
@@ -246,8 +261,10 @@ async function runSelfCheck() {
     const dryRun = await checkDryRun();
     const selfRefs = await checkSelfReferencePaths();
     const bottleneckTies = await checkBottleneckTies();
+    const blankGate = await checkBlankProjectGate();
+    const handoff = await checkHandoffRecognition();
     return {
-      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && tracker.pass && gate.pass && dryRun.pass && selfRefs.pass && bottleneckTies.pass,
+      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && tracker.pass && gate.pass && dryRun.pass && selfRefs.pass && bottleneckTies.pass && blankGate.pass && handoff.pass,
       score: scored.overall,
       englishScore: english.overall,
       budget,
@@ -256,6 +273,8 @@ async function runSelfCheck() {
       dryRun,
       selfRefs,
       bottleneckTies,
+      blankGate,
+      handoff,
       bottleneck: scored.bottleneck ?? english.bottleneck,
       bottlenecks: scored.bottlenecks.length ? scored.bottlenecks : english.bottlenecks
     };
@@ -525,6 +544,55 @@ async function checkBottleneckTies() {
   };
 }
 
+// Stage nine: a blank repo must not ship a gate that cannot fail. When no package manifest is
+// detected the generator has nothing to verify, so it emits a placeholder step. Executing that
+// placeholder as a plain echo exited 0, which made ./init.sh report success on a repo where
+// nothing had been verified — and "no feature may be marked done without evidence" became
+// structurally unreachable on a blank project. The placeholder now exits non-zero, so the gate
+// opens exactly when it is replaced. Two directions are asserted, because "always exits 1" would
+// be a different defect wearing the same fix: the placeholder must fail, and a real command must
+// still pass. The probe hands in the generator's own sentence, so this code cannot pass by
+// agreeing with a copy of the string it is meant to verify.
+async function checkBlankProjectGate() {
+  const placeholder = 'echo "No package manifest detected; replace this line with your project verification command."';
+  const blank = renderVerificationStep(placeholder);
+  const real = renderVerificationStep('go test ./...');
+  const placeholderFails = /\bexit 1\b/.test(blank) && !/^\s*go test/m.test(blank);
+  // The real command must render as something that runs, not as the refusal branch.
+  const realRuns = !/\bexit 1\b/.test(real) && real.includes('go test ./...');
+  return {
+    pass: placeholderFails && realRuns,
+    placeholderFails,
+    realRuns
+  };
+}
+
+// Stage ten: the handoff is identified by what it is, not by one hardcoded filename. Scaffolding
+// writes `.scratch/handoff.md`, but the doc is produced later at the user's request and may be
+// timestamped — upstream's own handoff skill timestamps it. If recognition keyed on the exact
+// name, a repo holding a perfectly good handoff would score as having none and the startup
+// checklist would never read it. Landing point stays enforced: only `.scratch/` is scanned.
+async function checkHandoffRecognition() {
+  let dir;
+  try {
+    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-handoff-'));
+    await mkdir(path.join(dir, '.scratch'), { recursive: true });
+    await writeText(path.join(dir, '.scratch', 'handoff-20260101-000000.md'), '# Handoff\n');
+    const loaded = await loadHarnessFiles(dir);
+    const recognized = loaded.some(({ path: file }) => file === '.scratch/handoff-20260101-000000.md');
+    // A stray doc outside the landing points must NOT be picked up: the five-landing-point rule is
+    // the reason the check reads .scratch/ only, and widening it would quietly legitimise docs/.
+    await writeText(path.join(dir, 'handoff-at-root.md'), '# Handoff\n');
+    const afterStray = await loadHarnessFiles(dir);
+    const strayIgnored = !afterStray.some(({ path: file }) => file === 'handoff-at-root.md');
+    return { pass: recognized && strayIgnored, recognized, strayIgnored };
+  } catch (error) {
+    return { pass: false, recognized: false, strayIgnored: false, error: error.message };
+  } finally {
+    if (dir) await rm(dir, { recursive: true, force: true });
+  }
+}
+
 function recommend(harnessResult, evalResult) {
   if (harnessResult.overall >= 85 && evalResult.score >= 90) {
     return 'Ready for realistic before/after agent-session benchmarking.';
@@ -559,11 +627,17 @@ function renderBenchmarkHtml(report) {
   const bottleneckTieLine = report.selfCheck?.bottleneckTies
     ? ` The bottleneck line names ${report.selfCheck.bottleneckTies.tieCount} tied subsystem(s) as a tie instead of picking one (${report.selfCheck.bottleneckTies.pass ? 'verified' : 'FAILED'}).`
     : '';
+  const blankGateLine = report.selfCheck?.blankGate
+    ? ` On a project with no detectable stack, the placeholder verification step exits non-zero rather than reporting a pass it did not earn (${report.selfCheck.blankGate.pass ? 'verified' : 'FAILED'}).`
+    : '';
+  const handoffLine = report.selfCheck?.handoff
+    ? ` A handoff doc under .scratch/ is recognised regardless of filename, while one outside the landing points is ignored (${report.selfCheck.handoff.pass ? 'verified' : 'FAILED'}).`
+    : '';
   const selfCheckSection = report.selfCheck?.skipped
     ? ''
     : `<section>
       <h2>Script Self-Check <span>${report.selfCheck.pass ? 'PASS' : 'FAIL'}</span></h2>
-      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100, plus an English tracker-mode fixture at ${report.selfCheck.englishScore ?? 0}/100 — confirms the bundled scripts run end-to-end and scoring is bilingual.${budgetLine}${selfRefLine}${bottleneckTieLine}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
+      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100, plus an English tracker-mode fixture at ${report.selfCheck.englishScore ?? 0}/100 — confirms the bundled scripts run end-to-end and scoring is bilingual.${budgetLine}${selfRefLine}${bottleneckTieLine}${blankGateLine}${handoffLine}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
     </section>`;
   const evalHtml = htmlReport(report.harness, `Harness Benchmark: ${path.basename(report.target)}`)
     .replace('</main>', `${selfCheckSection}<section>
