@@ -103,6 +103,7 @@ addyosmani 的完整工作流层按生命周期组织，全部为模型可调用
 | 预先商定接缝、先红后绿、垂直切片 | `tdd` / `test-driven-development` | 同上 推进规范 | 接缝协商是否仍是前置要求；red-green 流程是否调整 |
 | 增量环（实现→测试→验证→提交）、范围纪律（发现但不动）、保持可编译、回滚友好 | `incremental-implementation` | 同上 推进规范 | 增量环步骤与红旗是否变化 |
 | 单一写入者分区（`docs/agents/*`、`CONTEXT.md`、`docs/adr/` 的归属与延迟创建） | `setup-matt-pocock-skills` / `domain-modeling` | `matt-coexistence.md` | setup 产物的路径与格式是否变化 |
+| 落点权威归 harness、内容权威归产出 skill（两轴不互相授权） | 治理分工（本技能裁决，非上游事实） | `matt-coexistence.md`、`README.md` 治理权归属段 | 上游若新增产物型 skill：只需补进「产物落点视图」，**无需**改落点权威的归属 |
 | 交接为引用式、落临时目录、不复制既有产物 | `handoff` | `session-wrapup-pattern.md` | 交接落点与「不复制」规则是否变化 |
 
 **内化的边界**：只内化**不变量**，不内化正文。上游 skill 的步骤、模板、示例一律按名引用——复制进来的那一刻就开始腐化（反例 #1）。

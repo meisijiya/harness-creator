@@ -20,7 +20,7 @@ import {
 const args = parseArgs(process.argv.slice(2));
 
 if (args.help) {
-  console.log(`Usage: ${scriptCommand('create-harness.mjs')} [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--mode auto|registry|tracker] [--tracking "CONCLUSION"] [--commands "a,b"] [--force] [--dry-run]
+  console.log(`Usage: ${scriptCommand('create-harness.mjs')} [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--mode auto|registry|tracker] [--tracking "CONCLUSION"] [--blueprint "WHAT THIS PROJECT IS"] [--commands "a,b"] [--force] [--dry-run]
 
 Creates a minimal production harness:
   AGENTS.md or CLAUDE.md (an existing CLAUDE.md is kept and preferred)
@@ -49,6 +49,13 @@ the real run that follows it.
 --tracking records the one-time git-tracking alignment conclusion in the AGENTS.md
 "## 产物追踪策略" section. Omit it and the section is written as pending: harness-creator
 asks the question once and fills the conclusion in. See references/git-tracking-alignment.md.
+
+--blueprint carries the user's own one-line description of what the project is and what it
+delivers, and is written verbatim into the AGENTS.md "## 项目蓝图" section. It is the only
+channel for that input: omit it and the section is written as a visible pending marker,
+never assembled from the detected stack. A blueprint is a description — not product form,
+not an implementation path, not tickets — and no feature entry may be derived from it
+before the requirements have been aligned with the user.
 
 An existing AGENTS.md/CLAUDE.md is never rewritten (skip, or --force) — instead the harness
 sections it lacks are reported so the agent can merge them by hand, keeping third-party
@@ -184,9 +191,18 @@ const modeKey = trackerMode ? 'tracker' : 'registry';
 
 const replacements = {
   AGENT_FILE_NAME: agentFile,
-  PROJECT_PURPOSE: project.stack === 'generic'
-    ? 'Project harness for reliable agent-assisted development.'
-    : `Project harness for reliable agent-assisted development in a ${project.stack} codebase.`,
+  // The project blueprint: what this project is and what it delivers. NOT product form, NOT an
+  // implementation path, NOT tickets — the section it fills says so, and the working rules forbid
+  // deriving entries from it before the requirements have actually been aligned.
+  // The value is never invented. It comes from the user's own statement via --blueprint, or it
+  // stays a visible pending marker. This used to be assembled from `project.stack`, which meant the
+  // one place in AGENTS.md that answers "what is this project" carried no project fact at all: a
+  // repo could ship a filled-in-looking blueprint that says nothing. Left as the pending marker,
+  // the gap is visible and askable; invented, it hides the same missing input that lets an agent
+  // go on to write unaligned feature entries.
+  PROJECT_PURPOSE: args.blueprint
+    ? String(args.blueprint)
+    : '待补——由用户陈述「这个项目是什么、最终交付什么」后填入；此字样存在即表示蓝图尚未确定',
   VERIFICATION_COMMANDS: commands.map((command) => `- \`${command}\``).join('\n'),
   PRIMARY_VERIFICATION_COMMAND: './init.sh',
   REPO_LAYOUT: REPO_LAYOUT[modeKey].join('\n'),

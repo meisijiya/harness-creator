@@ -150,7 +150,11 @@ Runs a lightweight harness benchmark:
      real command must still run — a gate that cannot fail is not a gate.
  11. Checks handoff recognition: a doc under .scratch/ is recognised by what it is, not by one
      filename, while a doc outside the landing points is ignored.
- 12. Produces a JSON report and optional HTML report.
+ 12. Checks the blueprint slot: omitting --blueprint must leave a visible pending marker rather
+     than stack-derived text, and a supplied blueprint must reach AGENTS.md verbatim.
+ 13. Checks the entry template: a fresh registry scaffold must not ship project-shaped feature
+     entries, and must state the alignment rule before any entry may be added.
+ 14. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -210,6 +214,14 @@ if (!selfCheck.skipped) {
     const { pass, recognized, strayIgnored, error } = selfCheck.handoff;
     console.log(`  Handoff recognition: ${pass ? 'PASS' : 'FAIL'} — timestamped doc under .scratch/ recognised: ${recognized ? 'ok' : 'NO'}; doc outside the landing points ignored: ${strayIgnored ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.blueprint) {
+    const { pass, pendingMarked, noInventedFill, verbatim, error } = selfCheck.blueprint;
+    console.log(`  Blueprint slot: ${pass ? 'PASS' : 'FAIL'} — omitted --blueprint stays a pending marker: ${pendingMarked ? 'ok' : 'NO'}; no stack-derived fill: ${noInventedFill ? 'ok' : 'NO'}; supplied blueprint reaches AGENTS.md verbatim: ${verbatim ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+  }
+  if (selfCheck.entries) {
+    const { pass, count, atMostExample, alignmentRuleStated, error } = selfCheck.entries;
+    console.log(`  Entry restraint: ${pass ? 'PASS' : 'FAIL'} — no project-shaped entries at scaffold time (${count} entry/entries): ${atMostExample ? 'ok' : 'NO'}; alignment rule stated in feature_list.json and AGENTS.md: ${alignmentRuleStated ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+  }
   if (!selfCheck.pass && selfCheck.error) console.log(`  ${selfCheck.error}`);
 }
 console.log(formatScoreReport(harnessResult, target));
@@ -263,8 +275,10 @@ async function runSelfCheck() {
     const bottleneckTies = await checkBottleneckTies();
     const blankGate = await checkBlankProjectGate();
     const handoff = await checkHandoffRecognition();
+    const blueprint = await checkBlueprintSlot();
+    const entries = await checkEntryTemplateRestraint();
     return {
-      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && tracker.pass && gate.pass && dryRun.pass && selfRefs.pass && bottleneckTies.pass && blankGate.pass && handoff.pass,
+      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && tracker.pass && gate.pass && dryRun.pass && selfRefs.pass && bottleneckTies.pass && blankGate.pass && handoff.pass && blueprint.pass && entries.pass,
       score: scored.overall,
       englishScore: english.overall,
       budget,
@@ -275,6 +289,8 @@ async function runSelfCheck() {
       bottleneckTies,
       blankGate,
       handoff,
+      blueprint,
+      entries,
       bottleneck: scored.bottleneck ?? english.bottleneck,
       bottlenecks: scored.bottlenecks.length ? scored.bottlenecks : english.bottlenecks
     };
@@ -593,8 +609,84 @@ async function checkHandoffRecognition() {
   }
 }
 
-function recommend(harnessResult, evalResult) {
-  if (harnessResult.overall >= 85 && evalResult.score >= 90) {
+// Stage eleven: the blueprint slot. AGENTS.md's one place that answers "what is this project"
+// used to be assembled from the detected stack, so a repo could ship a filled-in-looking blueprint
+// that carried no project fact at all — and an agent holding a project-shaped blank went on to
+// write feature entries nobody had agreed to. The slot is now fed by the user's own statement
+// (--blueprint) or stays a visible pending marker. Both directions are asserted, because each
+// failure is a different defect: an omitted --blueprint must NOT be papered over with invented
+// text, and a supplied one must reach the file verbatim rather than being replaced or dropped.
+// The probe asks for the marker by its own keyword, so this cannot pass by agreeing with a copy
+// of a string it is meant to verify.
+async function checkBlueprintSlot() {
+  let dir;
+  let supplied;
+  try {
+    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-blueprint-'));
+    const script = path.join(scriptDir, 'create-harness.mjs');
+    const blueprint = 'Probe project: delivers one thing the probe names itself.';
+
+    await execFileAsync('node', [script, '--target', dir, '--mode', 'registry']);
+    const omitted = await readText(path.join(dir, 'AGENTS.md'));
+    // Pending must be explicit and must not smuggle in stack-derived boilerplate.
+    const pendingMarked = omitted.includes('待补');
+    const noInventedFill = !/agent-assisted development/i.test(omitted);
+
+    supplied = await mkdtemp(path.join(os.tmpdir(), 'harness-blueprint-set-'));
+    await execFileAsync('node', [script, '--target', supplied, '--mode', 'registry', '--blueprint', blueprint]);
+    const verbatim = (await readText(path.join(supplied, 'AGENTS.md'))).includes(blueprint);
+
+    return {
+      pass: pendingMarked && noInventedFill && verbatim,
+      pendingMarked,
+      noInventedFill,
+      verbatim
+    };
+  } catch (error) {
+    return { pass: false, pendingMarked: false, noInventedFill: false, verbatim: false, error: error.message };
+  } finally {
+    for (const target of [dir, supplied]) if (target) await rm(target, { recursive: true, force: true });
+  }
+}
+
+// Stage twelve: the entry template must not pre-load project-shaped work. The scaffold used to
+// ship five entries named like a plausible delivery path (first user-facing feature, verification
+// coverage, docs, cleanup), and a scaffolded repo therefore started life looking like five agreed
+// tasks had already been decided — which is how unaligned requirements became "entries". Nothing
+// caught it: the old template scored 100/100, because every check asked for shape, never for
+// emptiness. Two directions: the scaffold must carry no project-specific entry beyond the
+// structural example, and the alignment rule must be present so the boundary is stated where the
+// agent actually reads it.
+async function checkEntryTemplateRestraint() {
+  let dir;
+  try {
+    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-entries-'));
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir, '--mode', 'registry']);
+    const raw = await readText(path.join(dir, 'feature_list.json'));
+    const parsed = JSON.parse(raw);
+    const entries = Array.isArray(parsed.features) ? parsed.features : [];
+    // The structural example is allowed; a third entry, or a name that reads like a delivery
+    // milestone rather than a placeholder, is the defect this stage exists for.
+    const atMostExample = entries.length <= 2;
+    const namesArePlaceholders = entries.every((entry) => /项目初始化|示例/.test(entry.name));
+    const alignmentRuleStated = /对齐/.test(raw);
+    const agentsHasRule = /对齐/.test(await readText(path.join(dir, 'AGENTS.md')));
+    return {
+      pass: atMostExample && namesArePlaceholders && alignmentRuleStated && agentsHasRule,
+      count: entries.length,
+      atMostExample,
+      namesArePlaceholders,
+      alignmentRuleStated,
+      agentsHasRule
+    };
+  } catch (error) {
+    return { pass: false, count: 0, atMostExample: false, namesArePlaceholders: false, alignmentRuleStated: false, agentsHasRule: false, error: error.message };
+  } finally {
+    if (dir) await rm(dir, { recursive: true, force: true });
+  }
+}
+
+function recommend(harnessResult, evalResult) {  if (harnessResult.overall >= 85 && evalResult.score >= 90) {
     return 'Ready for realistic before/after agent-session benchmarking.';
   }
   if (harnessResult.overall < 70) {
@@ -633,11 +725,20 @@ function renderBenchmarkHtml(report) {
   const handoffLine = report.selfCheck?.handoff
     ? ` A handoff doc under .scratch/ is recognised regardless of filename, while one outside the landing points is ignored (${report.selfCheck.handoff.pass ? 'verified' : 'FAILED'}).`
     : '';
+  // The blueprint slot decides whether AGENTS.md can claim project facts nobody supplied, so its
+  // result belongs in the artifact people actually review — same reasoning as the lines above.
+  const blueprintLine = report.selfCheck?.blueprint
+    ? ` The project-blueprint slot stays a visible pending marker when the user has not stated one, rather than being filled from the detected stack (${report.selfCheck.blueprint.pass ? 'verified' : 'FAILED'}).`
+    : '';
+  // The entry template decides what a fresh harness already claims, so its restraint is reported too.
+  const entryLine = report.selfCheck?.entries
+    ? ` A freshly scaffolded registry ships no project-shaped feature entries, and states the alignment rule before any entry may be added (${report.selfCheck.entries.pass ? 'verified' : 'FAILED'}).`
+    : '';
   const selfCheckSection = report.selfCheck?.skipped
     ? ''
     : `<section>
       <h2>Script Self-Check <span>${report.selfCheck.pass ? 'PASS' : 'FAIL'}</span></h2>
-      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100, plus an English tracker-mode fixture at ${report.selfCheck.englishScore ?? 0}/100 — confirms the bundled scripts run end-to-end and scoring is bilingual.${budgetLine}${selfRefLine}${bottleneckTieLine}${blankGateLine}${handoffLine}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
+      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100, plus an English tracker-mode fixture at ${report.selfCheck.englishScore ?? 0}/100 — confirms the bundled scripts run end-to-end and scoring is bilingual.${budgetLine}${selfRefLine}${bottleneckTieLine}${blankGateLine}${handoffLine}${blueprintLine}${entryLine}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
     </section>`;
   const evalHtml = htmlReport(report.harness, `Harness Benchmark: ${path.basename(report.target)}`)
     .replace('</main>', `${selfCheckSection}<section>

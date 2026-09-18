@@ -174,8 +174,9 @@
         "不预创建 CONTEXT.md 与 docs/adr/：它们由 matt 的 domain-modeling 延迟创建，缺失是正常状态",
         "不预建空 .scratch/ 目录（matt 会把它读作本地 markdown 工单已在用的信号），只在 AGENTS.md 中约定其用途",
         "不写 ## Agent skills 块、不改 docs/agents/*：保留 matt 现有内容，只追加 harness 章节",
-        "CONTEXT.md/ADR 沿用 matt 规范（## Language + _Avoid_），不改写成 harness 自有标题",
-        "目标已有 CLAUDE.md 时不另建 AGENTS.md",
+    "CONTEXT.md/ADR 沿用 matt 规范（## Language + _Avoid_），不改写成 harness 自有标题",
+    "不把「内容归 matt」当成落点豁免：matt 名下产物仍须落在五个落点内，落点外的产物（如仓库根新建的 CONSTRAINTS.md）须由 harness 判定去向或交用户裁决，不因内容归上游而放行",
+    "目标已有 CLAUDE.md 时不另建 AGENTS.md",
         "不产生第二状态源：tracker 模式下不写 feature_list.json/progress.md（脚本在 --mode tracker 或检测到 docs/agents/ 时跳过），状态只指向工单系统"
       ]
     },
