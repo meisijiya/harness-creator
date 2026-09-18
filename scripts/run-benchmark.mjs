@@ -6,10 +6,12 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import {
+  bottleneckLabel,
   formatScoreReport,
   htmlReport,
   loadHarnessFiles,
   parseArgs,
+  pickBottlenecks,
   readJson,
   readText,
   scoreHarness,
@@ -189,6 +191,10 @@ if (!selfCheck.skipped) {
     const { pass, offenders = [], checked, error } = selfCheck.selfRefs;
     console.log(`  Self-reference paths: ${pass ? 'PASS' : 'FAIL'} — ${checked} shipped file(s) checked${offenders.length ? `; relative script path in ${offenders.join(', ')}` : ''}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.bottleneckTies) {
+    const { pass, tieCount, uniqueCount, noneCount, tieLabel } = selfCheck.bottleneckTies;
+    console.log(`  Bottleneck ties: ${pass ? 'PASS' : 'FAIL'} — 5-way tie names all 5: ${tieCount === 5 ? 'ok' : `NO (${tieCount})`}; unique minimum names one: ${uniqueCount === 1 ? 'ok' : `NO (${uniqueCount})`}; complete harness reports none: ${noneCount === 0 ? 'ok' : `NO (${noneCount})`} — ${tieLabel}`);
+  }
   if (!selfCheck.pass && selfCheck.error) console.log(`  ${selfCheck.error}`);
 }
 console.log(formatScoreReport(harnessResult, target));
@@ -215,8 +221,9 @@ if (
 // The second stage guards bilingual scoring: upstream toolchains
 // produce English artifacts, so an English tracker-mode harness must
 // score just as well as the Chinese registry-mode scaffold. The third stage keeps the skill's
-// own instruction file inside its size budget, and the last one keeps every command the skill
-// prints runnable from the target repo (the failure that silently disabled the mode gate).
+// own instruction file inside its size budget, the next keeps every command the skill prints
+// runnable from the target repo (the failure that silently disabled the mode gate), and the last
+// keeps the audit's headline from asserting a ranking the scores do not support.
 async function runSelfCheck() {
   let dir;
   try {
@@ -238,8 +245,9 @@ async function runSelfCheck() {
     const gate = await checkModeGate();
     const dryRun = await checkDryRun();
     const selfRefs = await checkSelfReferencePaths();
+    const bottleneckTies = await checkBottleneckTies();
     return {
-      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && tracker.pass && gate.pass && dryRun.pass && selfRefs.pass,
+      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && tracker.pass && gate.pass && dryRun.pass && selfRefs.pass && bottleneckTies.pass,
       score: scored.overall,
       englishScore: english.overall,
       budget,
@@ -247,7 +255,9 @@ async function runSelfCheck() {
       gate,
       dryRun,
       selfRefs,
-      bottleneck: scored.bottleneck ?? english.bottleneck
+      bottleneckTies,
+      bottleneck: scored.bottleneck ?? english.bottleneck,
+      bottlenecks: scored.bottlenecks.length ? scored.bottlenecks : english.bottlenecks
     };
   } catch (error) {
     return { pass: false, score: 0, error: error.message };
@@ -484,12 +494,49 @@ function scoreEvals(evalsJson) {
   };
 }
 
+// The audit's headline is a single "Bottleneck" line, and the recommendation repeats it, so that
+// line has to reflect what the scores support. Reporting one member of a tie presents an arbitrary
+// pick as a diagnosis: the code comment claimed uniqueness while the guard only checked "not full
+// marks", so a four-way tie at 1/5 printed a single subsystem and pointed the user at it. That is
+// the audit's most-quoted output giving a confident wrong answer, so it is asserted here instead
+// of left to the comment.
+async function checkBottleneckTies() {
+  const full = { instructions: { score: 5 }, state: { score: 5 }, verification: { score: 5 }, scope: { score: 5 }, lifecycle: { score: 5 } };
+  const tied = { instructions: { score: 1 }, state: { score: 1 }, verification: { score: 1 }, scope: { score: 1 }, lifecycle: { score: 1 } };
+  const unique = { instructions: { score: 2 }, state: { score: 1 }, verification: { score: 3 } };
+  const noneList = pickBottlenecks(full);
+  const tieList = pickBottlenecks(tied);
+  const uniqueList = pickBottlenecks(unique);
+  const tieLabel = bottleneckLabel({ bottlenecks: tieList, subsystems: tied });
+  const uniqueLabel = bottleneckLabel({ bottlenecks: uniqueList, subsystems: unique });
+  const noneLabel = bottleneckLabel({ bottlenecks: noneList, subsystems: full });
+  // Three cases, each with a distinct failure: a tie must name every tied subsystem (naming one is
+  // the old defect), a unique minimum must still name exactly that one, and a complete harness must
+  // report nothing to fix rather than the first subsystem in the list.
+  const tieNamesAll = tieList.length === 5 && ['instructions', 'lifecycle'].every((name) => tieLabel.includes(name));
+  const uniqueNamesOne = uniqueList.length === 1 && uniqueList[0] === 'state' && uniqueLabel === 'state';
+  const noneStaysQuiet = noneList.length === 0 && /none/.test(noneLabel);
+  return {
+    pass: tieNamesAll && uniqueNamesOne && noneStaysQuiet,
+    tieCount: tieList.length,
+    uniqueCount: uniqueList.length,
+    noneCount: noneList.length,
+    tieLabel
+  };
+}
+
 function recommend(harnessResult, evalResult) {
   if (harnessResult.overall >= 85 && evalResult.score >= 90) {
     return 'Ready for realistic before/after agent-session benchmarking.';
   }
   if (harnessResult.overall < 70) {
-    return `Improve the ${harnessResult.bottleneck} subsystem before benchmarking agent behavior.`;
+    const names = harnessResult.bottlenecks?.length
+      ? harnessResult.bottlenecks
+      : [harnessResult.bottleneck].filter(Boolean);
+    if (names.length === 0) {
+      return 'Scored below the usable threshold without a single weakest subsystem; work the per-check failures above in order.';
+    }
+    return `Improve the ${names.join(' / ')} subsystem${names.length > 1 ? 's' : ''} before benchmarking agent behavior.`;
   }
   if (evalResult.score < 80) {
     return 'Expand eval coverage before treating benchmark results as representative.';
@@ -507,11 +554,16 @@ function renderBenchmarkHtml(report) {
   const selfRefLine = report.selfCheck?.selfRefs
     ? ` ${report.selfCheck.selfRefs.checked} shipped file(s) checked for command reachability from a target repo (${report.selfCheck.selfRefs.pass ? 'all runnable' : `relative self-reference in ${(report.selfCheck.selfRefs.offenders || []).join(', ')}`}).`
     : '';
+  // Same reasoning as the self-reference line above: the tie guard decides what the audit's
+  // headline is allowed to claim, so its own result belongs in the artifact people review later.
+  const bottleneckTieLine = report.selfCheck?.bottleneckTies
+    ? ` The bottleneck line names ${report.selfCheck.bottleneckTies.tieCount} tied subsystem(s) as a tie instead of picking one (${report.selfCheck.bottleneckTies.pass ? 'verified' : 'FAILED'}).`
+    : '';
   const selfCheckSection = report.selfCheck?.skipped
     ? ''
     : `<section>
       <h2>Script Self-Check <span>${report.selfCheck.pass ? 'PASS' : 'FAIL'}</span></h2>
-      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100, plus an English tracker-mode fixture at ${report.selfCheck.englishScore ?? 0}/100 — confirms the bundled scripts run end-to-end and scoring is bilingual.${budgetLine}${selfRefLine}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
+      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100, plus an English tracker-mode fixture at ${report.selfCheck.englishScore ?? 0}/100 — confirms the bundled scripts run end-to-end and scoring is bilingual.${budgetLine}${selfRefLine}${bottleneckTieLine}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
     </section>`;
   const evalHtml = htmlReport(report.harness, `Harness Benchmark: ${path.basename(report.target)}`)
     .replace('</main>', `${selfCheckSection}<section>

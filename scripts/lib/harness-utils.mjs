@@ -417,11 +417,39 @@ export function scoreHarness(files) {
 
   const total = Object.values(subsystems).reduce((sum, item) => sum + item.score, 0);
   const overall = Math.round((total / (SUBSYSTEMS.length * 5)) * 100);
-  const ranked = Object.entries(subsystems).sort((a, b) => a[1].score - b[1].score);
-  // A bottleneck only means something when a subsystem is weaker than the rest.
-  // When every subsystem already maxes out, reporting one is misleading.
-  const bottleneck = ranked[0][1].score === 5 ? null : ranked[0][0];
-  return { overall, bottleneck, subsystems };
+  // A bottleneck only means something when a subsystem is weaker than the rest. Two ways that
+  // stops being true: every subsystem maxes out (nothing to fix), or several sit at the same
+  // lowest score (no ranking exists to single one out). Picking the first of a tie is not a
+  // smaller answer than the tie — it is a different claim, and the audit's headline is the one
+  // line a user will quote, so it must not assert a ranking the scores do not support.
+  const bottlenecks = pickBottlenecks(subsystems);
+  return {
+    overall,
+    bottlenecks,
+    // For callers that need one name. Null when the tie makes a single name unrepresentative.
+    bottleneck: bottlenecks.length === 1 ? bottlenecks[0] : null,
+    subsystems
+  };
+}
+
+// Every subsystem sharing the lowest score, in subsystem order. Empty when nothing is weak.
+export function pickBottlenecks(subsystems) {
+  const entries = Object.entries(subsystems);
+  if (entries.length === 0) return [];
+  const lowest = Math.min(...entries.map(([, item]) => item.score));
+  if (lowest === 5) return [];
+  return entries.filter(([, item]) => item.score === lowest).map(([name]) => name);
+}
+
+// One line for consoles and HTML. Naming one of several tied subsystems would print an arbitrary
+// pick with the same confidence as a real diagnosis, so a tie is spelled out as a tie.
+export function bottleneckLabel(result) {
+  const names = result.bottlenecks?.length
+    ? result.bottlenecks
+    : (result.bottleneck ? [result.bottleneck] : []);
+  if (names.length === 0) return 'none — all subsystems at full score';
+  if (names.length === 1) return names[0];
+  return `${names.join(', ')} (${names.length} tied at ${result.subsystems?.[names[0]]?.score}/5)`;
 }
 
 function hasFile(byPath, names, message) {
@@ -517,7 +545,7 @@ export function formatScoreReport(result, root = '.') {
   const lines = [
     `Harness validation for ${root}`,
     `Overall: ${result.overall}/100`,
-    `Bottleneck: ${result.bottleneck ?? 'none — all subsystems at full score'}`,
+    `Bottleneck: ${bottleneckLabel(result)}`,
     ''
   ];
 
@@ -571,7 +599,7 @@ export function htmlReport(result, title = 'Harness Assessment') {
       <p>Five-subsystem harness validation report.</p>
       <div class="summary">
         <div class="metric">Overall<strong>${result.overall}/100</strong></div>
-        <div class="metric">Bottleneck<strong>${escapeHtml(result.bottleneck ?? 'none')}</strong></div>
+        <div class="metric">Bottleneck<strong>${escapeHtml(bottleneckLabel(result))}</strong></div>
       </div>
     </header>
     ${rows}
