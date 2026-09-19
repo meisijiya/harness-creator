@@ -52,6 +52,7 @@ node <技能目录>/scripts/scan-housekeeping.mjs --target . --session-ref <会�
 | 决策与理由 | ADR（`docs/adr/`） |
 | 代码表达不了的领域用语 | `CONTEXT.md` |
 | 可执行约束（测试、Schema、门禁） | `init.sh` / CI |
+| 跨会话有效的**长期不变量**（既非决策、亦非术语、亦非门禁） | 目标仓库 `AGENTS.md` 的「工作规则」节——受该节自身条目上限约束：先合并同族项，合并后仍超，就重新判断它能否落进 `init.sh`/CI |
 | 状态与依赖 | `feature_list.json` / `progress.md` / 工单 |
 | 仍需使用的任务级草稿 | `.scratch/`（随任务删除） |
 | 已无价值的任务级草稿 | 清场（③） |
@@ -67,7 +68,7 @@ node <技能目录>/scripts/scan-housekeeping.mjs --target . --session-ref <会�
 
 🔴 **CHECKPOINT**：删除前逐条列出「将删 / 将留」并获批准。
 
-**本步不碰**：非本会话文件；历史累积的 `status=done` 且有 `evidence` 的条目（那是整理的活）；`status=done` 但缺 `evidence` 的条目（先补证据，不是抹痕迹）。
+**本步不碰**：非本会话文件；历史累积的 `status=done` 且有 `evidence` 的条目（那是整理的活）；`status=done` 但缺 `evidence` 的条目（先补证据，不是抹痕迹）；指令文件（`AGENTS.md`/`CLAUDE.md`）的任何内容——包括豁免清单里的失效登记行，那同样是整理的活。
 
 ### ④ 记账（state）
 

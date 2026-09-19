@@ -10,7 +10,7 @@
 import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { exists, listFiles, parseArgs, readJson, scriptCommand } from './lib/harness-utils.mjs';
+import { exists, listFiles, parseArgs, readJson, readText, scriptCommand } from './lib/harness-utils.mjs';
 
 const execFileAsync = promisify(execFile);
 const args = parseArgs(process.argv.slice(2));
@@ -34,6 +34,10 @@ Reports:
   - entries marked done WITHOUT evidence (must NOT be pruned)
   - .scratch/ contents, marked current-session / stale / unverified
   - files changed since --session-ref = the current session's scope
+  - the instruction file's own health: its size, the sections it grows in, exemption
+    rows whose path no longer exists, and unresolved placeholders. The instruction file
+    is a routing doc rather than a landing point, so nothing else here would ever look
+    at it — it is reported only, never edited or trimmed by this scan.
 
 --session-ref must be the commit where THIS session started. It is NOT defaulted to
 HEAD: assuming HEAD would treat already-committed session work as history and
@@ -206,6 +210,50 @@ if (await exists(path.join(target, '.scratch'))) {
   }
 }
 
+// 指令文件不属于五个落点——它是路由文档，不是产物——所以上面两张表都不覆盖它。代价是它既没有
+// 清理触发、也没有体积上限，只能单向膨胀。这里补一个**只读**体检：各节体积、豁免清单里已失效的
+// 登记行、以及未定稿的占位符。只报告；改写与删除仍由代理走 🔴 CHECKPOINT。
+const instructionFile = {
+  name: null,
+  totalBytes: 0,
+  lines: 0,
+  ruleCount: 0,
+  sections: [],
+  danglingExemptions: [],
+  placeholders: []
+};
+// CLAUDE.md 优先：已有 CLAUDE.md 就不另建 AGENTS.md（与 detectAgentFile 同一取舍）。
+for (const candidate of ['CLAUDE.md', 'AGENTS.md']) {
+  if (await exists(path.join(target, candidate))) {
+    instructionFile.name = candidate;
+    break;
+  }
+}
+if (instructionFile.name) {
+  const text = (await readText(path.join(target, instructionFile.name))).replace(/\r\n/g, '\n');
+  instructionFile.totalBytes = Buffer.byteLength(text, 'utf8');
+  instructionFile.lines = text.split('\n').length;
+  const parts = text.split(/^##\s+/m).slice(1);
+  const rules = parts.find((part) => part.startsWith('工作规则')) || '';
+  instructionFile.ruleCount = rules.split('\n').filter((item) => /^- \*\*/.test(item)).length;
+  instructionFile.sections = parts
+    .map((part) => {
+      const [heading, ...rest] = part.split('\n');
+      return { heading: heading.trim(), bytes: Buffer.byteLength(rest.join('\n'), 'utf8') };
+    })
+    .sort((a, b) => b.bytes - a.bytes);
+  const exemptTable = text.split(/^###\s+/m).slice(1).find((part) => part.startsWith('放行豁免清单'));
+  if (exemptTable) {
+    for (const row of exemptTable.split('\n').filter((item) => item.trim().startsWith('|'))) {
+      const cell = (row.split('|')[1] || '').trim().replace(/`/g, '');
+      // 跳过表头、分隔行与空占位行（模板的空表用 `_（暂无）_`，全角括号），只判真实登记。
+      if (!cell || cell === '路径' || /^-+$/.test(cell) || cell.startsWith('_')) continue;
+      if (!await exists(path.join(target, cell))) instructionFile.danglingExemptions.push(cell);
+    }
+  }
+  instructionFile.placeholders = ['{{', '待补', '待对齐'].filter((token) => text.includes(token));
+}
+
 const report = {
   flow: sessionOnly ? 'session-wrapup' : 'housekeeping',
   target,
@@ -216,7 +264,8 @@ const report = {
   session,
   wrapup,
   featureList,
-  scratch
+  scratch,
+  instructionFile
 };
 
 if (args.json) {
@@ -294,6 +343,21 @@ line(sessionOnly
   ? `.scratch/: ${scratch.length} file(s) — in-session(verdict needed): ${scratch.length - outOfScopeCount - unverifiedCount}, out-of-scope: ${outOfScopeCount}, unverified: ${unverifiedCount}`
   : `.scratch/: ${scratch.length} file(s) — prune-candidate(stale): ${staleCount}, unverified: ${unverifiedCount}`);
 for (const entry of scratch) line(`  ${entry.state.padEnd(12)} ${entry.path}`);
+line();
+line(`Instruction file (${instructionFile.name || 'AGENTS.md/CLAUDE.md'}) — a routing doc, not a landing point:`);
+if (!instructionFile.name) {
+  line('  absent — nothing to report; creating one is the create-harness flow, not this scan.');
+} else {
+  line(`  ${instructionFile.name}: ${instructionFile.totalBytes} B, ${instructionFile.lines} lines, working rules ${instructionFile.ruleCount}`);
+  line('  largest sections (this is where the file grows):');
+  for (const section of instructionFile.sections.slice(0, 3)) {
+    line(`    ${String(section.bytes).padStart(6)} B  ## ${section.heading}`);
+  }
+  line(`  exemption rows whose path no longer exists — delete the row: ${instructionFile.danglingExemptions.length}`);
+  for (const dangling of instructionFile.danglingExemptions) line(`    ! ${dangling}`);
+  line(`  unresolved placeholders (still not filled in): ${instructionFile.placeholders.length ? instructionFile.placeholders.join(', ') : 'none'}`);
+  line('  Report only: nothing above is edited or removed by this scan.');
+}
 line();
 line('This scan changed nothing. Any deletion needs an explicit 🔴 CHECKPOINT that lists');
 line('exactly what will be removed, plus user approval. ADR and CONTEXT.md are never pruned.');

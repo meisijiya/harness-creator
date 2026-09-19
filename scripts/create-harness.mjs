@@ -150,14 +150,14 @@ if (!dryRun) await mkdir(target, { recursive: true });
 const REPO_LAYOUT = {
   registry: [
     '| `.scratch/` | 临时材料 | 写任务材料时创建；任务完成或 worktree 关闭即删除，不进默认上下文 |',
-    '| `CONTEXT.md` | 领域语言 | 由上游领域建模 skill 延迟创建（首个术语定稿时）；缺失属正常状态 |',
+    '| `CONTEXT.md` | 领域语言 | 由上游领域建模 skill 延迟创建（首个术语定稿时）；缺失属正常状态；格式与创建时机归上游配置，不代改 |',
     '| `docs/adr/` | 决策记录 | 同上，首个 ADR 需要时创建；只增不删 |',
     '| `init.sh` | 可执行约束 | harness 创建；声称完成前必须运行 |',
     '| `feature_list.json`、`progress.md` | 状态与证据 | harness 创建；每会话更新，`evidence` 必填 |'
   ],
   tracker: [
     '| `.scratch/` | 临时材料 | 写任务材料时创建；任务完成或 worktree 关闭即删除，不进默认上下文 |',
-    '| `CONTEXT.md` | 领域语言 | 由上游领域建模 skill 延迟创建（首个术语定稿时）；缺失属正常状态 |',
+    '| `CONTEXT.md` | 领域语言 | 由上游领域建模 skill 延迟创建（首个术语定稿时）；缺失属正常状态；格式与创建时机归上游配置，不代改 |',
     '| `docs/adr/` | 决策记录 | 同上，首个 ADR 需要时创建；只增不删 |',
     '| `init.sh` | 可执行约束 | harness 创建；声称完成前必须运行 |',
     '| 工单系统（仓外或本地） | 状态与依赖 | 工单即事实来源；仓内**不留** `feature_list.json`/`progress.md`，避免第二状态源 |'
@@ -171,21 +171,6 @@ const REPO_LAYOUT = {
 const STATE_ARTIFACT = {
   registry: '`feature_list.json` 与 `progress.md`',
   tracker: '工单系统'
-};
-const REQUIRED_ARTIFACTS = {
-  registry: [
-    '- `feature_list.json` —— 功能状态与证据的事实来源（条目 = 工单：交付 / 阻塞 / 验收标准）',
-    '- `progress.md` —— 精简日志：当前状态、完成证据、阻塞、下一步',
-    '- `init.sh` —— 标准启动与验证路径',
-    '- `CONTEXT.md` + ADR —— 可选长期资产：领域语言与决策史',
-    '- `.scratch/` —— 可选任务级暂存区：spec 草稿与交接文档，随任务删除'
-  ],
-  tracker: [
-    '- 工单系统（仓外或本地）—— 状态与证据的事实来源；仓内**不留** `feature_list.json`/`progress.md`',
-    '- `init.sh` —— 标准启动与验证路径',
-    '- `CONTEXT.md` + ADR —— 长期资产：领域语言与决策史（格式与创建时机归 `docs/agents/*` 的配置）',
-    '- `.scratch/` —— 任务级暂存区：spec 草稿与交接文档，随任务/worktree 删除'
-  ]
 };
 const modeKey = trackerMode ? 'tracker' : 'registry';
 
@@ -206,7 +191,6 @@ const replacements = {
   VERIFICATION_COMMANDS: commands.map((command) => `- \`${command}\``).join('\n'),
   PRIMARY_VERIFICATION_COMMAND: './init.sh',
   REPO_LAYOUT: REPO_LAYOUT[modeKey].join('\n'),
-  REQUIRED_ARTIFACTS: REQUIRED_ARTIFACTS[modeKey].join('\n'),
   STATE_ARTIFACT: STATE_ARTIFACT[modeKey],
   // The tracking-alignment conclusion is filled by the one-time question harness-creator asks
   // before writing, or supplied up front with --tracking. Leaving it marked as pending is the

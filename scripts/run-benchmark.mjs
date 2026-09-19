@@ -30,6 +30,33 @@ const execFileAsync = promisify(execFile);
 const SKILL_MD_BASELINE_BYTES = 7889;
 const SKILL_MD_MAX_BYTES = Math.floor(SKILL_MD_BASELINE_BYTES * 1.5);
 
+// The generated instruction file gets the same treatment, for the same reason and with more at
+// stake: it is the largest artifact this skill ships into every target repo, it is read in full at
+// every session start, and nothing used to measure it — while the audit's instruction checks are
+// all presence checks, so extra text could only ever help. Measured on a default render (no
+// --blueprint, no --commands) because the cap must not depend on what a project happens to fill in.
+const AGENTS_MD_BASELINE_BYTES = 9648;
+const AGENTS_MD_MAX_BYTES = Math.floor(AGENTS_MD_BASELINE_BYTES * 1.15);
+const AGENTS_MD_MAX_LINES = 130;
+// The template states this limit in its own "本文件自我约束" rule; the check keeps the statement
+// honest, so a 13th rule has to displace something instead of just accumulating.
+const WORKING_RULES_MAX = 12;
+
+// Content an instruction file must not restate, because the agent can read it from the repo
+// itself: the tree, the stack, the scripts. Every external guide leads with this, and the failure
+// is expensive — those lines are paid for at every session start. The stack rules key on the
+// label-and-colon or heading shape, so a line that merely forbids touching the stack ("not product
+// form: no UI, no interaction, no tech choices") is not a violation. Declared here, ahead of the
+// runSelfCheck() call site: a const sitting next to the function that reads it is still in its
+// temporal dead zone at that point.
+const DISCOVERABLE_CONTENT = [
+  { name: 'directory tree', pattern: /[├└]──/ },
+  { name: 'stack listing', pattern: /^[|\-*].*(技术栈|技术选型|tech stack)\s*[:：]/im },
+  { name: 'stack heading', pattern: /^#{2,3}\s*(技术栈|技术选型|tech stack)\s*$/im },
+  { name: 'directory listing heading', pattern: /^#{2,3}\s*(目录结构|项目结构|directory structure|project structure)\s*$/im },
+  { name: 'install or quickstart section', pattern: /^#{2,3}\s*(安装|installation|快速开始|quick ?start)\s*$/im }
+];
+
 // Declared at module scope, ahead of the runSelfCheck() call: a const sitting next to the function
 // that reads it would still be in its temporal dead zone at that call site.
 const SELFTEXT_EXEMPT = new Set(['README.md']);
@@ -137,31 +164,36 @@ Runs a lightweight harness benchmark:
   2. Scores the current target harness.
   3. Checks eval coverage in evals/evals.json.
   4. Checks the SKILL.md size budget (${SKILL_MD_MAX_BYTES} bytes, 150% of the ${SKILL_MD_BASELINE_BYTES}-byte baseline).
-  5. Scores a tracker-mode scaffold and checks its emitted-artifact invariants: no skill-repo-relative
+  5. Checks the generated AGENTS.md budget: the default render must stay within its byte and line
+     caps, and the working-rules list within the limit its own self-restraint rule states.
+  6. Checks the generated AGENTS.md for restated, discoverable content — directory trees, stack
+     descriptions — and proves the detector has teeth against a seeded violation.
+  7. Scores a tracker-mode scaffold and checks its emitted-artifact invariants: no skill-repo-relative
      path reaches a target repo, and no registry state file is emitted.
-  6. Checks the mode gate: a signal-free target given no explicit --mode must refuse to write (exit 1,
+  8. Checks the mode gate: a signal-free target given no explicit --mode must refuse to write (exit 1,
      zero files), while an explicit --mode or a detected signal must still scaffold.
-  7. Checks --dry-run: it must change nothing, plan real artifacts rather than recite a template
+  9. Checks --dry-run: it must change nothing, plan real artifacts rather than recite a template
      list, and agree with the write that follows it.
-  8. Checks the skill's own shipped files: no command it prints may use a script path that only
+ 10. Checks the skill's own shipped files: no command it prints may use a script path that only
      resolves from the skill directory (the agent's cwd is the target repo).
-  9. Checks the bottleneck headline: a tie must name every tied subsystem, a unique minimum must
+ 11. Checks the bottleneck headline: a tie must name every tied subsystem, a unique minimum must
      name one, and a complete harness must report none.
- 10. Checks the blank-project gate: the placeholder verification step must exit non-zero, while a
+ 12. Checks the blank-project gate: the placeholder verification step must exit non-zero, while a
      real command must still run — a gate that cannot fail is not a gate.
- 11. Checks handoff recognition: a doc under .scratch/ is recognised by what it is, not by one
+ 13. Checks handoff recognition: a doc under .scratch/ is recognised by what it is, not by one
      filename, while a doc outside the landing points is ignored.
- 12. Checks the blueprint slot: omitting --blueprint must leave a visible pending marker rather
+ 14. Checks the blueprint slot: omitting --blueprint must leave a visible pending marker rather
      than stack-derived text, and a supplied blueprint must reach AGENTS.md verbatim.
- 13. Checks the entry template: a fresh registry scaffold must not ship project-shaped feature
+ 15. Checks the entry template: a fresh registry scaffold must not ship project-shaped feature
      entries, and must state the alignment rule before any entry may be added.
- 14. Checks the instruction-file invariant: an existing CLAUDE.md must not get a second AGENTS.md
+ 16. Checks the instruction-file invariant: an existing CLAUDE.md must not get a second AGENTS.md
      beside it, and an existing instruction file must stay byte-identical while its missing
      harness sections are still reported.
- 15. Checks the housekeeping scanner: it must change nothing, must not treat history as prunable
-     when no --session-ref is given, must still mark history when one is, and must never prune a
-     done-without-evidence entry.
- 16. Produces a JSON report and optional HTML report.
+ 17. Checks the housekeeping scanner: it must change nothing, must not treat history as prunable
+     when no --session-ref is given, must still mark history when one is, must never prune a
+     done-without-evidence entry, and must report the instruction file's own health — ranked
+     sections, dangling exemption rows, unfilled placeholders — without editing it.
+ 18. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -192,6 +224,14 @@ if (!selfCheck.skipped) {
   if (selfCheck.budget) {
     const { size, max, pass, rawSize, crlfCount, lineEndingInvariant } = selfCheck.budget;
     console.log(`  SKILL.md budget: ${pass ? 'PASS' : 'FAIL'} — ${size}/${max} bytes LF-normalized (${max - size >= 0 ? `${max - size} left` : `${size - max} over`})${crlfCount ? `; checkout is CRLF (${crlfCount} lines → raw ${rawSize})` : ''}; line-ending invariant: ${lineEndingInvariant ? 'ok' : 'NO'}`);
+  }
+  if (selfCheck.agentsBudget) {
+    const { pass, size, max, lines, maxLines, ruleCount, maxRules, rawSize, crlfCount, lineEndingInvariant, error } = selfCheck.agentsBudget;
+    console.log(`  AGENTS.md budget: ${pass ? 'PASS' : 'FAIL'} — ${size}/${max} bytes LF-normalized (${max - size >= 0 ? `${max - size} left` : `${size - max} over`}); ${lines}/${maxLines} lines; working rules ${ruleCount}/${maxRules}${crlfCount ? `; rendered CRLF (raw ${rawSize})` : ''}; line-ending invariant: ${lineEndingInvariant ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+  }
+  if (selfCheck.agentsDiscover) {
+    const { pass, offenders = [], selfRestraintStated, seededCaught, error } = selfCheck.agentsDiscover;
+    console.log(`  AGENTS.md discoverability: ${pass ? 'PASS' : 'FAIL'} — default render free of restated content: ${offenders.length === 0 ? 'ok' : `NO (${offenders.join(', ')})`}; self-restraint rule stated: ${selfRestraintStated ? 'ok' : 'NO'}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.tracker) {
     const { pass, score, offenders = [], leakedState = [], error } = selfCheck.tracker;
@@ -234,8 +274,8 @@ if (!selfCheck.skipped) {
     console.log(`  Agent-file invariant: ${pass ? 'PASS' : 'FAIL'} — existing CLAUDE.md means no AGENTS.md is created: ${noSecondFile && choseClaude ? 'ok' : 'NO'}; existing instruction file left byte-identical: ${untouched ? 'ok' : 'NO'}; missing sections still reported: ${missingReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.housekeeping) {
-    const { pass, readOnly, noRefMeansUnverified, refMarksHistory, pruneActive, pruneSuppressed, noEvidenceNeverPruned, porcelainPathIntact, error } = selfCheck.housekeeping;
-    console.log(`  Housekeeping safety: ${pass ? 'PASS' : 'FAIL'} — scan changes nothing: ${readOnly ? 'ok' : 'NO'}; no --session-ref means unverified, not stale: ${noRefMeansUnverified ? 'ok' : 'NO'}; a ref still marks history: ${refMarksHistory ? 'ok' : 'NO'}; housekeeping still emits prune candidates: ${pruneActive ? 'ok' : 'NO'}; wrap-up suppresses prune: ${pruneSuppressed ? 'ok' : 'NO'}; done-without-evidence never pruned: ${noEvidenceNeverPruned ? 'ok' : 'NO'}; porcelain path keeps its first character: ${porcelainPathIntact ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+    const { pass, readOnly, noRefMeansUnverified, refMarksHistory, pruneActive, pruneSuppressed, noEvidenceNeverPruned, porcelainPathIntact, instructionReported, danglingExemptionReported, placeholderReported, error } = selfCheck.housekeeping;
+    console.log(`  Housekeeping safety: ${pass ? 'PASS' : 'FAIL'} — scan changes nothing: ${readOnly ? 'ok' : 'NO'}; no --session-ref means unverified, not stale: ${noRefMeansUnverified ? 'ok' : 'NO'}; a ref still marks history: ${refMarksHistory ? 'ok' : 'NO'}; housekeeping still emits prune candidates: ${pruneActive ? 'ok' : 'NO'}; wrap-up suppresses prune: ${pruneSuppressed ? 'ok' : 'NO'}; done-without-evidence never pruned: ${noEvidenceNeverPruned ? 'ok' : 'NO'}; porcelain path keeps its first character: ${porcelainPathIntact ? 'ok' : 'NO'}; instruction file reported with ranked sections: ${instructionReported ? 'ok' : 'NO'}; dangling exemption row named, live one left alone: ${danglingExemptionReported ? 'ok' : 'NO'}; unfilled placeholder surfaced: ${placeholderReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (!selfCheck.pass && selfCheck.error) console.log(`  ${selfCheck.error}`);
 }
@@ -282,6 +322,8 @@ async function runSelfCheck() {
     const scored = scoreHarness(await loadHarnessFiles(dir));
     const english = await scoreEnglishTrackerFixture(dir);
     const budget = await checkSkillBudget();
+    const agentsBudget = await checkAgentFileBudget();
+    const agentsDiscover = await checkAgentFileDiscoverability();
     const minScore = Number(args.minSelfCheckScore || 90);
     const tracker = await checkTrackerScaffold(minScore);
     const gate = await checkModeGate();
@@ -295,10 +337,12 @@ async function runSelfCheck() {
     const agentFile = await checkAgentFileInvariant();
     const housekeeping = await checkHousekeepingSafety();
     return {
-      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && tracker.pass && gate.pass && dryRun.pass && selfRefs.pass && bottleneckTies.pass && blankGate.pass && handoff.pass && blueprint.pass && entries.pass && agentFile.pass && housekeeping.pass,
+      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && agentsBudget.pass && agentsDiscover.pass && tracker.pass && gate.pass && dryRun.pass && selfRefs.pass && bottleneckTies.pass && blankGate.pass && handoff.pass && blueprint.pass && entries.pass && agentFile.pass && housekeeping.pass,
       score: scored.overall,
       englishScore: english.overall,
       budget,
+      agentsBudget,
+      agentsDiscover,
       tracker,
       gate,
       dryRun,
@@ -342,6 +386,77 @@ async function checkSkillBudget() {
     crlfCount,
     lineEndingInvariant
   };
+}
+
+// The generated instruction file, measured end-to-end: the real template goes through the real
+// renderer into a throwaway directory, because the thing being capped is what a target repo
+// actually receives, not the template source. Same LF-normalized rule as SKILL.md, asserted rather
+// than assumed, so a Windows checkout cannot force a contributor to delete content to satisfy a
+// platform artifact.
+async function checkAgentFileBudget() {
+  let dir;
+  try {
+    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-agents-budget-'));
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir, '--mode', 'registry']);
+    const raw = await readText(path.join(dir, 'AGENTS.md'));
+    const text = raw.replace(/\r\n/g, '\n');
+    const size = Buffer.byteLength(text, 'utf8');
+    const rawSize = Buffer.byteLength(raw, 'utf8');
+    const crlfCount = (raw.match(/\r\n/g) || []).length;
+    const lineEndingInvariant = rawSize - size === crlfCount;
+    const lines = text.split('\n').length;
+    // The working-rules list is the section that grows one line at a time, so it is counted on its
+    // own instead of hiding inside the file total until the total is already too big.
+    const section = text.split(/^##\s+/m).slice(1).find((part) => part.startsWith('工作规则')) || '';
+    const ruleCount = section.split('\n').filter((line) => /^- \*\*/.test(line)).length;
+    return {
+      pass: size <= AGENTS_MD_MAX_BYTES && lines <= AGENTS_MD_MAX_LINES && ruleCount <= WORKING_RULES_MAX && lineEndingInvariant,
+      size,
+      max: AGENTS_MD_MAX_BYTES,
+      lines,
+      maxLines: AGENTS_MD_MAX_LINES,
+      ruleCount,
+      maxRules: WORKING_RULES_MAX,
+      rawSize,
+      crlfCount,
+      lineEndingInvariant
+    };
+  } catch (error) {
+    return { pass: false, error: error.message };
+  } finally {
+    if (dir) await rm(dir, { recursive: true, force: true });
+  }
+}
+
+// The failure every external guide names first: an instruction file that restates what the agent
+// can read for itself — the directory tree, the stack, the package scripts. Those lines are paid
+// for at every session start and buy nothing, and nothing here stopped them from being added. The
+// detector is a pure function so the check can prove it has teeth against a seeded violation
+// without writing anything into the repo.
+// The detector is a pure function so the check can prove it has teeth against a seeded violation
+// without writing anything into the repo. It reads DISCOVERABLE_CONTENT, declared up top.
+function discoverableOffenders(text) {
+  return DISCOVERABLE_CONTENT.filter(({ pattern }) => pattern.test(text)).map(({ name }) => name);
+}
+
+async function checkAgentFileDiscoverability() {
+  let dir;
+  try {
+    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-agents-discover-'));
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir, '--mode', 'registry']);
+    const rendered = await readText(path.join(dir, 'AGENTS.md'));
+    const offenders = discoverableOffenders(rendered);
+    // The self-restraint rule is the only thing in the shipped file that tells a future editor to
+    // stop adding; losing it silently would re-open the unbounded growth this check exists to close.
+    const selfRestraintStated = /本文件自我约束/.test(rendered) && /长期不变量/.test(rendered);
+    const seeded = `${rendered}\n## 目录结构\n\n\`\`\`\n├── src\n└── dist\n\`\`\`\n\n- 技术栈：React + TypeScript\n`;
+    const seededCaught = discoverableOffenders(seeded).length >= 2;
+    return { pass: offenders.length === 0 && selfRestraintStated && seededCaught, offenders, selfRestraintStated, seededCaught };
+  } catch (error) {
+    return { pass: false, offenders: [], selfRestraintStated: false, seededCaught: false, error: error.message };
+  } finally {
+    if (dir) await rm(dir, { recursive: true, force: true });
+  }
 }
 
 // The skill's own shipped files are checked here too. Every command it prints has to be runnable
@@ -779,6 +894,35 @@ async function checkHousekeepingSafety() {
         { id: 'f3', name: 'pending', status: 'in_progress' }
       ]
     }, null, 2));
+    // The instruction file is a routing doc, not a landing point, so nothing else in this scan
+    // would ever look at it. This fixture gives it one dangling exemption row, one live row and an
+    // unfilled placeholder, so the report has to tell the two rows apart instead of counting them —
+    // a count would also pass on a scanner that flagged every row.
+    await mkdir(path.join(dir, 'teach-notes'), { recursive: true });
+    await writeText(path.join(dir, 'AGENTS.md'), [
+      '# AGENTS.md',
+      '',
+      '## 工作规则',
+      '',
+      '- **一次一个功能**：从 `feature_list.json` 挑一个未完成项',
+      '- **必须验证**：未运行验证命令前不得声称完成',
+      '',
+      '## 验证命令',
+      '',
+      '- `npm test`',
+      '',
+      '## 产物追踪策略',
+      '',
+      '- 当前结论：待对齐',
+      '',
+      '### 放行豁免清单（由产出 skill 自治理）',
+      '',
+      '| 路径 | 产出 skill | 性质 / 生命周期 | 用户裁决 | 追踪状态 | 复审触发 |',
+      '|---|---|---|---|---|---|',
+      '| `teach-notes/` | teach | 教学状态 | 原样保留 | ignored | 用户改主意时 |',
+      '| `gone-workspace/` | teach | 教学状态 | 原样保留 | ignored | 用户改主意时 |',
+      ''
+    ].join('\n'));
     const git = (rest) => execFileAsync('git', rest, { cwd: dir });
     const who = ['-c', 'user.email=bench@local', '-c', 'user.name=bench'];
     await git(['init', '-q']);
@@ -858,17 +1002,35 @@ async function checkHousekeepingSafety() {
     const porcelainPathIntact = [plain, wrapupNoRef].every(
       (report) => report.session.uncommitted.includes('scripts/deep/tool.mjs')
     );
+    // The instruction-file health report. Sections must be produced and ranked (a scanner that
+    // lists them unordered is not doing the one job this branch exists for), the dangling row must
+    // be named while the live one is left alone, and an unfilled placeholder must surface.
+    const instruction = plain.instructionFile || {};
+    const sections = instruction.sections || [];
+    const instructionReported = instruction.name === 'AGENTS.md'
+      && sections.length === 3
+      && sections.every((item, index) => index === 0 || sections[index - 1].bytes >= item.bytes)
+      && instruction.ruleCount === 2;
+    // The row is reported as written (path cell minus its backticks), so the assertion uses the
+    // verbatim form rather than a normalised one.
+    const danglingExemptionReported = (instruction.danglingExemptions || []).includes('gone-workspace/')
+      && !(instruction.danglingExemptions || []).includes('teach-notes/');
+    const placeholderReported = (instruction.placeholders || []).includes('待对齐');
 
     return {
       pass: readOnly && noRefMeansUnverified && refMarksHistory && pruneActive
-        && pruneSuppressed && noEvidenceNeverPruned && porcelainPathIntact,
+        && pruneSuppressed && noEvidenceNeverPruned && porcelainPathIntact
+        && instructionReported && danglingExemptionReported && placeholderReported,
       readOnly,
       noRefMeansUnverified,
       refMarksHistory,
       pruneActive,
       pruneSuppressed,
       noEvidenceNeverPruned,
-      porcelainPathIntact
+      porcelainPathIntact,
+      instructionReported,
+      danglingExemptionReported,
+      placeholderReported
     };
   } catch (error) {
     return {
@@ -880,6 +1042,9 @@ async function checkHousekeepingSafety() {
       pruneSuppressed: false,
       noEvidenceNeverPruned: false,
       porcelainPathIntact: false,
+      instructionReported: false,
+      danglingExemptionReported: false,
+      placeholderReported: false,
       error: error.message
     };
   } finally {
