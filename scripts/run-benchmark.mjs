@@ -648,6 +648,16 @@ function scoreEvals(evalsJson) {
   checks.push({ pass: cases.some((item) => /memory|记忆/i.test(item.name)), message: 'Covers memory taxonomy' });
   checks.push({ pass: cases.some((item) => /tool|permission|safety|工具|权限|安全/i.test(item.name)), message: 'Covers tool safety' });
   checks.push({ pass: cases.some((item) => /multi-agent|delegation|coordination|多代理|协调|委派/i.test(item.name)), message: 'Covers multi-agent coordination' });
+  // This list is the coverage contract, and it has to grow whenever a capability family ships —
+  // otherwise the headline score keeps reading 100% while a new family has no behavioural case at
+  // all. That is exactly how this check went stale: the seven family entries above were written
+  // when the skill was smaller, and everything added since had gates but no case. A gate proves a
+  // SCRIPT is right; only a case shows what an AGENT does. Each entry below is deliberately a
+  // distinct message so a counter-example can show which contract broke.
+  checks.push({ pass: cases.some((item) => /蓝图|blueprint/i.test(item.name)), message: 'Covers the blueprint slot' });
+  checks.push({ pass: cases.some((item) => /条目模板|克制|restraint/i.test(item.name)), message: 'Covers entry-template restraint' });
+  checks.push({ pass: cases.some((item) => /指令文件|CLAUDE/i.test(item.name)), message: 'Covers the instruction-file invariant' });
+  checks.push({ pass: cases.some((item) => /不可发现|字节|discoverab|budget/i.test(item.name)), message: 'Covers instruction-file size and discoverability' });
   checks.push({ pass: cases.every((item) => item.prompt && item.expected_output && Array.isArray(item.expectations)), message: 'Each eval has prompt, expected output, expectations' });
   checks.push({ pass: cases.every((item) => item.expectations?.length >= 3), message: 'Each eval has at least three expectation checks' });
 
