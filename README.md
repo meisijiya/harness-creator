@@ -77,12 +77,16 @@ node scripts/create-harness.mjs --target /path/to/project --mode registry
 node scripts/validate-harness.mjs --target /path/to/project
 node scripts/check-git-tracking.mjs --target /path/to/project
 node scripts/run-benchmark.mjs --target /path/to/project --html /path/to/report.html
+node scripts/render-assessment-html.mjs --target /path/to/project
+node scripts/scan-housekeeping.mjs --target /path/to/project
 
 # 从技能目录运行：使用已安装的 scripts/
 node ~/.agents/skills/harness-creator/scripts/create-harness.mjs --target /path/to/project --mode registry
 node ~/.agents/skills/harness-creator/scripts/validate-harness.mjs --target /path/to/project
 node ~/.agents/skills/harness-creator/scripts/check-git-tracking.mjs --target /path/to/project
 node ~/.agents/skills/harness-creator/scripts/run-benchmark.mjs --target /path/to/project --html /path/to/report.html
+node ~/.agents/skills/harness-creator/scripts/render-assessment-html.mjs --target /path/to/project
+node ~/.agents/skills/harness-creator/scripts/scan-housekeeping.mjs --target /path/to/project
 ```
 
 这些脚本仅使用 Node.js 内置模块，不需要额外安装依赖。
@@ -177,7 +181,7 @@ node ~/.agents/skills/harness-creator/scripts/run-benchmark.mjs --target /path/t
 | 意图 | 典型说法 | 作用域 | 动作 | 扫描 |
 |---|---|---|---|---|
 | **会话收尾** | "收尾"、"结束这次会话" | **本会话产出**（会话起始 ref 之后的改动与新增） | 定界 → 归位 → 清场 → 记账 → 收口 | `--session-only` |
-| **整理仓库** | "整理仓库"、"清账" | **全仓状态落点**（含历史累积） | 清账 / 查漏 / 补齐 | 默认 |
+| **整理仓库** | "整理仓库"、"清账" | **全仓「状态」一族**（状态落点 + 指令文件的失效登记行，含历史累积） | 清账 / 查漏 / 补齐 | 默认 |
 | **优化 / 审计** | "优化 harness"、"评估一下" | **全仓 harness 质量** | 五子系统审计 + 改进落地 | `validate-harness.mjs` |
 
 会话收尾只处理**这次会话产出的东西**：按五个落点归类（决策→ADR、术语→`CONTEXT.md`、可执行约束→`init.sh`/CI、状态→注册表或工单、任务草稿→`.scratch/`），清掉本次会话已无价值的临时材料，再按 AGENTS.md 的「会话结束」记账收口。它**不 prune 历史条目、不跑全仓审计**——那分别属于整理与优化。三者不叠加：用户同时说"收尾，顺便优化一下"时拆开执行，不把审计结果混进收尾。
@@ -198,7 +202,7 @@ node ~/.agents/skills/harness-creator/scripts/scan-housekeeping.mjs --target /pa
 
 它只输出清单、不删任何东西：治理模式、五个落点的缺失项、`feature_list.json` 中「done 且有证据」（可清）／「done 无证据」（**不可清**，先补证据）／未完成的条目、`.scratch/` 的分级（current／stale／unverified），以及自 `--session-ref` 以来改动的文件（即本会话范围）。`--session-ref` 必须是**本会话起始 commit**，**不默认 `HEAD`**——省略时只有未提交改动算本会话，其余标为「无法判定」而非「陈旧」，以免把已提交的本会话内容误判为历史。
 
-清账的作用域**只有状态这一个落点**：ADR（只增不删）与 `CONTEXT.md`（持续更新）永不清；删除前必须列出「将删/将留」清单并经 🔴 CHECKPOINT 批准。沉淀按需进行——默认你已在需求对齐后用上游的沉淀 skill 完成，本技能只补缺口、不代调用他人 skill。完整流程见 `references/housekeeping-pattern.md`。
+清账的作用域是**「状态」一族**——仓内的状态落点，加上指令文件里承担状态职责的那张登记表（完整口径以 `references/housekeeping-pattern.md` 为准）：ADR（只增不删）与 `CONTEXT.md`（持续更新）永不清；删除前必须列出「将删/将留」清单并经 🔴 CHECKPOINT 批准。沉淀按需进行——默认你已在需求对齐后用上游的沉淀 skill 完成，本技能只补缺口、不代调用他人 skill。完整流程见 `references/housekeeping-pattern.md`。
 
 ## 技能生态搭配
 

@@ -430,9 +430,7 @@ async function checkAgentFileBudget() {
 
 // The failure every external guide names first: an instruction file that restates what the agent
 // can read for itself — the directory tree, the stack, the package scripts. Those lines are paid
-// for at every session start and buy nothing, and nothing here stopped them from being added. The
-// detector is a pure function so the check can prove it has teeth against a seeded violation
-// without writing anything into the repo.
+// for at every session start and buy nothing, and nothing here stopped them from being added.
 // The detector is a pure function so the check can prove it has teeth against a seeded violation
 // without writing anything into the repo. It reads DISCOVERABLE_CONTENT, declared up top.
 function discoverableOffenders(text) {
