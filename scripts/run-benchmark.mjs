@@ -651,23 +651,59 @@ function scoreEvals(evalsJson) {
   const cases = Array.isArray(evalsJson.evals) ? evalsJson.evals : [];
   const checks = [];
   checks.push({ pass: cases.length >= 10, message: 'At least 10 eval cases' });
-  checks.push({ pass: cases.some((item) => /minimal|creation|最小化|创建/i.test(item.name)), message: 'Covers minimal harness creation' });
-  checks.push({ pass: cases.some((item) => /session|continuity|会话|连续/i.test(item.name)), message: 'Covers session continuity' });
-  checks.push({ pass: cases.some((item) => /assessment|score|评估|得分/i.test(item.name)), message: 'Covers harness assessment' });
-  checks.push({ pass: cases.some((item) => /verification|验证/i.test(item.name)), message: 'Covers verification workflow' });
-  checks.push({ pass: cases.some((item) => /memory|记忆/i.test(item.name)), message: 'Covers memory taxonomy' });
-  checks.push({ pass: cases.some((item) => /tool|permission|safety|工具|权限|安全/i.test(item.name)), message: 'Covers tool safety' });
-  checks.push({ pass: cases.some((item) => /multi-agent|delegation|coordination|多代理|协调|委派/i.test(item.name)), message: 'Covers multi-agent coordination' });
-  // This list is the coverage contract, and it has to grow whenever a capability family ships —
+  // This list is the coverage contract, and it must grow whenever a capability family ships —
   // otherwise the headline score keeps reading 100% while a new family has no behavioural case at
-  // all. That is exactly how this check went stale: the seven family entries above were written
-  // when the skill was smaller, and everything added since had gates but no case. A gate proves a
-  // SCRIPT is right; only a case shows what an AGENT does. Each entry below is deliberately a
-  // distinct message so a counter-example can show which contract broke.
-  checks.push({ pass: cases.some((item) => /蓝图|blueprint/i.test(item.name)), message: 'Covers the blueprint slot' });
-  checks.push({ pass: cases.some((item) => /条目模板|克制|restraint/i.test(item.name)), message: 'Covers entry-template restraint' });
-  checks.push({ pass: cases.some((item) => /指令文件|CLAUDE/i.test(item.name)), message: 'Covers the instruction-file invariant' });
-  checks.push({ pass: cases.some((item) => /不可发现|字节|discoverab|budget/i.test(item.name)), message: 'Covers instruction-file size and discoverability' });
+  // all. It went stale twice: the first entries were written when the skill was smaller, so later
+  // families had gates but no case; and checking the reverse direction found 17 of the 23 cases
+  // then in the file unprotected — deleting them left the headline at 100%. A gate proves a
+  // SCRIPT is right; only a case shows what an AGENT does. The entries are data, not inline
+  // predicates, because the guards below reuse them for both pairing directions. Each entry keeps
+  // a distinct message so a counter-example shows exactly which one broke.
+  const familyEntries = [
+    ['Covers minimal harness creation', /minimal|creation|最小化/i],
+    ['Covers session continuity', /session|continuity|连续性/i],
+    ['Covers harness assessment', /assessment|score|评估|得分/i],
+    ['Covers verification workflow', /verification|验证工作流/i],
+    ['Covers memory taxonomy', /memory|记忆/i],
+    ['Covers tool safety', /tool|permission|safety|工具|权限|安全/i],
+    ['Covers multi-agent coordination', /multi-agent|delegation|coordination|多代理|协调|委派/i],
+    ['Covers scripted validation tooling', /脚本化|scripted/i],
+    ['Covers the blueprint slot', /蓝图|blueprint/i],
+    ['Covers entry-template restraint', /条目模板|克制|restraint/i],
+    ['Covers the instruction-file invariant', /指令文件不变量|CLAUDE|instruction.file invariant/i],
+    ['Covers instruction-file size and discoverability', /不可发现|discoverab/i],
+    ['Covers context budgeting', /上下文预算|context budget/i],
+    ['Covers lifecycle bootstrap', /生命周期|lifecycle/i],
+    ['Covers tracker mode', /tracker/i],
+    ['Covers repo housekeeping', /整理仓库|清账|housekeeping/i],
+    ['Covers matt coexistence', /共存|coexist|matt/i],
+    ['Covers artifact tracking alignment', /跟踪|tracking/i],
+    ['Covers third-party artifact routing', /受控放行|放行|第三方|third-party/i],
+    ['Covers session wrap-up', /收尾|wrap.?up/i],
+    ['Covers task advancement', /任务推进|advancement|条目即工单/i],
+    ['Covers the post-handoff boundary', /交接/i],
+    ['Covers upstream maintenance', /上游变更|upstream/i]
+  ];
+  for (const [message, pattern] of familyEntries) {
+    checks.push({ pass: cases.some((item) => pattern.test(item.name)), message });
+  }
+  // The guard asserts the reverse of every entry above: the entries prove each family still has
+  // a case; this proves each case is still claimed by an entry. Without it a case can leave the
+  // contract unnoticed — the state those 17 cases were in — and no deletion moves the headline.
+  const orphans = cases.filter((item) => !familyEntries.some(([, pattern]) => pattern.test(item.name)));
+  checks.push({
+    pass: orphans.length === 0,
+    message: `Every eval case is referenced by a contract entry${orphans.length ? ` — orphan case(s): ${orphans.map((item) => `${item.id} ${item.name}`).join('; ')}` : ''}`
+  });
+  // The over-claim check closes the last silent path: an entry matching two cases would let
+  // either be deleted unnoticed — the family still looks covered by the other one — which is the
+  // same invisible-deletion defect the orphan guard closes on the case side. An entry matching
+  // nothing is already caught by its own check above.
+  const overclaimed = familyEntries.filter(([, pattern]) => cases.filter((item) => pattern.test(item.name)).length > 1);
+  checks.push({
+    pass: overclaimed.length === 0,
+    message: `No contract entry matches more than one eval case${overclaimed.length ? ` — over-claiming: ${overclaimed.map(([message]) => message).join('; ')}` : ''}`
+  });
   checks.push({ pass: cases.every((item) => item.prompt && item.expected_output && Array.isArray(item.expectations)), message: 'Each eval has prompt, expected output, expectations' });
   checks.push({ pass: cases.every((item) => item.expectations?.length >= 3), message: 'Each eval has at least three expectation checks' });
 
