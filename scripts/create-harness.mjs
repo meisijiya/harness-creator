@@ -149,14 +149,14 @@ if (!dryRun) await mkdir(target, { recursive: true });
 // NOT be told a feature registry exists (that would be a second state source).
 const REPO_LAYOUT = {
   registry: [
-    '| `.scratch/` | 临时材料 | 写任务材料时创建；任务完成或 worktree 关闭即删除，不进默认上下文 |',
+    '| `.scratch/` | 临时材料 | 写任务材料时创建；由收尾与整理按作用域分别清，不进默认上下文 |',
     '| `CONTEXT.md` | 领域语言 | 由上游领域建模 skill 延迟创建（首个术语定稿时）；缺失属正常状态；格式与创建时机归上游配置，不代改 |',
     '| `docs/adr/` | 决策记录 | 同上，首个 ADR 需要时创建；只增不删 |',
     '| `init.sh` | 可执行约束 | harness 创建；声称完成前必须运行 |',
     '| `feature_list.json`、`progress.md` | 状态与证据 | harness 创建；每会话更新，`evidence` 必填 |'
   ],
   tracker: [
-    '| `.scratch/` | 临时材料 | 写任务材料时创建；任务完成或 worktree 关闭即删除，不进默认上下文 |',
+    '| `.scratch/` | 临时材料 | 写任务材料时创建；由收尾与整理按作用域分别清，不进默认上下文 |',
     '| `CONTEXT.md` | 领域语言 | 由上游领域建模 skill 延迟创建（首个术语定稿时）；缺失属正常状态；格式与创建时机归上游配置，不代改 |',
     '| `docs/adr/` | 决策记录 | 同上，首个 ADR 需要时创建；只增不删 |',
     '| `init.sh` | 可执行约束 | harness 创建；声称完成前必须运行 |',

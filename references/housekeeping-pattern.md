@@ -7,7 +7,7 @@
 | 模式 | 状态住在哪 | 整理的作用面 |
 |---|---|---|
 | registry | 仓内 `feature_list.json` + `progress.md` | 清账有实质作用（仓内状态会累积） |
-| tracker | 外部工单系统 | 本技能**不删工单**；仓内只剩 `.scratch/`（本已随 worktree 删除）→ 近似 no-op |
+| tracker | 外部工单系统 | 本技能**不删工单**；但仓内 `.scratch/` **不随分支或工作目录的销毁消失**，单工作目录下跨需求累积 → **不是 no-op**，清账有实质作用面 |
 
 ## 三段流程
 
@@ -28,7 +28,7 @@ node <技能目录>/scripts/scan-housekeeping.mjs --target /path/to/project --se
 |---|---|
 | `feature_list.json` 中 `status=done` **且有 `evidence`** 的条目 | 已完成、证据已在 git/CI 留痕，条目本身已过期 |
 | `progress.md` 的过期段落 | 只保留当前状态、证据、阻塞、下一步 |
-| `.scratch/` 中**已判定为历史**（提供了 `--session-ref` 且不在本会话范围）的陈旧材料 | 任务级暂存区，随任务删除；未提供 ref 时只标「无法判定」，不删 |
+| `.scratch/` 中**已判定为历史**（提供了 `--session-ref` 且不在本会话范围）的陈旧材料 | 任务级暂存区，由收尾与整理按作用域分别清，不依赖任何自动机制；未提供 ref 时只标「无法判定」，不删 |
 | 指令文件豁免清单中**路径已不存在**的登记行 | 该表记的是"这项还在不在、跟不跟踪"，属状态而非决策；指向已消失产物的行只会误导读者 |
 
 指令文件（`AGENTS.md`/`CLAUDE.md`）**不以整体进入作用域**：它是路由文档不是落点，扫描器只对它做只读体检——各节体积、失效登记行、未定稿占位符（见 `scan-housekeeping.mjs` 报告）。体积与规则条目的增减是用户决策权，扫描器不代改、不代删。
@@ -48,7 +48,7 @@ node <技能目录>/scripts/scan-housekeeping.mjs --target /path/to/project --se
 | 可执行约束（测试、Schema、门禁） | `init.sh` / CI |
 | 跨会话有效的长期不变量（既非决策、亦非术语、亦非门禁） | 目标仓库 `AGENTS.md`「工作规则」节（受条目上限约束，先合并同族项） |
 | 状态与依赖 | 工单 / `feature_list.json` |
-| 其余任务级草稿 | 留在 `.scratch/`，随任务删除 |
+| 其余任务级草稿 | 留在 `.scratch/`，由收尾与整理按作用域分别清 |
 
 ### ③ 补齐（precipitate，按需）
 
@@ -69,7 +69,7 @@ node <技能目录>/scripts/scan-housekeeping.mjs --target /path/to/project --se
 | `feature_list.json` 非法 JSON | 先修复 JSON，再谈整理 | 报错退出，不猜测条目 |
 | `status=done` 但无 `evidence` | 归入「不可清」，提示补证据 | 仅在用户明确授权弃用该条目时才删 |
 | 删除后工作树非预期 | `git checkout -- <path>` 恢复 | 从最近提交恢复；未提交内容不可恢复，故删除前必须先确认 |
-| tracker 模式 | 只清 `.scratch/`；工单归用户与工单系统 | 报告为近似 no-op，不做多余动作 |
+| tracker 模式 | 只清 `.scratch/` 中已判定为历史且已无价值的材料；工单归用户与工单系统 | **不可报 no-op**：跨需求会累积，须逐条列出「将删／将留」 |
 
 ## 反例
 

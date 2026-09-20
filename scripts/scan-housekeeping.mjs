@@ -144,7 +144,7 @@ const classify = (relativePath) => {
 // 会话收尾：把本会话产出按五落点归类，并找出落在落点之外的会话产出。
 // routed.scratch 同时就是「需要裁决保留还是删除」的集合——同一事实只落一处，不另设一张表。
 const LANDING_MATCHERS = [
-  { key: 'scratch', label: '.scratch/（临时材料，随任务删除）', match: (p) => p === '.scratch' || p.startsWith('.scratch/') },
+  { key: 'scratch', label: '.scratch/（临时材料，由收敛流程主动清）', match: (p) => p === '.scratch' || p.startsWith('.scratch/') },
   { key: 'context', label: 'CONTEXT.md（领域语言，持续更新）', match: (p) => p === 'CONTEXT.md' },
   { key: 'adr', label: 'docs/adr/（决策，只增不删）', match: (p) => p === 'docs/adr' || p.startsWith('docs/adr/') },
   { key: 'gate', label: 'init.sh / CI（可执行约束）', match: (p) => p === 'init.sh' || p.startsWith('.github/workflows/') },

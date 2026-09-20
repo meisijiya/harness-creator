@@ -29,14 +29,14 @@ const LANDING_POINTS = [
     label: '临时材料',
     paths: ['.scratch/'],
     expected: 'untracked',
-    rationale: 'spec 草稿、调研笔记、交接文档、教学工作区——随任务/worktree 删除，进版本控制即制造噪声事实来源'
+    rationale: 'spec 草稿、调研笔记、交接文档、教学工作区——由收尾与整理按作用域分别清，不依赖任何自动机制；进版本控制即制造噪声事实来源'
   },
   {
     id: 'context',
     label: '领域语言',
     paths: ['CONTEXT.md'],
     expected: 'tracked',
-    rationale: '长期资产：代码表达不了的领域用语，跨会话与跨 worktree 共享；不跟踪等于每个 worktree 从零重建'
+    rationale: '长期资产：代码表达不了的领域用语，跨会话与跨分支共享；不跟踪等于每开一个工作副本都要从零重建'
   },
   {
     id: 'adr',
