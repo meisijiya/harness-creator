@@ -193,7 +193,11 @@ Runs a lightweight harness benchmark:
      when no --session-ref is given, must still mark history when one is, must never prune a
      done-without-evidence entry, and must report the instruction file's own health — ranked
      sections, dangling exemption rows, unfilled placeholders — without editing it.
- 18. Produces a JSON report and optional HTML report.
+ 18. Checks the housekeeping scanner's mode report against the authoritative detector: `.scratch/`
+     must not count as a tracker signal, feature_list.json must win over a signal, and a real
+     tracker signal — including the AGENTS.md vocabulary of the lazily-created window — must still
+     be detected. A detector that only ever answers "registry" must not pass.
+ 19. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -277,6 +281,10 @@ if (!selfCheck.skipped) {
     const { pass, readOnly, noRefMeansUnverified, refMarksHistory, pruneActive, pruneSuppressed, noEvidenceNeverPruned, porcelainPathIntact, instructionReported, danglingExemptionReported, placeholderReported, error } = selfCheck.housekeeping;
     console.log(`  Housekeeping safety: ${pass ? 'PASS' : 'FAIL'} — scan changes nothing: ${readOnly ? 'ok' : 'NO'}; no --session-ref means unverified, not stale: ${noRefMeansUnverified ? 'ok' : 'NO'}; a ref still marks history: ${refMarksHistory ? 'ok' : 'NO'}; housekeeping still emits prune candidates: ${pruneActive ? 'ok' : 'NO'}; wrap-up suppresses prune: ${pruneSuppressed ? 'ok' : 'NO'}; done-without-evidence never pruned: ${noEvidenceNeverPruned ? 'ok' : 'NO'}; porcelain path keeps its first character: ${porcelainPathIntact ? 'ok' : 'NO'}; instruction file reported with ranked sections: ${instructionReported ? 'ok' : 'NO'}; dangling exemption row named, live one left alone: ${danglingExemptionReported ? 'ok' : 'NO'}; unfilled placeholder surfaced: ${placeholderReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.modeReport) {
+    const { pass, scratchIsNotSignal, trackerDetected, registryWins, windowCaseDetected, error } = selfCheck.modeReport;
+    console.log(`  Housekeeping mode report: ${pass ? 'PASS' : 'FAIL'} — .scratch/ is not a tracker signal: ${scratchIsNotSignal ? 'ok' : 'NO'}; a real tracker signal is still detected: ${trackerDetected ? 'ok' : 'NO'}; feature_list.json wins over a signal: ${registryWins ? 'ok' : 'NO'}; tracker vocabulary in the setup window detected: ${windowCaseDetected ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+  }
   if (!selfCheck.pass && selfCheck.error) console.log(`  ${selfCheck.error}`);
 }
 console.log(formatScoreReport(harnessResult, target));
@@ -336,8 +344,9 @@ async function runSelfCheck() {
     const entries = await checkEntryTemplateRestraint();
     const agentFile = await checkAgentFileInvariant();
     const housekeeping = await checkHousekeepingSafety();
+    const modeReport = await checkHousekeepingMode();
     return {
-      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && agentsBudget.pass && agentsDiscover.pass && tracker.pass && gate.pass && dryRun.pass && selfRefs.pass && bottleneckTies.pass && blankGate.pass && handoff.pass && blueprint.pass && entries.pass && agentFile.pass && housekeeping.pass,
+      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && agentsBudget.pass && agentsDiscover.pass && tracker.pass && gate.pass && dryRun.pass && selfRefs.pass && bottleneckTies.pass && blankGate.pass && handoff.pass && blueprint.pass && entries.pass && agentFile.pass && housekeeping.pass && modeReport.pass,
       score: scored.overall,
       englishScore: english.overall,
       budget,
@@ -354,6 +363,7 @@ async function runSelfCheck() {
       entries,
       agentFile,
       housekeeping,
+      modeReport,
       bottleneck: scored.bottleneck ?? english.bottleneck,
       bottlenecks: scored.bottlenecks.length ? scored.bottlenecks : english.bottlenecks
     };
@@ -1053,6 +1063,73 @@ async function checkHousekeepingSafety() {
       instructionReported: false,
       danglingExemptionReported: false,
       placeholderReported: false,
+      error: error.message
+    };
+  } finally {
+    for (const dir of fixtures) await rm(dir, { recursive: true, force: true });
+  }
+}
+
+// scan-housekeeping.mjs 自己实现了一套模式信号探测，而 harness-utils.mjs 的 trackerMode 是权威版
+// （create-harness、validate 与这里的 scoreHarness 都用它）。两套一旦分叉，同一个仓库会收到两份
+// 互相矛盾的模式结论，且危害是单向的：registry 仓被报成 tracker 时，扫描器会连带打印「仓内可清
+// 的只有 .scratch/」，把用户从 feature_list.json 的 prune 候选上引开——恰是 D4 打掉的那类 wrong-mode。
+// 四臂各隔离一条性质，两个方向都断言：只断言「registry 不被误判成 tracker」的话，一个永远只报
+// registry 的探测器也能通过（会拦下一切的闸门是最没用的闸门）。
+async function checkHousekeepingMode() {
+  const fixtures = [];
+  const build = async (files) => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'harness-mode-'));
+    fixtures.push(dir);
+    for (const [relative, content] of Object.entries(files)) {
+      const full = path.join(dir, relative);
+      await mkdir(path.dirname(full), { recursive: true });
+      await writeText(full, content);
+    }
+    return dir;
+  };
+  const modeOf = async (dir) => {
+    const { stdout } = await execFileAsync('node', [
+      path.join(scriptDir, 'scan-housekeeping.mjs'), '--target', dir, '--json'
+    ]);
+    return JSON.parse(stdout.slice(stdout.indexOf('{'))).mode;
+  };
+  const RULES = '# AGENTS.md\n\n## 工作规则\n\n- **一次一个功能**\n';
+  try {
+    // ① `.scratch/` 不是信号：一个刚放过草稿、此外什么都没有的仓仍是 registry。
+    const scratchIsNotSignal = await modeOf(await build({
+      '.scratch/spec.md': '# draft\n',
+      'AGENTS.md': RULES
+    })) === 'registry';
+    // ② 反向：tracker 信号存在且仓内没有注册表时，必须判 tracker。
+    const trackerDetected = await modeOf(await build({
+      'CONTEXT.md': '# Language\n',
+      'AGENTS.md': RULES
+    })) === 'tracker';
+    // ③ 仓内已有注册表时信号不得推翻它（harness-utils 的 `!featureList` 前置）。
+    const registryWins = await modeOf(await build({
+      'CONTEXT.md': '# Language\n',
+      'feature_list.json': '{"features":[]}\n',
+      'AGENTS.md': RULES
+    })) === 'registry';
+    // ④ 窗口期：骨架刚生成，matt 名下产物尚未延迟创建，唯一证据是 AGENTS.md 里的工单词汇。
+    const windowCaseDetected = await modeOf(await build({
+      'AGENTS.md': `${RULES}\n状态与依赖由工单系统承接。\n`
+    })) === 'tracker';
+    return {
+      pass: scratchIsNotSignal && trackerDetected && registryWins && windowCaseDetected,
+      scratchIsNotSignal,
+      trackerDetected,
+      registryWins,
+      windowCaseDetected
+    };
+  } catch (error) {
+    return {
+      pass: false,
+      scratchIsNotSignal: false,
+      trackerDetected: false,
+      registryWins: false,
+      windowCaseDetected: false,
       error: error.message
     };
   } finally {

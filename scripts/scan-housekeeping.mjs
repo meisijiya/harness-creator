@@ -75,13 +75,28 @@ for (const point of LANDING_POINTS) {
   (await exists(path.join(target, point.path)) ? present : missing).push(point.label);
 }
 
+// 模式判定必须与 harness-utils.mjs 的 trackerMode 同口径。两套探测器一旦分叉，同一个仓库就会
+// 收到两份互相矛盾的模式结论，且这里印错是**有害方向**：registry 仓被报成 tracker 时，下面会跟
+// 着打印「仓内可清的只有 .scratch/」，把用户从 feature_list.json 的 prune 候选上引开。
+const readIfExists = async (relative) => {
+  const full = path.join(target, relative);
+  return await exists(full) ? await readText(full) : '';
+};
 const modeSignals = [];
-for (const signal of ['.scratch', 'CONTEXT.md', 'docs/adr']) {
+for (const signal of ['CONTEXT.md', 'docs/adr', 'docs/agents']) {
   if (await exists(path.join(target, signal))) modeSignals.push(signal);
 }
 const hasFeatureList = await exists(path.join(target, 'feature_list.json'));
 const hasProgress = await exists(path.join(target, 'progress.md'));
-const mode = modeSignals.length > 0 ? 'tracker' : 'registry';
+// `.scratch/` 不算信号：上游教学、调研、交接 skill 都会写它，任何仓库都可能有一个
+// （SKILL.md「两种模式」与 references/failure-modes.md 都写明了）。它一旦算信号，一个正常的
+// registry 仓只要放过草稿就被报成 tracker。
+// feature_list.json 存在即 registry 胜出——仓内已有明确状态源，信号不得推翻它。
+// 窗口期（骨架刚生成、matt 名下产物仍在延迟创建）唯一证据是 AGENTS.md 里的工单词汇。
+const trackerVocab = /工单系统|issue tracker|ticket system/i.test(
+  `${await readIfExists('AGENTS.md')}\n${await readIfExists('CLAUDE.md')}`
+);
+const mode = !hasFeatureList && (modeSignals.length > 0 || trackerVocab) ? 'tracker' : 'registry';
 
 const session = { available: false, ref: explicitRef, changed: [], uncommitted: [], note: '' };
 
