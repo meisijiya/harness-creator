@@ -278,8 +278,8 @@ if (!selfCheck.skipped) {
     console.log(`  Agent-file invariant: ${pass ? 'PASS' : 'FAIL'} — existing CLAUDE.md means no AGENTS.md is created: ${noSecondFile && choseClaude ? 'ok' : 'NO'}; existing instruction file left byte-identical: ${untouched ? 'ok' : 'NO'}; missing sections still reported: ${missingReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.housekeeping) {
-    const { pass, readOnly, noRefMeansUnverified, refMarksHistory, pruneActive, pruneSuppressed, noEvidenceNeverPruned, porcelainPathIntact, instructionReported, danglingExemptionReported, placeholderReported, error } = selfCheck.housekeeping;
-    console.log(`  Housekeeping safety: ${pass ? 'PASS' : 'FAIL'} — scan changes nothing: ${readOnly ? 'ok' : 'NO'}; no --session-ref means unverified, not stale: ${noRefMeansUnverified ? 'ok' : 'NO'}; a ref still marks history: ${refMarksHistory ? 'ok' : 'NO'}; housekeeping still emits prune candidates: ${pruneActive ? 'ok' : 'NO'}; wrap-up suppresses prune: ${pruneSuppressed ? 'ok' : 'NO'}; done-without-evidence never pruned: ${noEvidenceNeverPruned ? 'ok' : 'NO'}; porcelain path keeps its first character: ${porcelainPathIntact ? 'ok' : 'NO'}; instruction file reported with ranked sections: ${instructionReported ? 'ok' : 'NO'}; dangling exemption row named, live one left alone: ${danglingExemptionReported ? 'ok' : 'NO'}; unfilled placeholder surfaced: ${placeholderReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+    const { pass, readOnly, noRefMeansUnverified, refMarksHistory, pruneActive, pruneSuppressed, noEvidenceNeverPruned, porcelainPathIntact, instructionReported, danglingExemptionReported, placeholderReported, docEntryReported, error } = selfCheck.housekeeping;
+    console.log(`  Housekeeping safety: ${pass ? 'PASS' : 'FAIL'} — scan changes nothing: ${readOnly ? 'ok' : 'NO'}; no --session-ref means unverified, not stale: ${noRefMeansUnverified ? 'ok' : 'NO'}; a ref still marks history: ${refMarksHistory ? 'ok' : 'NO'}; housekeeping still emits prune candidates: ${pruneActive ? 'ok' : 'NO'}; wrap-up suppresses prune: ${pruneSuppressed ? 'ok' : 'NO'}; done-without-evidence never pruned: ${noEvidenceNeverPruned ? 'ok' : 'NO'}; porcelain path keeps its first character: ${porcelainPathIntact ? 'ok' : 'NO'}; instruction file reported with ranked sections: ${instructionReported ? 'ok' : 'NO'}; dangling exemption row named, live one left alone: ${danglingExemptionReported ? 'ok' : 'NO'}; unfilled placeholder surfaced: ${placeholderReported ? 'ok' : 'NO'}; document entry: unowned + dangling named, compliant ones left alone: ${docEntryReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.modeReport) {
     const { pass, scratchIsNotSignal, trackerDetected, registryWins, windowCaseDetected, error } = selfCheck.modeReport;
@@ -385,8 +385,11 @@ async function checkSkillBudget() {
   const size = Buffer.byteLength(raw.replace(/\r\n/g, '\n'), 'utf8');
   const rawSize = Buffer.byteLength(raw, 'utf8');
   const crlfCount = (raw.match(/\r\n/g) || []).length;
-  // Holds only when the reported size differs from the raw size by exactly the CRLF overhead —
-  // i.e. normalization happened and no other byte was dropped along the way.
+  // Holds for CRLF, LF and mixed endings alike: each CRLF removes exactly one byte, so this guards
+  // the measurement definition — it fails the moment `size` stops normalizing (e.g. reverts to raw
+  // bytes, where the difference becomes 0 and the guard goes red) — rather than the checkout's line
+  // endings. Mixed endings are deliberately not detected here: they don't move the LF-normalized
+  // size, so the cap stays honest and a line-ending hygiene check belongs elsewhere, if anywhere.
   const lineEndingInvariant = rawSize - size === crlfCount;
   return {
     pass: size <= SKILL_MD_MAX_BYTES && lineEndingInvariant,
@@ -951,10 +954,23 @@ async function checkHousekeepingSafety() {
     // The instruction file is a routing doc, not a landing point, so nothing else in this scan
     // would ever look at it. This fixture gives it one dangling exemption row, one live row and an
     // unfilled placeholder, so the report has to tell the two rows apart instead of counting them —
-    // a count would also pass on a scanner that flagged every row.
+    // a count would also pass on a scanner that flagged every row. The document-entry list gets the
+    // same treatment: a compliant entry that exists, one missing its owner annotation, and one whose
+    // path is gone — flagging every entry and flagging none must both fail.
     await mkdir(path.join(dir, 'teach-notes'), { recursive: true });
+    await mkdir(path.join(dir, 'docs'), { recursive: true });
+    await writeText(path.join(dir, 'docs', 'live-doc.md'), '# Live doc\n');
     await writeText(path.join(dir, 'AGENTS.md'), [
       '# AGENTS.md',
+      '',
+      '## 启动工作流',
+      '',
+      '1. **确认工作目录**：运行 `pwd`',
+      '',
+      '5. **阅读项目文档（如存在）**——长期维护的活文档逐条列出并标出 owner：',
+      '   - `docs/live-doc.md`（owner: 架构组）',
+      '   - `docs/orphan-doc.md`',
+      '   - `docs/gone-doc.md`（owner: 架构组）',
       '',
       '## 工作规则',
       '',
@@ -971,10 +987,10 @@ async function checkHousekeepingSafety() {
       '',
       '### 放行豁免清单（由产出 skill 自治理）',
       '',
-      '| 路径 | 产出 skill | 性质 / 生命周期 | 用户裁决 | 追踪状态 | 复审触发 |',
-      '|---|---|---|---|---|---|',
-      '| `teach-notes/` | teach | 教学状态 | 原样保留 | ignored | 用户改主意时 |',
-      '| `gone-workspace/` | teach | 教学状态 | 原样保留 | ignored | 用户改主意时 |',
+      '| 路径 | 产出 skill | owner | 性质 / 生命周期 | 用户裁决 | 追踪状态 | 复审触发 |',
+      '|---|---|---|---|---|---|---|',
+      '| `teach-notes/` | teach | 使用方 | 教学状态 | 原样保留 | ignored | 用户改主意时 |',
+      '| `gone-workspace/` | teach | 使用方 | 教学状态 | 原样保留 | ignored | 用户改主意时 |',
       ''
     ].join('\n'));
     const git = (rest) => execFileAsync('git', rest, { cwd: dir });
@@ -1062,7 +1078,7 @@ async function checkHousekeepingSafety() {
     const instruction = plain.instructionFile || {};
     const sections = instruction.sections || [];
     const instructionReported = instruction.name === 'AGENTS.md'
-      && sections.length === 3
+      && sections.length === 4
       && sections.every((item, index) => index === 0 || sections[index - 1].bytes >= item.bytes)
       && instruction.ruleCount === 2;
     // The row is reported as written (path cell minus its backticks), so the assertion uses the
@@ -1070,11 +1086,23 @@ async function checkHousekeepingSafety() {
     const danglingExemptionReported = (instruction.danglingExemptions || []).includes('gone-workspace/')
       && !(instruction.danglingExemptions || []).includes('teach-notes/');
     const placeholderReported = (instruction.placeholders || []).includes('待对齐');
+    // The document-entry list under 启动工作流: an existing entry must carry an owner annotation, an
+    // annotated entry must really exist, and the compliant entry must escape both lists. Naming the
+    // wrong file — or every file — fails here.
+    const docEntries = instruction.docEntries || {};
+    const missingOwner = docEntries.missingOwner || [];
+    const danglingDocs = docEntries.dangling || [];
+    const docEntryReported = missingOwner.includes('docs/orphan-doc.md')
+      && !missingOwner.includes('docs/live-doc.md')
+      && !missingOwner.includes('docs/gone-doc.md')
+      && danglingDocs.includes('docs/gone-doc.md')
+      && !danglingDocs.includes('docs/live-doc.md');
 
     return {
       pass: readOnly && noRefMeansUnverified && refMarksHistory && pruneActive
         && pruneSuppressed && noEvidenceNeverPruned && porcelainPathIntact
-        && instructionReported && danglingExemptionReported && placeholderReported,
+        && instructionReported && danglingExemptionReported && placeholderReported
+        && docEntryReported,
       readOnly,
       noRefMeansUnverified,
       refMarksHistory,
@@ -1084,7 +1112,8 @@ async function checkHousekeepingSafety() {
       porcelainPathIntact,
       instructionReported,
       danglingExemptionReported,
-      placeholderReported
+      placeholderReported,
+      docEntryReported
     };
   } catch (error) {
     return {
@@ -1099,6 +1128,7 @@ async function checkHousekeepingSafety() {
       instructionReported: false,
       danglingExemptionReported: false,
       placeholderReported: false,
+      docEntryReported: false,
       error: error.message
     };
   } finally {

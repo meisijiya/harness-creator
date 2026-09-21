@@ -31,6 +31,8 @@
 - 意图/体验类活文档（代码表达不了的内容）指定 owner，持续更新
 - 与代码重复视为双写（漂移源）；过时即归档
 
+**代码即文档**：代码能表达的事实以代码为唯一载体——业务代码不「归位」、随提交走；只有代码表达不了的内容才落长期落点。
+
 路线组合：任务 spec 临时化（Ephemeral）+ 长期约束可执行化（Executable）+ 其余材料归档按需读。
 
 ## 安装
@@ -144,7 +146,7 @@ node ~/.agents/skills/harness-creator/scripts/scan-housekeeping.mjs --target /pa
 | 蓝图槽 | 省略 `--blueprint` 时必须留下可见的**待补**占位，而不是技术栈推断出来的文本；给了蓝图则必须**逐字**进 `AGENTS.md` |
 | 条目模板克制 | 新骨架不得自带项目形态的功能条目（首次会话刻意是空的），且必须先写明「对齐后方可新增」的规则 |
 | 指令文件不变量 | 已有 `CLAUDE.md` 时不得在其旁再建 `AGENTS.md`（两份指令文件＝两张互相矛盾的指路表）；已有指令文件保持**逐字节不变**，而其缺失章节仍被报告——报告 ≠ 改写 |
-| 收尾 / 整理扫描器安全 | 唯一一个「以删除为目的」看产物的脚本：必须**只读**；无 `--session-ref` 时只许标「无法判定」而非「陈旧」；给了 ref 仍须能标出历史（抑制不得是永久的）；收尾须抑制 prune 而整理仍须产出候选；`done` 无 evidence 在任何模式下都不得进删除候选；并须报告指令文件自身的健康度——节体积排序、**指向已消失路径的豁免登记行**、未定稿占位符——且只报告不改写（区分"该报的报出"与"不该报的不报"） |
+| 收尾 / 整理扫描器安全 | 唯一一个「以删除为目的」看产物的脚本：必须**只读**；无 `--session-ref` 时只许标「无法判定」而非「陈旧」；给了 ref 仍须能标出历史（抑制不得是永久的）；收尾须抑制 prune 而整理仍须产出候选；`done` 无 evidence 在任何模式下都不得进删除候选；并须报告指令文件自身的健康度——节体积排序、**指向已消失路径的豁免登记行**、未定稿占位符、**项目文档条目的 owner 标注**（缺 owner / 指向不存在路径）——且只报告不改写（区分"该报的报出"与"不该报的不报"） |
 | 整理扫描的模式报告 | `scan-housekeeping.mjs` 的模式判定必须与权威探测器（`harness-utils` 的 `trackerMode`）同口径：`.scratch/` **不算**信号（上游多个 skill 都会写它）、`feature_list.json` 存在即 registry 胜出、真 tracker 信号（含骨架刚生成时的 AGENTS.md 工单词汇）仍须判出 tracker——一个只会回答 registry 的探测器不得通过 |
 
 带 `--html` 时这些结果一并进报告——关卡结论若只出现在控制台，在事后复盘的产物里就等于不存在。格式守卫本身也该有守卫：每道关卡都配了反证测试（把旧行为塞回去，关卡必须 FAIL 并点名）。
@@ -201,7 +203,7 @@ node ~/.agents/skills/harness-creator/scripts/scan-housekeeping.mjs --target /pa
 node ~/.agents/skills/harness-creator/scripts/scan-housekeeping.mjs --target /path/to/project --session-ref <会话起始 commit>
 ```
 
-它只输出清单、不删任何东西：治理模式、五个落点的缺失项、`feature_list.json` 中「done 且有证据」（可清）／「done 无证据」（**不可清**，先补证据）／未完成的条目、`.scratch/` 的分级（current／stale／unverified），以及自 `--session-ref` 以来改动的文件（即本会话范围）。`--session-ref` 必须是**本会话起始 commit**，**不默认 `HEAD`**——省略时只有未提交改动算本会话，其余标为「无法判定」而非「陈旧」，以免把已提交的本会话内容误判为历史。
+它只输出清单、不删任何东西：治理模式、五个落点的缺失项、`feature_list.json` 中「done 且有证据」（可清）／「done 无证据」（**不可清**，先补证据）／未完成的条目、`.scratch/` 的分级（current／stale／unverified）、指令文件体检（节体积排序、失效登记行、未定稿占位符、项目文档条目的 owner 标注），以及自 `--session-ref` 以来改动的文件（即本会话范围）。`--session-ref` 必须是**本会话起始 commit**，**不默认 `HEAD`**——省略时只有未提交改动算本会话，其余标为「无法判定」而非「陈旧」，以免把已提交的本会话内容误判为历史。
 
 清账的作用域是**「状态」一族**——仓内的状态落点，加上指令文件里承担状态职责的那张登记表（完整口径以 `references/housekeeping-pattern.md` 为准）：ADR（只增不删）与 `CONTEXT.md`（持续更新）永不清；删除前必须列出「将删/将留」清单并经 🔴 CHECKPOINT 批准。沉淀按需进行——默认你已在需求对齐后用上游的沉淀 skill 完成，本技能只补缺口、不代调用他人 skill。完整流程见 `references/housekeeping-pattern.md`。
 

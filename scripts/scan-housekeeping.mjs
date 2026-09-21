@@ -35,7 +35,8 @@ Reports:
   - .scratch/ contents, marked current-session / stale / unverified
   - files changed since --session-ref = the current session's scope
   - the instruction file's own health: its size, the sections it grows in, exemption
-    rows whose path no longer exists, and unresolved placeholders. The instruction file
+    rows whose path no longer exists, document entries missing an owner annotation or
+    pointing at a path that no longer exists, and unresolved placeholders. The instruction file
     is a routing doc rather than a landing point, so nothing else here would ever look
     at it — it is reported only, never edited or trimmed by this scan.
 
@@ -235,6 +236,7 @@ const instructionFile = {
   ruleCount: 0,
   sections: [],
   danglingExemptions: [],
+  docEntries: { missingOwner: [], dangling: [] },
   placeholders: []
 };
 // CLAUDE.md 优先：已有 CLAUDE.md 就不另建 AGENTS.md（与 detectAgentFile 同一取舍）。
@@ -264,6 +266,24 @@ if (instructionFile.name) {
       // 跳过表头、分隔行与空占位行（模板的空表用 `_（暂无）_`，全角括号），只判真实登记。
       if (!cell || cell === '路径' || /^-+$/.test(cell) || cell.startsWith('_')) continue;
       if (!await exists(path.join(target, cell))) instructionFile.danglingExemptions.push(cell);
+    }
+  }
+  // 项目文档层：启动工作流里的长期文档按模板格式逐条登记（`路径`（owner: 角色））。只判「列出来的」
+  // 条目——没列文档的仓库是合法状态；缺 owner 与指向不存在路径分别报告，合规条目不得被点名。
+  const workflow = parts.find((part) => part.startsWith('启动工作流')) || '';
+  const stepLines = workflow.split('\n');
+  const docStep = stepLines.findIndex((line) => /^\d+\.\s+\*\*阅读项目文档/.test(line));
+  if (docStep !== -1) {
+    for (const line of stepLines.slice(docStep + 1)) {
+      if (/^\d+\.\s/.test(line)) break; // 下一个编号步骤即本步结束
+      const entry = line.match(/^\s+-\s+(.+)$/);
+      if (!entry) continue;
+      const item = entry[1].trim();
+      if (!item || item.startsWith('_')) continue; // 空占位 `_（暂无）_`
+      const docPath = (item.match(/`([^`]+)`/) || [])[1];
+      if (!docPath) continue; // 没有反引号路径的条目不是本格式：不猜
+      if (!/（owner:\s*[^）]+）/.test(item)) instructionFile.docEntries.missingOwner.push(docPath);
+      if (!await exists(path.join(target, docPath))) instructionFile.docEntries.dangling.push(docPath);
     }
   }
   instructionFile.placeholders = ['{{', '待补', '待对齐'].filter((token) => text.includes(token));
@@ -370,6 +390,10 @@ if (!instructionFile.name) {
   }
   line(`  exemption rows whose path no longer exists — delete the row: ${instructionFile.danglingExemptions.length}`);
   for (const dangling of instructionFile.danglingExemptions) line(`    ! ${dangling}`);
+  line(`  document entries missing an owner annotation — add one: ${instructionFile.docEntries.missingOwner.length}`);
+  for (const docPath of instructionFile.docEntries.missingOwner) line(`    ! ${docPath}`);
+  line(`  document entries whose path no longer exists — drop the entry: ${instructionFile.docEntries.dangling.length}`);
+  for (const docPath of instructionFile.docEntries.dangling) line(`    ! ${docPath}`);
   line(`  unresolved placeholders (still not filled in): ${instructionFile.placeholders.length ? instructionFile.placeholders.join(', ') : 'none'}`);
   line('  Report only: nothing above is edited or removed by this scan.');
 }
