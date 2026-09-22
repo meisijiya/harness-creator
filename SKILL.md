@@ -24,11 +24,13 @@ license: MIT
 
 | 子系统 | 最小产物 | 用途 |
 |---|---|---|
-| 指令 | `AGENTS.md` 或 `CLAUDE.md`（路由 `CONTEXT.md` 与 ADR） | 启动路径、工作规则、完成定义 |
+| 指令 | `AGENTS.md` 或 `CLAUDE.md`（薄内核：路由 `CONTEXT.md`、ADR 与分册） | 启动路径、工作规则、完成定义；详规按需加载 |
 | 状态 | `feature_list.json`、`progress.md`（精简版） | 当前功能、状态、证据、下一步 |
 | 验证 | `init.sh` 或 CI 门禁 | 声称完成前必须运行的检查；证据由机器承接 |
 | 范围 | 功能依赖关系与完成标准 | 防止越界与半途而废的工作 |
 | 生命周期 | 会话结束例程（更新状态 + 干净提交）；交接文档按需生成 | 让下一次会话可以重新启动 |
+
+「指令」子系统是两层：根指令文件（路由与不变量）＋ 它路由的 `docs/agents/*.md` 分册（情境性详规）。分册属指令子系统内部结构，**不是第六落点**，也不承担状态/决策/术语职责。
 
 ## 两种模式
 
@@ -67,6 +69,10 @@ node <技能目录>/scripts/create-harness.mjs --target /path/to/project --mode 
 
 输出：产物清单 + 创建说明。
 
+### 精简与抽离 AGENTS.md
+
+情境性详规按主题落 `docs/agents/` 分册（默认 `tracking-policy.md`、`escalation.md`），根文件只留一行含读取时机的路由。**判据与存量瘦身流程见 [Context Engineering](references/context-engineering-pattern.md) 的「指令文件的抽离与维护」**。🔴 CHECKPOINT：改写章节或新建分册前，展示 before/after diff 与清单，获批后落盘。
+
 ### 审计现有 harness
 
 ```bash
@@ -91,7 +97,7 @@ node <技能目录>/scripts/run-benchmark.mjs --target /path/to/project --html /
 - 跨会话记忆：`memory-persistence-pattern.md`
 - 可复用工作流（技能形式）：`skill-runtime-pattern.md`
 - 权限、工具、并发：`tool-registry-pattern.md`
-- 上下文预算与渐进式披露：`context-engineering-pattern.md`
+- 上下文预算与渐进式披露（含指令文件的抽离与维护）：`context-engineering-pattern.md`
 - 任务委派与并行代理：`multi-agent-pattern.md`
 - 钩子、启动、长时间运行的工作：`lifecycle-bootstrap-pattern.md`
 - 不易察觉的失败模式：`gotchas.md`
@@ -107,7 +113,7 @@ node <技能目录>/scripts/run-benchmark.mjs --target /path/to/project --html /
 
 ## 设计规则
 
-- 根指令文件保持简短：只做路由与不变量，不做完整手册。
+- 根指令文件保持简短：只做路由与不变量，不做完整手册——情境性详规按主题抽到 `docs/agents/` 分册，根文件只留一行路由（读取时机写在路由行内）。判据是「每次动作是否可能需要」，不是「段落有多长」；**把不变量抽进分册等于让规则不再无条件生效**。
 - 事实各归其位：领域语言进 `CONTEXT.md`（与代码互补、不重复代码；格式归上游，引用不复制），决策进 ADR（不进进度日志），进度日志只留状态/证据/阻塞/下一步。
 - 项目文档（`design.md`、`docs/`）纳入治理：约束进门禁、术语进 `CONTEXT.md`、决策进 ADR、活文档指定 owner；与代码重复视为双写，过时即归档。
 - 任务级材料（spec 草稿、调研笔记）放 `.scratch/`，由收尾与整理按作用域分别清。
@@ -135,6 +141,8 @@ harness 设计中不要做的事；交付前对照一次。
 | 9 | 引入产物落在五个落点之外的第三方 skill | 制造第六个事实来源；他人 skill 无法改造 | 先路由回落点；自带硬约束时**受控放行**（登记豁免、用户裁决、追踪有结论），其余拒 |
 | 10 | 让第三方 skill 自行询问产物追踪策略 | 重复询问，结论分散成第二事实源 | 见第一步第 5 条 |
 | 11 | 把未对齐的需求写成功能条目、或代用户补验收标准 | 需求对齐不属本技能职责；固化即越权，验收标准会变成代理的想象 | 蓝图只记概览（`--blueprint`）；无对齐结论就不新增条目 |
+| 12 | 把「每次动作都需要」的不变量抽进分册 | 分册按需读取——抽走后规则不再无条件生效 | 抽离只针对情境性详规；根文件必须留含读取时机的路由行 |
+| 13 | 在 `docs/agents/` 用 matt 的三个文件名（`issue-tracker.md`、`domain.md`、`triage-labels.md`） | 一个路径两个写入者：matt 的产物被覆盖或分叉 | 分册只用自有主题名；撞名时 `create-harness.mjs` 直接报错，不静默写入 |
 
 ## 交付清单
 
@@ -143,6 +151,7 @@ harness 设计中不要做的事；交付前对照一次。
 **Registry 模式（基础）**
 
 - [ ] `AGENTS.md` 或 `CLAUDE.md`（含仓库结构与一次性追踪策略，路由状态产物与 `CONTEXT.md`/ADR）
+- [ ] `docs/agents/tracking-policy.md`、`docs/agents/escalation.md`（抽离层：详规按需读取，根文件各留一行路由）
 - [ ] `feature_list.json` + `progress.md`（精简版）
 - [ ] `init.sh`（空项目下**必然失败**：占位验证带 `exit 1`，须替换为真实命令）
 - [ ] 交接落点约定（`.scratch/` 下；生成方默认写到别处时改写到那里）

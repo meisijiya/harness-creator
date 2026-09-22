@@ -24,9 +24,11 @@ matt 的 `setup-matt-pocock-skills` 与本技能都会在 tracker 模式的仓�
 
 | 产物（落点权威：harness） | 唯一写入者（内容权威） | 创建时机（内容权威） | harness 的动作 |
 |---|---|---|---|
+| `docs/agents/` **目录** | 共享：matt setup 与本技能都写入 | — | 目录本身不是任何一方的信号：按**文件名**分区，见下表 |
 | `docs/agents/issue-tracker.md` | matt setup | setup 运行时 | 只读；兼作 tracker 探测信号与状态路由 |
 | `docs/agents/domain.md` | matt setup | setup 运行时 | 只读；兼作 tracker 探测信号 |
 | `docs/agents/triage-labels.md` | matt setup | 仅 `triage` 已装时 | 只读 |
+| `docs/agents/tracking-policy.md`、`docs/agents/escalation.md`（harness 分册） | harness | harness 运行时（或代理按「精简与抽离」流程补建） | 创建/维护；`templates/agent-docs/` 是名单唯一来源，评分器跟随同名文件 |
 | `AGENTS.md`/`CLAUDE.md` 的 `## Agent skills` 块 | matt setup | setup 运行时 | 保留不写；本方章节由代理合并，脚本只报告缺失项 |
 | `CONTEXT.md` | matt 的 `domain-modeling` | **延迟**——首个术语定稿时 | 不预创建；已存在则只读路由 |
 | `docs/adr/` | matt 的 `domain-modeling` | **延迟**——首个 ADR 需要时 | 不预创建；已存在则只读路由 |
@@ -34,6 +36,20 @@ matt 的 `setup-matt-pocock-skills` 与本技能都会在 tracker 模式的仓�
 | `.scratch/` | 使用方（按需） | 首次写入任务材料时 | 只文档化约定，**不预建空目录**；handoff/teach/research 等 skill 也会写入，**不构成 tracker 信号** |
 | 放行豁免项（如 `teach` 工作区，落点由 skill 自身硬规定） | **产出 skill / 使用方** | 首次写入时 | 只在 AGENTS.md 豁免清单里登记（路径、owner、用户裁决、追踪状态）；**不治理其内容与形态**，放行不等于不看见 |
 | `feature_list.json`、`progress.md` | harness | registry 模式 | tracker 模式不创建 |
+
+## `docs/agents/` 是共享目录，按文件名分区
+
+两个写入者在同一目录里各写各的主题文件，互不覆盖：
+
+| 写入者 | 文件名 | 命名约束 |
+|---|---|---|
+| matt setup | `issue-tracker.md`、`domain.md`、`triage-labels.md` | 上游自有名单，harness 不改写 |
+| harness | 主题化自有名（默认 `tracking-policy.md`、`escalation.md`） | **不得占用左列三个名字**；撞名时 `create-harness.mjs` 报错而不写入 |
+
+两条边界：
+
+- **探测按文件、不按目录**：tracker 模式信号是 `docs/agents/domain.md` 或 `docs/agents/issue-tracker.md` 这两个**具体文件**；harness 分册的存在不构成 tracker 信号，也不会让 registry 仓库被误判。
+- **matt 的探索会看到这个目录**：上游 setup 把"`docs/agents/` 是否已存在"当作自己输出可能存在的线索。即便 harness 先跑、目录已建，matt 仍按自己的文件名判存在性并幂等写入（其 SKILL.md 规定 `## Agent skills` 块已存在时就地更新而非追加），因此不会漏建，也不会重复。**顺序无关**：谁先跑都不会覆盖另一方。
 
 ## 两个方向的顺序
 
@@ -67,6 +83,8 @@ matt 规定：`CLAUDE.md` 存在则编辑它；否则编辑 `AGENTS.md`；两者
 | harness 预建空 `.scratch/` | matt 把它读作「本地 markdown 工单已在用」的信号，误判 issue tracker 形态 |
 | `CLAUDE.md` 已存在时再建 `AGENTS.md` | 两个指令文件，代理读到互相矛盾的路由 |
 | 把 matt 的 `docs/agents/*` 复制进 harness 参考文档 | 复制外部版本化规范，matt 升级即漂移 |
+| harness 在 `docs/agents/` 下使用 matt 的三个文件名 | 一个路径两个写入者：matt 的产物被覆盖或分叉；撞名必须报错而非静默写入 |
+| 拿 `docs/agents/` 目录的存在当 tracker 信号 | 该目录已被两个写入者共享，按目录判定会把 registry 仓库误判为 tracker；信号只能是 matt 的两个具体文件 |
 | tracker 模式仍写 `feature_list.json`/`progress.md` | 与工单系统形成第二状态源（黑名单 #1） |
 | 因缺 `CONTEXT.md` 就把 matt 配置过的仓库判为非 tracker | 延迟创建被误读为缺陷，用户被推向错误模式 |
 | 仅凭 `.scratch/` 存在就判 tracker 模式 | 第三方 skill（teach/research/handoff）也会写它，会把 registry 仓库误判为 tracker |

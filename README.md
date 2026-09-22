@@ -104,13 +104,18 @@ node ~/.agents/skills/harness-creator/scripts/scan-housekeeping.mjs --target /pa
 
 ## 它会创建什么
 
-- `AGENTS.md` 或 `CLAUDE.md`（含「项目蓝图」「仓库结构」「产物追踪策略」等节，见下）
+- `AGENTS.md` 或 `CLAUDE.md`——**薄内核**：只写路由与不变量（项目蓝图、验证命令、仓库结构、启动工作流、工作规则、完成定义、会话结束）
+- `docs/agents/tracking-policy.md`、`docs/agents/escalation.md`——**抽离层**：情境性详规按主题落在这里，根文件各留一行含读取时机的路由
 - `init.sh`
 - `feature_list.json` 与 `progress.md`（精简版：当前状态、证据、阻塞、下一步）——**仅 registry 模式**；tracker 模式的状态在工单系统，写出这两个文件会制造第二状态源，因此脚本在该模式下跳过它们
 
+**指令文件是路由层，不是手册。** 它每次会话被完整读取，所以只放「每次动作都可能需要」的内容；只在该类问题出现时才查的详规，按主题放进 `docs/agents/` 分册，由根文件的一行路由按需加载。判据、存量瘦身（把已经膨胀的 AGENTS.md 拆开）流程与边界见 [`references/context-engineering-pattern.md`](references/context-engineering-pattern.md) 的「指令文件的抽离与维护」。
+
+`templates/agent-docs/` 是分册名单的**唯一来源**——生成脚本与评分器读同一目录，所以抽离出去的内容不会被判为缺失，新加一个分册也不用改脚本。分册属**「指令」子系统的二级层，不是第六个落点**：它按需加载，不承担状态/决策/术语职责（那三类仍归五个落点）。
+
 **「项目蓝图」节只回答两个问题：这个项目是什么、最终交付什么。** 它是描述，不是需求——不定义产品形式、不定义实现路径、不拆工单。内容由你陈述、经 `--blueprint` 落盘；省略时保留可见的**待补**占位，不代填、不由技术栈推断。**需求固化即越权**：需求对齐与设计不归本技能，蓝图只记对齐结论，且在结论产生前不得新增或改写任何条目。因此**首次会话的注册表刻意是空的**——只留「项目初始化」与一条示例，项目特有的功能条目由你在对齐后自行补入。最小化骨架是正确且刻意的，但它**不等于懂你的项目**。
 
-会话交接是**落点规则而非固定文件名**：引用式交接文档落在 `.scratch/` 下（文件名随意，`handoff.md`、带时间戳的都行）——仓根与 `docs/` 都不是五个落点之一，生成方若默认写到那里，改写到 `.scratch/` 即可。tracker 模式（`CONTEXT.md` + ADR + 工单系统承接状态，工单可本地可仓外）见 SKILL.md 的"两种模式"一节。与 matt setup 共存时按**单一写入者**分工：matt 拥有 `docs/agents/*`、`CONTEXT.md`、`docs/adr/`、`## Agent skills` 块（其中 `CONTEXT.md`/ADR 由上游领域建模 skill **延迟创建**），本技能不代建，只落自己的章节与 `init.sh`；详见 `references/matt-coexistence.md`。
+会话交接是**落点规则而非固定文件名**：引用式交接文档落在 `.scratch/` 下（文件名随意，`handoff.md`、带时间戳的都行）——仓根与 `docs/` 都不是五个落点之一，生成方若默认写到那里，改写到 `.scratch/` 即可。tracker 模式（`CONTEXT.md` + ADR + 工单系统承接状态，工单可本地可仓外）见 SKILL.md 的"两种模式"一节。与 matt setup 共存时按**单一写入者**分工，且 `docs/agents/` 目录是**共享**的、按**文件名**区分所有权：matt 拥有 `issue-tracker.md`/`domain.md`/`triage-labels.md`，本技能拥有 `tracking-policy.md`/`escalation.md`（撞名时脚本直接报错，不静默写入）；`CONTEXT.md`、`docs/adr/`、`## Agent skills` 块归 matt（其中 `CONTEXT.md`/ADR 由上游领域建模 skill **延迟创建**），本技能不代建，只落自己的章节与 `init.sh`；详见 `references/matt-coexistence.md`。
 
 `create-harness.mjs` 可检测常见的项目类型与包管理器。在基础验证命令层面支持 Node/npm/pnpm/yarn/bun、Python、Go、Rust、Maven、Gradle 和 .NET。
 
@@ -128,13 +133,14 @@ node ~/.agents/skills/harness-creator/scripts/scan-housekeeping.mjs --target /pa
 
 报告会给出得分最低的子系统——**并列最低时全部列出**，不会从并列里挑一个当成"瓶颈"：单点结论只在某个子系统确实弱于其余时才成立。最低分只是候选瓶颈，改动前先确认因果。
 
-`run-benchmark.mjs` 在此之上先跑一遍**工具链自检**：**17 项断言**（15 个独立检查 + 脚手架打分 + 双语打分），外加 eval 覆盖计分；任一项 FAIL 都会让脚本以退出码 1 结束。这些关卡守的是技能自己的不变量：
+`run-benchmark.mjs` 在此之上先跑一遍**工具链自检**：**18 项断言**（16 个独立检查 + 脚手架打分 + 双语打分），外加 eval 覆盖计分；任一项 FAIL 都会让脚本以退出码 1 结束。这些关卡守的是技能自己的不变量：
 
 | 关卡 | 守住什么 |
 |---|---|
 | 脚手架 + 双语打分 | 脚本端到端可跑；生成的骨架能过五子系统评分；英文 tracker 骨架与中文 registry 骨架同标准 |
 | 字节上限 | `SKILL.md` 不超基线 150%，按 **LF 归一化**计量——同一 commit 在 CRLF 检出上不该多算出每行 1 字节的余量 |
 | 生成物字节上限 | 技能 ship 进每个目标仓的**最大**产物是 `AGENTS.md`，它按渲染后的默认形态计量（字节 + 行数 + 工作规则条数）。在此之前它没有任何关卡，而审计对指令文件的检查**全是存在性检查**——长文本只会加分，所以激励梯度单向偏向"多写" |
+| 抽离层 | 生成器 ship `docs/agents/*.md` 并留路由；**评分器跟随路由**（自有分册的内容计入指令检查、上游同名文件不可充抵——差分成对断言）；断链（路由指向不存在的分册）与孤儿（无路由的分册）均被抓 |
 | 生成物不可发现内容 | 指令文件不得复述代理自己读得到的东西（目录树、技术栈、重述的安装/快速开始章节）；检测器另用一份**故意违规的样本**自证有牙，否则一条永远抓不到东西的检查和一个干净的模板无法区分 |
 | 产物护栏 | 生成物不含只在技能仓内才解析的技能仓相对路径；tracker 模式不吐 registry 状态文件；tracker 骨架得分不低于阈值 |
 | 模式闸门 | 无信号且未显式 `--mode` 时必须拒写（同时断言两条合法路径不被误伤） |

@@ -33,5 +33,10 @@
     "id": 7,
     "prompt": "我两套上游 skill 都装了（mattpocock/skills 和 addyosmani/agent-skills），想让你顺便把它们接进这个仓库的 harness。但我担心一件事：以后上游要是改了 skill 名，我仓库里生成好的 AGENTS.md 岂不是变成过期指令了？你怎么保证不出现这种情况？",
     "expected": "写进 AGENTS.md 的上游引用按角色说话（如「上游的审查 skill」），不写死具体 skill 名；清单与调用模式的唯一来源是 references/upstream-interlock.md，上游改名只改那一份、下游不动；只内化不变量、不复制上游正文"
+  },
+  {
+    "id": 8,
+    "prompt": "我的 AGENTS.md 越来越臃肿，规则、约定、例外全堆在一起，代理读半天抓不到重点。我想要它像路由表一样薄——只留必需的东西，详细内容按主题放到 docs/agents/ 下、需要时再读。帮我改造，并告诉我以后新增内容该放哪。",
+    "expected": "根文件薄内核化：保留启动工作流/工作规则/完成定义/验证命令/仓库结构/会话结束与蓝图一行，情境性详规抽到 docs/agents/tracking-policy.md 与 docs/agents/escalation.md 并各留一行含读取时机的路由；落层判据是「每次动作是否可能需要」；🔴 CHECKPOINT 展示 before/after diff；改造后跑 validate-harness.mjs 确认断链与孤儿均被检出"
   }
 ]

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { chmod, mkdir } from 'node:fs/promises';
+import { chmod, mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import {
   copyTemplate,
@@ -25,7 +25,15 @@ if (args.help) {
 Creates a minimal production harness:
   AGENTS.md or CLAUDE.md (an existing CLAUDE.md is kept and preferred)
   init.sh
+  docs/agents/tracking-policy.md + docs/agents/escalation.md — the extracted detail layer
   feature_list.json + progress.md — registry mode only
+
+The instruction file is deliberately a routing layer: it keeps the invariants and hot paths every
+action needs, and splits situation-specific detail into docs/agents/*.md, which it points at with a
+one-line "See ..." route. templates/agent-docs/*.md is the single source for that layer, and the
+scorer follows those files — extracting detail never scores as missing content. matt's setup owns
+three different names in the same directory (issue-tracker.md, domain.md, triage-labels.md); this
+script never writes or overwrites those.
 
 Tracker mode (--mode tracker, or auto-detected from docs/agents/*, CONTEXT.md or docs/adr/)
 skips the registry state files: state lives in the ticket system, so writing
@@ -201,6 +209,37 @@ const replacements = {
     : '待对齐——由 harness-creator 一次性询问后填入；此字样存在即表示尚未询问'
 };
 
+// The extracted detail layer ships as a directory read, not a literal list here: templates/agent-docs/*.md
+// is the single source for what "harness-owned docs/agents/" means, so adding a split-out topic is a
+// template change rather than a script change — and the scorer (lib/harness-utils.mjs) reads the same
+// directory, so the two cannot drift apart into "generated but not scored" or vice versa.
+//
+// matt's setup owns three names in the same directory. This refuses a collision loudly instead of
+// trusting that no template will ever take one: a silent overwrite of issue-tracker.md would put two
+// writers on one file, the exact drift references/matt-coexistence.md exists to prevent. The throw
+// surfaces during --dry-run too, so the preview fails rather than the real write.
+const UPSTREAM_OWNED_AGENT_DOCS = new Set(['issue-tracker.md', 'domain.md', 'triage-labels.md']);
+async function agentDocTemplates() {
+  let entries = [];
+  try {
+    entries = await readdir(path.join(TEMPLATE_DIR, 'agent-docs'), { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const names = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
+    if (UPSTREAM_OWNED_AGENT_DOCS.has(entry.name)) {
+      throw new Error(
+        `templates/agent-docs/${entry.name} collides with a file owned by matt's setup skill; `
+        + 'rename it so one path has exactly one writer (references/matt-coexistence.md).'
+      );
+    }
+    names.push(entry.name);
+  }
+  return names.sort();
+}
+
 const results = [];
 const agentPath = path.join(target, agentFile);
 const agentResult = await copyTemplate('agents.md', agentPath, replacements, { force, dryRun });
@@ -212,6 +251,18 @@ results.push(agentResult);
 const missingAgentSections = agentResult.status === 'skipped'
   ? diffSections(await readText(path.join(TEMPLATE_DIR, 'agents.md')), await readText(agentPath))
   : [];
+
+// The instruction file routes to these with "See docs/agents/<name>.md" lines; they are what makes
+// the file a routing layer instead of a manual. Same skip/--force contract as every other artifact:
+// an existing file is never rewritten without --force.
+for (const docName of await agentDocTemplates()) {
+  results.push(await copyTemplate(
+    path.join('agent-docs', docName),
+    path.join(target, 'docs/agents', docName),
+    replacements,
+    { force, dryRun }
+  ));
+}
 
 if (trackerMode) {
   for (const name of ['feature_list.json', 'progress.md']) {

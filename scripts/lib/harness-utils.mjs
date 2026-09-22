@@ -322,7 +322,15 @@ export function dedupe(values) {
 export function scoreHarness(files) {
   const byPath = new Map(files.map((file) => [file.path, file.content]));
   const allText = files.map((file) => `${file.path}\n${file.content}`).join('\n\n');
-  const agents = byPath.get('AGENTS.md') || byPath.get('CLAUDE.md') || '';
+  const instructionFile = byPath.get('AGENTS.md') || byPath.get('CLAUDE.md') || '';
+  // The instruction subsystem is two layers: the root file (routing + invariants) and the
+  // harness-owned docs/agents/*.md it routes to (situation-specific detail). Checks that ask
+  // "is X documented" read both — reading only the root file would score extraction as deletion,
+  // which is the incentive that made the file grow without bound in the first place. The two-way
+  // routing is asserted separately (the extraction check below), so this widening cannot be
+  // satisfied by an orphaned doc that no startup path ever reaches.
+  const instructionDocFiles = files.filter((file) => file.role === 'instruction-doc');
+  const agents = `${instructionFile}\n${instructionDocFiles.map((file) => file.content).join('\n')}`;
   const featureList = byPath.get('feature_list.json') || byPath.get('feature-list.json') || '';
   const progress = byPath.get('progress.md') || '';
   const init = byPath.get('init.sh') || '';
@@ -369,13 +377,36 @@ export function scoreHarness(files) {
     return structuredHas(contextDoc, ['## Language', '## Terms', '术语', 'glossary', 'domain', '领域'], '').pass;
   };
 
+  // Routing has to hold in both directions, or the split becomes a place detail disappears into: a
+  // "See docs/agents/x.md" route to a missing file is a dangling instruction (the agent is told to
+  // read something that is not there), and a doc nothing routes to is unreachable by construction.
+  // Dangling is checked across every docs/agents/*.md route — that includes matt's files, and a
+  // missing one is equally broken. Orphans are checked only on the harness-owned set: matt's files
+  // are created by their own skill and are not this skill's to require routes for.
+  const routedDocs = [...new Set(
+    [...instructionFile.matchAll(/docs\/agents\/([A-Za-z0-9._-]+\.md)/g)].map((match) => `docs/agents/${match[1]}`)
+  )];
+  const danglingRoutes = routedDocs.filter((route) => !byPath.has(route));
+  const orphanDocs = instructionDocFiles
+    .map((file) => file.path)
+    .filter((docPath) => !routedDocs.includes(docPath));
+  const extraction = {
+    pass: danglingRoutes.length === 0 && orphanDocs.length === 0,
+    danglingRoutes,
+    orphanDocs
+  };
+
   const checks = {
     instructions: [
       hasFile(byPath, ['AGENTS.md', 'CLAUDE.md'], 'Agent instruction file exists'),
       structuredHas(agents, ['Startup Workflow', 'Before writing code', '启动工作流', '编写代码前'], 'Startup workflow documented'),
       structuredHas(agents, ['Definition of Done', 'done only when', '完成定义'], 'Definition of done documented'),
       structuredHas(agents, ['Verification Commands', '验证命令', './init.sh', 'test', 'verify', '测试'], 'Verification commands discoverable'),
-      structuredHas(agents, ['feature_list.json', 'progress.md', 'CONTEXT.md', 'docs/agents/domain.md'], 'State artifacts routed from instructions')
+      structuredHas(agents, ['feature_list.json', 'progress.md', 'CONTEXT.md', 'docs/agents/domain.md'], 'State artifacts routed from instructions'),
+      {
+        pass: extraction.pass,
+        message: 'Instruction routing is well-formed (routed docs/agents files exist; harness docs are routed to)'
+      }
     ],
     state: [
       trackerMode
@@ -548,10 +579,34 @@ async function handoffCandidates(root) {
     .map((entry) => `.scratch/${entry.name}`);
 }
 
+// The extracted detail layer of the instruction subsystem: the root instruction file keeps routing
+// and invariants, and situation-specific detail lives in docs/agents/<name>.md, reached by a
+// one-line "See ..." route. The template directory — not a second list in code — is the single
+// source for that set, so a topic cannot be generated but unscored (which would penalise extraction)
+// or scored but never generated. matt's three names in the same directory are deliberately excluded:
+// they are upstream content and must not be able to satisfy harness instruction checks by themselves.
+export async function harnessAgentDocs() {
+  let entries = [];
+  try {
+    entries = await readdir(path.join(TEMPLATE_DIR, 'agent-docs'));
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((name) => name.endsWith('.md'))
+    .map((name) => `docs/agents/${name}`)
+    .sort();
+}
+
 export async function loadHarnessFiles(root) {
+  // The extracted instruction layer is loaded by name, so the scorer reads exactly what the
+  // generator ships, and tagged, so scoreHarness can tell harness-owned docs apart from matt's
+  // files in the same directory (which must never substitute for harness content).
+  const instructionDocs = await harnessAgentDocs();
   const candidates = [
     'AGENTS.md',
     'CLAUDE.md',
+    ...instructionDocs,
     'CONTEXT.md',
     'feature_list.json',
     'feature-list.json',
@@ -570,7 +625,9 @@ export async function loadHarnessFiles(root) {
   for (const candidate of candidates) {
     const fullPath = path.join(root, candidate);
     if (await exists(fullPath)) {
-      files.push({ path: candidate, content: await readText(fullPath) });
+      const entry = { path: candidate, content: await readText(fullPath) };
+      if (instructionDocs.includes(candidate)) entry.role = 'instruction-doc';
+      files.push(entry);
     }
   }
   // matt creates docs/adr/ lazily — it can exist while CONTEXT.md still does not — so an ADR
