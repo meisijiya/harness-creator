@@ -53,7 +53,7 @@ license: MIT
 | 1 | 创建 | 产物清单 + 确认的参数 → `AGENTS.md` + `init.sh` |
 | 2 | 审计 | 目标仓路径 → 三子系统得分 + 候选瓶颈 + 前 2-3 项改动 |
 | 3 | 报告 | 目标仓路径 + 输出路径 → `--html` 报告（需分享时才做，按需） |
-| 4 | 更新 | 目标仓路径 → 候选改动清单，获批后落地 |
+| 4 | 更新 | 目标仓路径 → 候选改动清单，🔴 获批后落地 |
 
 ### 创建 harness
 
@@ -61,7 +61,7 @@ license: MIT
 node <技能目录>/scripts/create-harness.mjs --target /path/to/project
 ```
 
-🔴 CHECKPOINT：先跑 `--dry-run`，把将创建/跳过的产物清单展示给用户，确认后再真正执行。
+🔴 CHECKPOINT：先跑 `--dry-run`，把将创建/跳过的清单展示给用户，**停下等回复**，获批后才真写。
 
 选项：`--agent-file CLAUDE.md`、`--package-manager npm|pnpm|yarn|bun`、`--commands "cmd one,cmd two"`、`--blueprint "一行蓝图"`；其余见 `--help`。`--force` 覆盖已存在文件——🔴 CHECKPOINT：使用前**必须**获批并列出被覆盖文件；含第三方块的文件一律不用。
 
