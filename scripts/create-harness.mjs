@@ -220,11 +220,22 @@ const replacements = {
 // surfaces during --dry-run too, so the preview fails rather than the real write.
 const UPSTREAM_OWNED_AGENT_DOCS = new Set(['issue-tracker.md', 'domain.md', 'triage-labels.md']);
 async function agentDocTemplates() {
-  let entries = [];
+  let entries;
   try {
     entries = await readdir(path.join(TEMPLATE_DIR, 'agent-docs'), { withFileTypes: true });
-  } catch {
-    return [];
+  } catch (error) {
+    // Unreadable is not the same as empty. The instruction file this run is about to write routes to
+    // docs/agents/*.md, so silently returning [] produced a harness whose startup workflow points at
+    // files that were never created — printed as "Created harness", exit 0, no warning, exactly the
+    // silent degradation this skill forbids elsewhere. An empty-but-readable directory is the
+    // legitimate case (a repo that keeps all detail inline) and still returns [] below. Failing
+    // loudly matches what the upstream-name collision just below already does, and because this runs
+    // before the real write it surfaces during --dry-run too.
+    throw new Error(
+      `Cannot read ${path.join(TEMPLATE_DIR, 'agent-docs')} (${error.code || error.message}): the `
+      + 'instruction file routes to docs/agents/*.md, so this install would ship a harness with '
+      + 'dangling routes and never report it. Restore templates/agent-docs/ before scaffolding.'
+    );
   }
   const names = [];
   for (const entry of entries) {
@@ -280,7 +291,7 @@ if (trackerMode) {
 const initPath = path.join(target, 'init.sh');
 if (force || !await exists(initPath)) {
   if (!dryRun) {
-    await writeText(initPath, initScriptFromCommands(commands));
+    await writeText(initPath, initScriptFromCommands(commands, { tracker: trackerMode }));
     await chmod(initPath, 0o755);
   }
   results.push({ path: initPath, status: 'written' });

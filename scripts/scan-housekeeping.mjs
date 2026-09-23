@@ -259,13 +259,27 @@ if (instructionFile.name) {
       return { heading: heading.trim(), bytes: Buffer.byteLength(rest.join('\n'), 'utf8') };
     })
     .sort((a, b) => b.bytes - a.bytes);
-  const exemptTable = text.split(/^###\s+/m).slice(1).find((part) => part.startsWith('放行豁免清单'));
-  if (exemptTable) {
+  // 豁免表住在「指令」子系统里，而模板把它放进分册（docs/agents/tracking-policy.md，`##`），
+  // 根文件只留一行路由。此前只从根文件里按 `^###` 找表，于是真实产物里永远找不到它——
+  // 自检夹具手写的 `### 放行豁免清单` 进 AGENTS.md 是生成器从不产出的布局，关卡绿着却从未
+  // 走过真实渲染路径。故：按题名在根文件与它路由到的分册里都找一遍，标题层级两档都认
+  // （分册用 `##`；用户把表手工合并回根文件时是 `###`）。
+  const exemptSources = [text];
+  for (const route of new Set(text.match(/docs\/agents\/[\w.-]+\.md/g) || [])) {
+    if (await exists(path.join(target, route))) {
+      exemptSources.push((await readText(path.join(target, route))).replace(/\r\n/g, '\n'));
+    }
+  }
+  for (const source of exemptSources) {
+    const exemptTable = source.split(/^#{2,3}\s+/m).slice(1).find((part) => part.startsWith('放行豁免清单'));
+    if (!exemptTable) continue;
     for (const row of exemptTable.split('\n').filter((item) => item.trim().startsWith('|'))) {
       const cell = (row.split('|')[1] || '').trim().replace(/`/g, '');
       // 跳过表头、分隔行与空占位行（模板的空表用 `_（暂无）_`，全角括号），只判真实登记。
       if (!cell || cell === '路径' || /^-+$/.test(cell) || cell.startsWith('_')) continue;
-      if (!await exists(path.join(target, cell))) instructionFile.danglingExemptions.push(cell);
+      if (!await exists(path.join(target, cell)) && !instructionFile.danglingExemptions.includes(cell)) {
+        instructionFile.danglingExemptions.push(cell);
+      }
     }
   }
   // 项目文档层：启动工作流里的长期文档按模板格式逐条登记（`路径`（owner: 角色））。只判「列出来的」

@@ -19,6 +19,7 @@ import {
   renderVerificationStep,
   scoreHarness,
   scriptCommand,
+  verificationCommands,
   writeText
 } from './lib/harness-utils.mjs';
 
@@ -69,6 +70,42 @@ const DISCOVERABLE_CONTENT = [
   { name: 'directory listing heading', pattern: /^#{2,3}\s*(目录结构|项目结构|directory structure|project structure)\s*$/im },
   { name: 'install or quickstart section', pattern: /^#{2,3}\s*(安装|installation|快速开始|quick ?start)\s*$/im }
 ];
+
+// Every self-check group has to satisfy three things at once: it gets computed, it joins the pass
+// conjunction, and it reaches the shareable HTML report. This list is the single source for all
+// three, because the failure worth designing out is the fourth possibility — a gate that is added
+// to the console and nowhere else. The report said as much already ("a check whose result never
+// reaches the artifact people actually read is half a carrier"), and seven groups had drifted out
+// of it. Declared here, ahead of the runSelfCheck() call site, for the temporal-dead-zone reason
+// recorded above: a const sitting next to the function that reads it is still in its TDZ there.
+const SELF_CHECK_GROUPS = [
+  'budget', 'agentsBudget', 'agentsDiscover', 'extraction', 'tracker', 'gate', 'dryRun',
+  'selfRefs', 'bottleneckTies', 'blankGate', 'handoff', 'blueprint', 'entries', 'agentFile',
+  'housekeeping', 'modeReport'
+];
+
+// One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
+// equal in both directions, so a group without a line (console-only) and a line without a group
+// (prose nothing backs) both fail instead of shipping. Each builder gets the group object and must
+// return '' for a missing group.
+const SELF_CHECK_REPORT_LINES = new Map([
+  ['budget', (group) => ` SKILL.md sits at ${group.size}/${group.max} bytes (${group.pass ? 'within' : 'OVER'} budget).`],
+  ['agentsBudget', (group) => ` The generated AGENTS.md stays inside its byte, line and working-rule budgets (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['agentsDiscover', (group) => ` The instruction file does not restate what the agent can read for itself, and the detector is proven to have teeth by a seeded violation (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['extraction', (group) => ` The split-out instruction layer is scaffolded and routed, the scorer follows those routes, and a dangling route or an orphan doc is caught (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['tracker', (group) => ` A tracker-mode scaffold keeps no registry state and its init.sh routes to the ticket system rather than to files that mode skips (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['gate', (group) => ` A signal-free repo with no explicit --mode refuses to write, while both legitimate paths still pass (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['dryRun', (group) => ` --dry-run writes nothing, reports the target's real state, and its plan matches the live run entry for entry (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
+  ['bottleneckTies', (group) => ` The bottleneck line names ${group.tieCount} tied subsystem(s) as a tie instead of picking one (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['blankGate', (group) => ` A project with nothing to verify — no manifest, or a manifest with no runnable script — gets a placeholder step that exits non-zero instead of reporting a pass it did not earn (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['handoff', (group) => ` A handoff doc under .scratch/ is recognised regardless of filename, while one outside the landing points is ignored (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['blueprint', (group) => ` The project-blueprint slot stays a visible pending marker when the user has not stated one, rather than being filled from the detected stack (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['entries', (group) => ` A freshly scaffolded registry ships no project-shaped feature entries, and states the alignment rule before any entry may be added (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['housekeeping', (group) => ` The housekeeping scanner changes nothing, refuses to call uncommitted history stale without a --session-ref (and still marks history when given one), suppresses pruning during wrap-up, and never prunes a done-without-evidence entry (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['modeReport', (group) => ` The housekeeping scanner reads .scratch/ as work in progress rather than as a tracker signal, while a real tracker signal is still detected (${group.pass ? 'verified' : 'FAILED'}).`]
+]);
 
 // Declared at module scope, ahead of the runSelfCheck() call: a const sitting next to the function
 // that reads it would still be in its temporal dead zone at that call site.
@@ -185,7 +222,10 @@ Runs a lightweight harness benchmark:
      follows those routes (a harness-owned doc counts; the same content under an upstream-owned
      name does not), a dangling route is caught, and an orphan doc is caught.
   8. Scores a tracker-mode scaffold and checks its emitted-artifact invariants: no skill-repo-relative
-     path reaches a target repo, and no registry state file is emitted.
+     path reaches a target repo, no registry state file is emitted, and — the leak a file-name check
+     cannot see — the generated init.sh routes to the ticket system instead of naming the two state
+     files this mode skips. A registry scaffold is checked in the same run so "delete the block"
+     cannot pass.
   9. Checks the mode gate: a signal-free target given no explicit --mode must refuse to write (exit 1,
      zero files), while an explicit --mode or a detected signal must still scaffold.
  10. Checks --dry-run: it must change nothing, plan real artifacts rather than recite a template
@@ -194,8 +234,10 @@ Runs a lightweight harness benchmark:
      resolves from the skill directory (the agent's cwd is the target repo).
  12. Checks the bottleneck headline: a tie must name every tied subsystem, a unique minimum must
      name one, and a complete harness must report none.
- 13. Checks the blank-project gate: the placeholder verification step must exit non-zero, while a
-     real command must still run — a gate that cannot fail is not a gate.
+ 13. Checks the blank-project gate: the placeholder verification step must exit non-zero, a real
+     command must still run, and — asserted through the real generator, not a hand-written string —
+     a manifest that defines no check/typecheck/lint/test/build also refuses instead of exiting 0
+     having verified nothing. A gate that cannot fail is not a gate.
  14. Checks handoff recognition: a doc under .scratch/ is recognised by what it is, not by one
      filename, while a doc outside the landing points is ignored.
  15. Checks the blueprint slot: omitting --blueprint must leave a visible pending marker rather
@@ -208,12 +250,17 @@ Runs a lightweight harness benchmark:
  18. Checks the housekeeping scanner: it must change nothing, must not treat history as prunable
      when no --session-ref is given, must still mark history when one is, must never prune a
      done-without-evidence entry, and must report the instruction file's own health — ranked
-     sections, dangling exemption rows, unfilled placeholders — without editing it.
+     sections, unfilled placeholders — without editing it. Dangling exemption rows are read from the
+     split-out doc the generator actually writes AND from an inline table in the root file, because
+     reading only one of the two is how this stayed green over a shape no real harness has.
  19. Checks the housekeeping scanner's mode report against the authoritative detector: `.scratch/`
      must not count as a tracker signal, feature_list.json must win over a signal, and a real
      tracker signal — including the AGENTS.md vocabulary of the lazily-created window — must still
      be detected. A detector that only ever answers "registry" must not pass.
- 20. Produces a JSON report and optional HTML report.
+ 20. Checks the self-check's own coverage: every group in SELF_CHECK_GROUPS must have a bound check,
+     a place in the pass conjunction, and a line in the shareable HTML report. A gate that only ever
+     prints is half a carrier, and seven groups had drifted into exactly that.
+ 21. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -258,8 +305,8 @@ if (!selfCheck.skipped) {
     console.log(`  Instruction extraction: ${pass ? 'PASS' : 'FAIL'} — ${docCount ?? 0} doc(s) scaffolded and routed: ${scaffolded ? 'ok' : 'NO'}; scorer follows routes: ${followsRoutes ? 'ok' : 'NO'}; upstream doc cannot substitute: ${upstreamNotCounted ? 'ok' : 'NO'}; clean split passes: ${sanePasses ? 'ok' : 'NO'}; dangling route caught: ${danglingCaught ? 'ok' : 'NO'}; orphan doc caught: ${orphanCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.tracker) {
-    const { pass, score, offenders = [], leakedState = [], error } = selfCheck.tracker;
-    console.log(`  Tracker scaffold: ${pass ? 'PASS' : 'FAIL'} — scored ${score}/100${offenders.length ? ` — skill-relative path in ${offenders.join(', ')}` : ''}${leakedState.length ? ` — registry state leaked into tracker mode: ${leakedState.join(', ')}` : ''}${error ? ` — ${error}` : ''}`);
+    const { pass, score, offenders = [], leakedState = [], trackerNamesNoRegistry, registryNamesItsState, error } = selfCheck.tracker;
+    console.log(`  Tracker scaffold: ${pass ? 'PASS' : 'FAIL'} — scored ${score}/100; tracker init.sh routes to its own state, not the registry files: ${trackerNamesNoRegistry ? 'ok' : 'NO'}; registry init.sh still routes to its own state: ${registryNamesItsState ? 'ok' : 'NO'}${offenders.length ? ` — skill-relative path in ${offenders.join(', ')}` : ''}${leakedState.length ? ` — registry state leaked into tracker mode: ${leakedState.join(', ')}` : ''}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.gate) {
     const { pass, refused, explicitOk, signalOk, wrote = [], error } = selfCheck.gate;
@@ -278,8 +325,8 @@ if (!selfCheck.skipped) {
     console.log(`  Bottleneck ties: ${pass ? 'PASS' : 'FAIL'} — 5-way tie names all 5: ${tieCount === 5 ? 'ok' : `NO (${tieCount})`}; unique minimum names one: ${uniqueCount === 1 ? 'ok' : `NO (${uniqueCount})`}; complete harness reports none: ${noneCount === 0 ? 'ok' : `NO (${noneCount})`} — ${tieLabel}`);
   }
   if (selfCheck.blankGate) {
-    const { pass, placeholderFails, realRuns } = selfCheck.blankGate;
-    console.log(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}`);
+    const { pass, placeholderFails, realRuns, scriptlessRefuses, withTestRuns } = selfCheck.blankGate;
+    console.log(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}; a manifest with no runnable script refuses too: ${scriptlessRefuses ? 'ok' : 'NO'}; a manifest with a real script still runs: ${withTestRuns ? 'ok' : 'NO'}`);
   }
   if (selfCheck.handoff) {
     const { pass, recognized, strayIgnored, error } = selfCheck.handoff;
@@ -299,13 +346,18 @@ if (!selfCheck.skipped) {
   }
   if (selfCheck.housekeeping) {
     const { pass, readOnly, noRefMeansUnverified, refMarksHistory, pruneActive, pruneSuppressed, noEvidenceNeverPruned, porcelainPathIntact, instructionReported, danglingExemptionReported, placeholderReported, docEntryReported, error } = selfCheck.housekeeping;
-    console.log(`  Housekeeping safety: ${pass ? 'PASS' : 'FAIL'} — scan changes nothing: ${readOnly ? 'ok' : 'NO'}; no --session-ref means unverified, not stale: ${noRefMeansUnverified ? 'ok' : 'NO'}; a ref still marks history: ${refMarksHistory ? 'ok' : 'NO'}; housekeeping still emits prune candidates: ${pruneActive ? 'ok' : 'NO'}; wrap-up suppresses prune: ${pruneSuppressed ? 'ok' : 'NO'}; done-without-evidence never pruned: ${noEvidenceNeverPruned ? 'ok' : 'NO'}; porcelain path keeps its first character: ${porcelainPathIntact ? 'ok' : 'NO'}; instruction file reported with ranked sections: ${instructionReported ? 'ok' : 'NO'}; dangling exemption row named, live one left alone: ${danglingExemptionReported ? 'ok' : 'NO'}; unfilled placeholder surfaced: ${placeholderReported ? 'ok' : 'NO'}; document entry: unowned + dangling named, compliant ones left alone: ${docEntryReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+    console.log(`  Housekeeping safety: ${pass ? 'PASS' : 'FAIL'} — scan changes nothing: ${readOnly ? 'ok' : 'NO'}; no --session-ref means unverified, not stale: ${noRefMeansUnverified ? 'ok' : 'NO'}; a ref still marks history: ${refMarksHistory ? 'ok' : 'NO'}; housekeeping still emits prune candidates: ${pruneActive ? 'ok' : 'NO'}; wrap-up suppresses prune: ${pruneSuppressed ? 'ok' : 'NO'}; done-without-evidence never pruned: ${noEvidenceNeverPruned ? 'ok' : 'NO'}; porcelain path keeps its first character: ${porcelainPathIntact ? 'ok' : 'NO'}; instruction file reported with ranked sections: ${instructionReported ? 'ok' : 'NO'}; dangling exemption rows named in both layouts (split-out doc + inline), live one left alone: ${danglingExemptionReported ? 'ok' : 'NO'}; unfilled placeholder surfaced: ${placeholderReported ? 'ok' : 'NO'}; document entry: unowned + dangling named, compliant ones left alone: ${docEntryReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.modeReport) {
     const { pass, scratchIsNotSignal, trackerDetected, registryWins, windowCaseDetected, error } = selfCheck.modeReport;
     console.log(`  Housekeeping mode report: ${pass ? 'PASS' : 'FAIL'} — .scratch/ is not a tracker signal: ${scratchIsNotSignal ? 'ok' : 'NO'}; a real tracker signal is still detected: ${trackerDetected ? 'ok' : 'NO'}; feature_list.json wins over a signal: ${registryWins ? 'ok' : 'NO'}; tracker vocabulary in the setup window detected: ${windowCaseDetected ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.reportCoverage) {
+    const { pass, unbound = [], missingLines = [], orphanLines = [] } = selfCheck.reportCoverage;
+    console.log(`  Report coverage: ${pass ? 'PASS' : 'FAIL'} — every self-check group is bound, gated and reported: ${pass ? 'ok' : `NO (unbound: ${unbound.join(', ') || 'none'}; missing report line: ${missingLines.join(', ') || 'none'}; orphan line: ${orphanLines.join(', ') || 'none'})`}`);
+  }
   if (!selfCheck.pass && selfCheck.error) console.log(`  ${selfCheck.error}`);
+  if (selfCheck.failedGroups?.length) console.log(`  Failing self-check group(s): ${selfCheck.failedGroups.join(', ')}`);
 }
 console.log(formatScoreReport(harnessResult, target));
 console.log(`Eval coverage: ${evalResult.score}/100 (${evalResult.passed}/${evalResult.total})`);
@@ -349,48 +401,63 @@ async function runSelfCheck() {
     await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir, '--mode', 'registry']);
     const scored = scoreHarness(await loadHarnessFiles(dir));
     const english = await scoreEnglishTrackerFixture(dir);
-    const budget = await checkSkillBudget();
-    const agentsBudget = await checkAgentFileBudget();
-    const agentsDiscover = await checkAgentFileDiscoverability();
-    const extraction = await checkExtractionLayer();
     const minScore = Number(args.minSelfCheckScore || 90);
-    const tracker = await checkTrackerScaffold(minScore);
-    const gate = await checkModeGate();
-    const dryRun = await checkDryRun();
-    const selfRefs = await checkSelfReferencePaths();
-    const bottleneckTies = await checkBottleneckTies();
-    const blankGate = await checkBlankProjectGate();
-    const handoff = await checkHandoffRecognition();
-    const blueprint = await checkBlueprintSlot();
-    const entries = await checkEntryTemplateRestraint();
-    const agentFile = await checkAgentFileInvariant();
-    const housekeeping = await checkHousekeepingSafety();
-    const modeReport = await checkHousekeepingMode();
+    // Driven by SELF_CHECK_GROUPS rather than a hand-written conjunction: the previous version listed
+    // each group three times (call, conjunction, return object), so a new group could be computed and
+    // printed while never joining the pass — a gate that reports and gates nothing. Lazy entries
+    // because checkTrackerScaffold needs minScore.
+    const groupChecks = {
+      budget: () => checkSkillBudget(),
+      agentsBudget: () => checkAgentFileBudget(),
+      agentsDiscover: () => checkAgentFileDiscoverability(),
+      extraction: () => checkExtractionLayer(),
+      tracker: () => checkTrackerScaffold(minScore),
+      gate: () => checkModeGate(),
+      dryRun: () => checkDryRun(),
+      selfRefs: () => checkSelfReferencePaths(),
+      bottleneckTies: () => checkBottleneckTies(),
+      blankGate: () => checkBlankProjectGate(),
+      handoff: () => checkHandoffRecognition(),
+      blueprint: () => checkBlueprintSlot(),
+      entries: () => checkEntryTemplateRestraint(),
+      agentFile: () => checkAgentFileInvariant(),
+      housekeeping: () => checkHousekeepingSafety(),
+      modeReport: () => checkHousekeepingMode()
+    };
+    const groups = {};
+    for (const key of SELF_CHECK_GROUPS) groups[key] = await groupChecks[key]();
+    // Three ways the list can drift, all of them silent before: a group with no bound check (called
+    // and crashed, or skipped), a group with no report line (console-only), and a report line for a
+    // group that no longer exists (prose nothing backs). Each is named so a counter-example points
+    // at the entry that broke.
+    const unbound = SELF_CHECK_GROUPS.filter((key) => typeof groupChecks[key] !== 'function');
+    const missingLines = SELF_CHECK_GROUPS.filter((key) => !SELF_CHECK_REPORT_LINES.has(key));
+    const orphanLines = [...SELF_CHECK_REPORT_LINES.keys()].filter((key) => !SELF_CHECK_GROUPS.includes(key));
+    const reportCoverage = {
+      pass: unbound.length === 0 && missingLines.length === 0 && orphanLines.length === 0,
+      unbound,
+      missingLines,
+      orphanLines
+    };
+    const failedGroups = SELF_CHECK_GROUPS.filter((key) => !groups[key]?.pass);
     return {
-      pass: scored.overall >= minScore && english.overall >= minScore && budget.pass && agentsBudget.pass && agentsDiscover.pass && extraction.pass && tracker.pass && gate.pass && dryRun.pass && selfRefs.pass && bottleneckTies.pass && blankGate.pass && handoff.pass && blueprint.pass && entries.pass && agentFile.pass && housekeeping.pass && modeReport.pass,
+      pass: scored.overall >= minScore && english.overall >= minScore && reportCoverage.pass && failedGroups.length === 0,
+      failedGroups,
+      reportCoverage,
       score: scored.overall,
       englishScore: english.overall,
-      budget,
-      agentsBudget,
-      agentsDiscover,
-      extraction,
-      tracker,
-      gate,
-      dryRun,
-      selfRefs,
-      bottleneckTies,
-      blankGate,
-      handoff,
-      blueprint,
-      entries,
-      agentFile,
-      housekeeping,
-      modeReport,
+      ...groups,
       bottleneck: scored.bottleneck ?? english.bottleneck,
       bottlenecks: scored.bottlenecks.length ? scored.bottlenecks : english.bottlenecks
     };
   } catch (error) {
-    return { pass: false, score: 0, error: error.message };
+    return {
+      pass: false,
+      score: 0,
+      failedGroups: [...SELF_CHECK_GROUPS],
+      reportCoverage: { pass: false, unbound: [], missingLines: [], orphanLines: [] },
+      error: error.message
+    };
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
   }
@@ -608,16 +675,48 @@ async function checkTrackerScaffold(minScore) {
   let dir;
   try {
     dir = await mkdtemp(path.join(os.tmpdir(), 'harness-tracker-'));
-    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir, '--mode', 'tracker']);
-    const emitted = await loadHarnessFiles(dir);
+    const trackerDir = path.join(dir, 'tracker');
+    const registryDir = path.join(dir, 'registry');
+    await mkdir(trackerDir, { recursive: true });
+    await mkdir(registryDir, { recursive: true });
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', trackerDir, '--mode', 'tracker']);
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', registryDir, '--mode', 'registry']);
+    const emitted = await loadHarnessFiles(trackerDir);
     const offenders = emitted.filter(({ content }) => SKILL_RELATIVE_PATH.test(content)).map(({ path: file }) => file);
     const leakedState = emitted
       .map(({ path: file }) => file)
       .filter((file) => ['feature_list.json', 'feature-list.json', 'progress.md'].includes(file));
+    // The artifact list was clean while the contents were not: init.sh still told the agent to read
+    // the two files that same run had reported as SKIPPED, so every tracker repo shipped a startup
+    // script pointing at files that do not exist. The guard reads the startup script's own text
+    // instead of the file list, because that is where the leak lived. AGENTS.md and
+    // tracking-policy.md name the registry artifacts on purpose — they draw the mode boundary — so
+    // the guard is scoped to the one file whose entire job is telling the agent what to do first.
+    const nextStepsOf = async (target) => (await readText(path.join(target, 'init.sh'))).split(/Next steps:/)[1] || '';
+    const namesRegistryArtifacts = (text) => /feature_list\.json|progress\.md/.test(text);
+    const trackerNamesNoRegistry = !namesRegistryArtifacts(await nextStepsOf(trackerDir));
+    // The other direction: registry mode must still route to its own state, so "delete the whole
+    // next-steps block" cannot pass this guard.
+    const registryNamesItsState = namesRegistryArtifacts(await nextStepsOf(registryDir));
     const score = scoreHarness(emitted).overall;
-    return { pass: offenders.length === 0 && leakedState.length === 0 && score >= minScore, score, offenders, leakedState };
+    return {
+      pass: offenders.length === 0 && leakedState.length === 0 && trackerNamesNoRegistry && registryNamesItsState && score >= minScore,
+      score,
+      offenders,
+      leakedState,
+      trackerNamesNoRegistry,
+      registryNamesItsState
+    };
   } catch (error) {
-    return { pass: false, score: 0, offenders: [], leakedState: [], error: error.message };
+    return {
+      pass: false,
+      score: 0,
+      offenders: [],
+      leakedState: [],
+      trackerNamesNoRegistry: false,
+      registryNamesItsState: false,
+      error: error.message
+    };
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
   }
@@ -783,7 +882,15 @@ function scoreEvals(evalsJson) {
     ['Covers session wrap-up', /收尾|wrap.?up/i],
     ['Covers task advancement', /任务推进|advancement|条目即工单/i],
     ['Covers the post-handoff boundary', /交接/i],
-    ['Covers upstream maintenance', /上游变更|upstream/i]
+    ['Covers upstream maintenance', /上游变更|upstream/i],
+    // The three families below close coverage for defects found by auditing the scripts rather than
+    // the prose — the blank-project gate's second arm, the content-level state leak in a tracker
+    // startup script, and the exemption table read from where the generator actually puts it. Each
+    // was a reproduced defect that no case exercised, which is how it survived with the headline
+    // reading 100%.
+    ['Covers the gate that refuses when nothing can run', /无可跑脚本|必须失败/i],
+    ['Covers mode-aware startup state routing', /不指向被跳过|状态文件/i],
+    ['Covers the exemption table in its real location', /豁免表|exemption/i]
   ];
   for (const [message, pattern] of familyEntries) {
     checks.push({ pass: cases.some((item) => pattern.test(item.name)), message });
@@ -865,10 +972,29 @@ async function checkBlankProjectGate() {
   const placeholderFails = /\bexit 1\b/.test(blank) && !/^\s*go test/m.test(blank);
   // The real command must render as something that runs, not as the refusal branch.
   const realRuns = !/\bexit 1\b/.test(real) && real.includes('go test ./...');
+  // The no-manifest branch above was only half the trap. A repo that HAS a manifest but defines
+  // none of check/typecheck/lint/test/build left the install as the only step, so ./init.sh ran,
+  // printed "Verification Complete" and exited 0 having verified nothing — and the audit scored
+  // that repo 100/100 with "Verification fails fast" PASS, since its checks are existence checks.
+  // Asserted through the real generator with the real project shape: handing renderVerificationStep
+  // a hand-written sentence would only prove this probe's copy of the string is right.
+  const scriptless = verificationCommands({ stack: 'node', packageJson: { scripts: {} }, packageManager: 'npm' }, 'npm');
+  const scriptlessRefuses = scriptless.length > 1
+    && scriptless.slice(1).some((command) => /\bexit 1\b/.test(renderVerificationStep(command)));
+  // The other direction: one real script must still yield a runnable gate, not a refusal. Without
+  // this arm "always emit the placeholder" would pass, which is the failure mode of a gate that
+  // refuses everything.
+  const withTest = verificationCommands({ stack: 'node', packageJson: { scripts: { test: 'jest' } }, packageManager: 'npm' }, 'npm');
+  const withTestRuns = withTest.some((command) => {
+    const rendered = renderVerificationStep(command);
+    return !/\bexit 1\b/.test(rendered) && rendered.includes('npm test');
+  });
   return {
-    pass: placeholderFails && realRuns,
+    pass: placeholderFails && realRuns && scriptlessRefuses && withTestRuns,
     placeholderFails,
-    realRuns
+    realRuns,
+    scriptlessRefuses,
+    withTestRuns
   };
 }
 
@@ -1056,8 +1182,25 @@ async function checkHousekeepingSafety() {
     // same treatment: a compliant entry that exists, one missing its owner annotation, and one whose
     // path is gone — flagging every entry and flagging none must both fail.
     await mkdir(path.join(dir, 'teach-notes'), { recursive: true });
-    await mkdir(path.join(dir, 'docs'), { recursive: true });
+    await mkdir(path.join(dir, 'docs', 'agents'), { recursive: true });
     await writeText(path.join(dir, 'docs', 'live-doc.md'), '# Live doc\n');
+    // The exemption table is written where the generator actually puts it: the root file keeps a
+    // routing line and the table itself lives in the split-out doc under docs/agents/. This fixture
+    // used to inline it as `### 放行豁免清单` in AGENTS.md — a layout create-harness.mjs never
+    // produces — so the check stayed green while reading a shape no real harness has, and every
+    // generated repo went unscanned. The inline table is kept too, because that is what a
+    // hand-merged repo looks like; both rows must be found or the check silently lost a path again.
+    await writeText(path.join(dir, 'docs', 'agents', 'tracking-policy.md'), [
+      '# 产物追踪策略（分册）',
+      '',
+      '## 放行豁免清单（由产出 skill 自治理）',
+      '',
+      '| 路径 | 产出 skill | owner | 性质 / 生命周期 | 用户裁决 | 追踪状态 | 复审触发 |',
+      '|---|---|---|---|---|---|---|',
+      '| `teach-notes/` | teach | 使用方 | 教学状态 | 原样保留 | ignored | 用户改主意时 |',
+      '| `gone-workspace/` | teach | 使用方 | 教学状态 | 原样保留 | ignored | 用户改主意时 |',
+      ''
+    ].join('\n'));
     await writeText(path.join(dir, 'AGENTS.md'), [
       '# AGENTS.md',
       '',
@@ -1083,12 +1226,13 @@ async function checkHousekeepingSafety() {
       '',
       '- 当前结论：待对齐',
       '',
+      '裁决规则、豁免清单与只读探测命令见 `docs/agents/tracking-policy.md`——只在遇到产物落点归属或追踪裁决问题时读。',
+      '',
       '### 放行豁免清单（由产出 skill 自治理）',
       '',
       '| 路径 | 产出 skill | owner | 性质 / 生命周期 | 用户裁决 | 追踪状态 | 复审触发 |',
       '|---|---|---|---|---|---|---|',
-      '| `teach-notes/` | teach | 使用方 | 教学状态 | 原样保留 | ignored | 用户改主意时 |',
-      '| `gone-workspace/` | teach | 使用方 | 教学状态 | 原样保留 | ignored | 用户改主意时 |',
+      '| `inline-gone/` | teach | 使用方 | 教学状态 | 原样保留 | ignored | 用户改主意时 |',
       ''
     ].join('\n'));
     const git = (rest) => execFileAsync('git', rest, { cwd: dir });
@@ -1179,10 +1323,14 @@ async function checkHousekeepingSafety() {
       && sections.length === 4
       && sections.every((item, index) => index === 0 || sections[index - 1].bytes >= item.bytes)
       && instruction.ruleCount === 2;
-    // The row is reported as written (path cell minus its backticks), so the assertion uses the
-    // verbatim form rather than a normalised one.
-    const danglingExemptionReported = (instruction.danglingExemptions || []).includes('gone-workspace/')
-      && !(instruction.danglingExemptions || []).includes('teach-notes/');
+    // The rows are reported as written (path cell minus its backticks), so the assertion uses the
+    // verbatim form rather than a normalised one. Both layouts must be read — the split-out doc the
+    // generator actually writes, and an inline table a hand-merged repo has — while the live row in
+    // the split-out doc is left alone. Reading only one of the two is the regression that kept this
+    // green for as long as it was.
+    const danglingExemptions = instruction.danglingExemptions || [];
+    const danglingExemptionReported = ['gone-workspace/', 'inline-gone/'].every((row) => danglingExemptions.includes(row))
+      && !danglingExemptions.includes('teach-notes/');
     const placeholderReported = (instruction.placeholders || []).includes('待对齐');
     // The document-entry list under 启动工作流: an existing entry must carry an owner annotation, an
     // annotated entry must really exist, and the compliant entry must escape both lists. Naming the
@@ -1320,50 +1468,27 @@ function recommend(harnessResult, evalResult) {  if (harnessResult.overall >= 85
 }
 
 function renderBenchmarkHtml(report) {
-  const budgetLine = report.selfCheck?.budget
-    ? ` SKILL.md sits at ${report.selfCheck.budget.size}/${report.selfCheck.budget.max} bytes (${report.selfCheck.budget.pass ? 'within' : 'OVER'} budget).`
-    : '';
-  // The new stage has to surface in the shareable report too. A check whose result never reaches
-  // the artifact people actually read is half a carrier: the gate would pass in the console and
-  // be invisible where the round gets reviewed later.
-  const selfRefLine = report.selfCheck?.selfRefs
-    ? ` ${report.selfCheck.selfRefs.checked} shipped file(s) checked for command reachability from a target repo (${report.selfCheck.selfRefs.pass ? 'all runnable' : `relative self-reference in ${(report.selfCheck.selfRefs.offenders || []).join(', ')}`}).`
-    : '';
-  // Same reasoning as the self-reference line above: the tie guard decides what the audit's
-  // headline is allowed to claim, so its own result belongs in the artifact people review later.
-  const bottleneckTieLine = report.selfCheck?.bottleneckTies
-    ? ` The bottleneck line names ${report.selfCheck.bottleneckTies.tieCount} tied subsystem(s) as a tie instead of picking one (${report.selfCheck.bottleneckTies.pass ? 'verified' : 'FAILED'}).`
-    : '';
-  const blankGateLine = report.selfCheck?.blankGate
-    ? ` On a project with no detectable stack, the placeholder verification step exits non-zero rather than reporting a pass it did not earn (${report.selfCheck.blankGate.pass ? 'verified' : 'FAILED'}).`
-    : '';
-  const handoffLine = report.selfCheck?.handoff
-    ? ` A handoff doc under .scratch/ is recognised regardless of filename, while one outside the landing points is ignored (${report.selfCheck.handoff.pass ? 'verified' : 'FAILED'}).`
-    : '';
-  // The blueprint slot decides whether AGENTS.md can claim project facts nobody supplied, so its
-  // result belongs in the artifact people actually review — same reasoning as the lines above.
-  const blueprintLine = report.selfCheck?.blueprint
-    ? ` The project-blueprint slot stays a visible pending marker when the user has not stated one, rather than being filled from the detected stack (${report.selfCheck.blueprint.pass ? 'verified' : 'FAILED'}).`
-    : '';
-  // The entry template decides what a fresh harness already claims, so its restraint is reported too.
-  const entryLine = report.selfCheck?.entries
-    ? ` A freshly scaffolded registry ships no project-shaped feature entries, and states the alignment rule before any entry may be added (${report.selfCheck.entries.pass ? 'verified' : 'FAILED'}).`
-    : '';
-  // The instruction-file invariant decides whether a repo ends up with two contradictory routing
-  // tables, so it is surfaced alongside the other shipped-behaviour checks.
-  const agentFileLine = report.selfCheck?.agentFile
-    ? ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${report.selfCheck.agentFile.pass ? 'verified' : 'FAILED'}).`
-    : '';
-  // The scanner is the only component with deletion in mind, and its guardrails are invisible in
-  // any ordinary run — a regression would look like a normal scan until something was pruned.
-  const housekeepingLine = report.selfCheck?.housekeeping
-    ? ` The housekeeping scanner changes nothing, refuses to call uncommitted history stale without a --session-ref (and still marks history when given one), suppresses pruning during wrap-up, and never prunes a done-without-evidence entry (${report.selfCheck.housekeeping.pass ? 'verified' : 'FAILED'}).`
+  // Built from SELF_CHECK_REPORT_LINES rather than one hand-written line per gate. Nine of the
+  // sixteen groups had drifted out of this report while the comment below kept promising they were
+  // here — extraction, tracker, the mode gate, --dry-run, the two generated-file budgets and the
+  // scanner's mode reading were console-only, so the artifact a round is reviewed from said nothing
+  // about them. Generating the lines from the same list the pass conjunction uses means a new gate
+  // cannot be half-carried again.
+  const selfCheckLines = SELF_CHECK_GROUPS
+    .map((key) => {
+      const group = report.selfCheck?.[key];
+      const build = SELF_CHECK_REPORT_LINES.get(key);
+      return group && build ? build(group) : '';
+    })
+    .join('');
+  const coverageLine = report.selfCheck?.reportCoverage
+    ? ` Every self-check group is bound, gated and reported (${report.selfCheck.reportCoverage.pass ? 'verified' : `FAILED — unbound: ${report.selfCheck.reportCoverage.unbound.join(', ') || 'none'}; missing report line: ${report.selfCheck.reportCoverage.missingLines.join(', ') || 'none'}; orphan line: ${report.selfCheck.reportCoverage.orphanLines.join(', ') || 'none'}`}).`
     : '';
   const selfCheckSection = report.selfCheck?.skipped
     ? ''
     : `<section>
       <h2>Script Self-Check <span>${report.selfCheck.pass ? 'PASS' : 'FAIL'}</span></h2>
-      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100, plus an English tracker-mode fixture at ${report.selfCheck.englishScore ?? 0}/100 — confirms the bundled scripts run end-to-end and scoring is bilingual.${budgetLine}${selfRefLine}${bottleneckTieLine}${blankGateLine}${handoffLine}${blueprintLine}${entryLine}${agentFileLine}${housekeepingLine}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
+      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100, plus an English tracker-mode fixture at ${report.selfCheck.englishScore ?? 0}/100 — confirms the bundled scripts run end-to-end and scoring is bilingual.${coverageLine}${selfCheckLines}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
     </section>`;
   const evalHtml = htmlReport(report.harness, `Harness Benchmark: ${path.basename(report.target)}`)
     .replace('</main>', `${selfCheckSection}<section>

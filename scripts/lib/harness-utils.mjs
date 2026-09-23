@@ -222,11 +222,42 @@ export function verificationCommands(project, explicitPackageManager) {
     scripts.build ? run('build') : null
   ].filter(Boolean);
 
-  return [install, ...dedupe(candidates)];
+  const real = dedupe(candidates);
+  // A manifest that defines none of check/typecheck/lint/test/build is the same trap as no
+  // manifest at all, and it was left open: install became the only step, so ./init.sh ran,
+  // printed "Verification Complete" and exited 0 having verified nothing — while
+  // validate-harness.mjs scored that repo 100/100 with "Verification fails fast" PASS, because
+  // its checks are existence checks and ./init.sh does exist. Only the placeholder branch
+  // refuses, so emit one whenever nothing real is left to run. The contract matches the
+  // no-manifest branch: the gate opens when the line is REPLACED, not when it is deleted.
+  if (real.length === 0) return [install, SCRIPTLESS_PLACEHOLDER];
+  return [install, ...real];
 }
 
-export function initScriptFromCommands(commands) {
+export function initScriptFromCommands(commands, options = {}) {
   const body = commands.map(renderVerificationStep).join('\n\n');
+  // The next-steps block is the only part of this file that names state, and the two modes keep
+  // state in different places. Hardcoding the registry files here shipped every tracker-mode repo
+  // a startup script telling the agent to read feature_list.json and progress.md — the two files
+  // the very same run reported as SKIPPED. The file-name guard could not catch it: the artifact
+  // list was clean, the leak was in the contents of a file that IS expected to exist.
+  const nextSteps = options.tracker
+    ? [
+      '1. Read CONTEXT.md for the domain language',
+      '2. Read the relevant docs/adr/ record before changing a decision',
+      '3. Read your issue tracker for the ticket you are working on',
+      '4. Read a handoff doc in .scratch/ if one exists',
+      '5. Work one ticket at a time',
+      '6. Re-run verification before claiming done'
+    ]
+    : [
+      '1. Read feature_list.json to see current feature state',
+      '2. Read progress.md for current status, blockers and next steps',
+      '3. Read a handoff doc in .scratch/ if one exists',
+      '4. Pick ONE unfinished feature to work on',
+      '5. Implement only that feature',
+      '6. Re-run verification before claiming done'
+    ];
   return `#!/bin/bash
 set -e
 
@@ -254,12 +285,7 @@ ${body}
 echo "=== Verification Complete ==="
 echo ""
 echo "Next steps:"
-echo "1. Read feature_list.json to see current feature state"
-echo "2. Read progress.md for current status, blockers and next steps"
-echo "3. Read a handoff doc in .scratch/ if one exists"
-echo "4. Pick ONE unfinished feature to work on"
-echo "5. Implement only that feature"
-echo "6. Re-run verification before claiming done"
+${nextSteps.map((line) => `echo "${line}"`).join('\n')}
 `;
 }
 
@@ -268,6 +294,11 @@ const INSTALL_STEP = /^(?:npm|pnpm|yarn|bun) (?:install|ci|i)$/;
 // scripted probe in run-benchmark.mjs can hand the real sentence in and get the real branch,
 // rather than restating this code's output and testing its own copy of the string.
 const PLACEHOLDER_VERIFICATION = /No package manifest detected; replace this line/;
+// The second shape that reaches renderVerificationStep with nothing real to verify: a manifest
+// exists but defines none of the scripts this generator knows how to run. Declared beside the
+// no-manifest sentence so both refusal branches are visible in one place.
+const SCRIPTLESS_PLACEHOLDER = 'echo "package.json defines no check, typecheck, lint, test or build script yet; replace this line with the project verification command."';
+const SCRIPTLESS_PLACEHOLDER_VERIFICATION = /defines no check, typecheck, lint, test or build script yet/;
 const SCRIPT_STEP = /^(?:npm|pnpm|yarn|bun) (?:run )?([\w:.-]+)$/;
 const NON_SCRIPT_ARGS = new Set(['install', 'ci', 'i', 'exec', 'dlx', 'create']);
 
@@ -279,7 +310,7 @@ export function renderVerificationStep(command) {
   // The step therefore exits non-zero until it is replaced: the gate opens exactly when the
   // byte-identical placeholder disappears. Its exit status is the honest answer to
   // "was any baseline verified?" — no. Deleting the line is not a bypass; replacing it is the fix.
-  if (PLACEHOLDER_VERIFICATION.test(command)) {
+  if (PLACEHOLDER_VERIFICATION.test(command) || SCRIPTLESS_PLACEHOLDER_VERIFICATION.test(command)) {
     return `echo "=== ${escapeForEcho(command)} ==="
 echo "ERROR: this is an unreplaced placeholder — nothing is being verified."
 echo "Replace this step in ./init.sh with the project's real verification command."

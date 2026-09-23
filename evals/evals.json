@@ -353,6 +353,45 @@
         "改写既有章节或新建分册前有显性 🔴 CHECKPOINT：展示 before/after diff 与分册清单，获批后才落盘",
         "改造后跑 validate-harness.mjs：断链（路由指向不存在的分册）与孤儿（无路由的分册）都会被检出并修正"
       ]
+    },
+    {
+      "id": 25,
+      "name": "空项目门禁第二臂：无可跑脚本时初始化脚本必须非零退出",
+      "prompt": "我新建的仓库里有 package.json，但 scripts 里什么都没定义（连 test 都还没有）。用 harness-creator 给它建最小 harness，然后告诉我这个 init.sh 现在能不能用来判断「功能完成」。",
+      "expected_output": "生成的 init.sh 在「有 manifest 但 check/typecheck/lint/test/build 一个都没定义」时必须非零退出并说明原因，而不是跑完只做依赖安装就打印 Verification Complete 并退出 0；同时说明真定义一个脚本后门禁照常运行，并提醒此时不得标记任何功能为 done",
+      "files": [],
+      "expectations": [
+        "init.sh 在无可跑验证命令时以非零退出，并打印「替换这一步」的指引",
+        "指出只有依赖安装步骤的 init.sh 是「永不失败的门禁」，不能作为完成证据，也不得据此标记任何功能 done",
+        "给出反向情形：一旦 package.json 定义了 check/lint/test/build 之一，该门禁即照常运行",
+        "不把无 manifest 与「有 manifest 但无可跑脚本」当成两种情况中的一种——两臂都必须拒跑"
+      ]
+    },
+    {
+      "id": 26,
+      "name": "工单模式初始化脚本不指向被跳过的状态文件",
+      "prompt": "这个仓库用 issue tracker 管需求，仓内只有 CONTEXT.md 和 docs/adr/，状态都在工单系统里。给仓库建 harness 并确定模式，然后我担心一件事：生成的 init.sh 会不会让我下个会话去读一些仓库里根本不存在的文件？",
+      "expected_output": "判为 tracker 模式（状态由工单系统承接，不生成 feature_list.json/progress.md），且生成的 init.sh 的「下一步」按模式分支：指向 CONTEXT.md / docs/adr/ / 工单系统 / .scratch/ 交接，不再指示读取被跳过的 feature_list.json 与 progress.md；registry 模式仍指向自己的仓内状态",
+      "files": [],
+      "expectations": [
+        "识别为 tracker 模式，不生成 feature_list.json 与 progress.md",
+        "init.sh 的启动指引指向 CONTEXT.md、docs/adr/、工单系统与 .scratch/ 交接，不点名仓内不存在的状态文件",
+        "说明「文件名单干净 ≠ 内容干净」：仅按文件名过滤发现不了内容层的状态泄漏",
+        "反向断言：registry 模式的 init.sh 仍指向自己的仓内状态产物"
+      ]
+    },
+    {
+      "id": 27,
+      "name": "指令文件体检读取分册中的豁免表（真实产物布局）",
+      "prompt": "我用 harness-creator 生成的 harness，产物追踪策略表在 docs/agents/tracking-policy.md 里，AGENTS.md 只有一行路由。现在那行豁免登记指向的目录已经被我删掉了，跑整理扫描（housekeeping）能把它报出来吗？",
+      "expected_output": "能：扫描器按路由走到 docs/agents/ 下的分册里读豁免表（`##` 标题），报出指向已消失路径的登记行；若表被手工合并回根指令文件（`###` 标题）同样读得到；同时存在的活登记行不得被点名",
+      "files": [],
+      "expectations": [
+        "说明豁免表住在分册里（生成器的真实布局），扫描器须跟随路由读取，只读根指令文件等于在真实产物上永不生效",
+        "报出指向已消失路径的登记行，且不把仍存在的活登记行一起点名",
+        "两种布局都要读：分册的 `##` 与手工合并回根文件的 `###`",
+        "自检夹具必须走真实生成路径，不得手写生成器从不产出的布局"
+      ]
     }
   ]
 }

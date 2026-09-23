@@ -38,5 +38,20 @@
     "id": 8,
     "prompt": "我的 AGENTS.md 越来越臃肿，规则、约定、例外全堆在一起，代理读半天抓不到重点。我想要它像路由表一样薄——只留必需的东西，详细内容按主题放到 docs/agents/ 下、需要时再读。帮我改造，并告诉我以后新增内容该放哪。",
     "expected": "根文件薄内核化：保留启动工作流/工作规则/完成定义/验证命令/仓库结构/会话结束与蓝图一行，情境性详规抽到 docs/agents/tracking-policy.md 与 docs/agents/escalation.md 并各留一行含读取时机的路由；落层判据是「每次动作是否可能需要」；🔴 CHECKPOINT 展示 before/after diff；改造后跑 validate-harness.mjs 确认断链与孤儿均被检出"
+  },
+  {
+    "id": 9,
+    "prompt": "我新建的仓库里有 package.json，但 scripts 里什么都没定义（连 test 都还没有）。建完 harness 后，这个 init.sh 现在能不能用来判断「功能完成」？",
+    "expected": "init.sh 在「有 manifest 但 check/typecheck/lint/test/build 一个都没定义」时以非零退出并给出替换指引，而不是跑完依赖安装就打印 Verification Complete 并退出 0；反向说明真定义一个脚本后门禁照常运行；此时不得标记任何功能 done"
+  },
+  {
+    "id": 10,
+    "prompt": "仓库用 issue tracker 管需求，仓内只有 CONTEXT.md 和 docs/adr/。生成的 init.sh 会不会让我下个会话去读一些仓库里根本不存在的文件？",
+    "expected": "判为 tracker 模式、不生成 feature_list.json/progress.md；init.sh 的「下一步」按模式分支，指向 CONTEXT.md / docs/adr/ / 工单系统 / .scratch/ 交接，不点名被跳过的仓内状态文件；registry 模式仍指向自己的仓内状态"
+  },
+  {
+    "id": 11,
+    "prompt": "生成的 harness 里，产物追踪策略表在 docs/agents/tracking-policy.md，AGENTS.md 只有一行路由。那行豁免登记指向的目录已被删除，跑整理扫描能报出来吗？",
+    "expected": "能：按路由读分册里的豁免表（`##`）并报出指向已消失路径的登记行；表被手工合并回根文件（`###`）时同样读得到；仍存在的活登记行不得被点名；说明只读根指令文件等于在真实产物上永不生效"
   }
 ]

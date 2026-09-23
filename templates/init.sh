@@ -2,6 +2,12 @@
 set -e
 
 # Verification gate. It must exit 0 before any feature is claimed done.
+#
+# This file is the MANUAL fallback: create-harness.mjs generates init.sh itself from the detected
+# stack (see scripts/lib/harness-utils.mjs), and this template is what you copy by hand when the
+# runtime has no Node. It probes the stack at run time instead of being generated for one, so it
+# deliberately stays stack-generic — including its "Next steps" block, which points at whatever
+# AGENTS.md lists under 仓库结构 rather than naming one mode's state files.
 
 echo "=== Harness Initialization ==="
 
@@ -36,6 +42,13 @@ if [ -f package.json ]; then
     fi
   fi
 
+  # Counts the checks that actually ran. A manifest that defines none of them is the same trap as no
+  # manifest at all: without this counter the script would run only the install, print
+  # "Verification Complete" and exit 0 having verified nothing — the gate cannot fail, so
+  # "no feature may be marked done without evidence" becomes unreachable on exactly the fresh
+  # skeleton where it matters most. The branch below refuses until a real command replaces it.
+  RAN=0
+
   node -e "const s=require('./package.json').scripts||{}; process.exit(s.check||s.typecheck||s['type-check']?0:1)" && {
     if node -e "const s=require('./package.json').scripts||{}; process.exit(s.check?0:1)"; then
       [ "$PM" = "npm" ] && npm run check || "$PM" run check
@@ -44,19 +57,31 @@ if [ -f package.json ]; then
     else
       [ "$PM" = "npm" ] && npm run type-check || "$PM" run type-check
     fi
+    RAN=1
   }
 
   node -e "const s=require('./package.json').scripts||{}; process.exit(s.lint?0:1)" && {
     [ "$PM" = "npm" ] && npm run lint || "$PM" run lint
+    RAN=1
   }
 
   node -e "const s=require('./package.json').scripts||{}; process.exit(s.test?0:1)" && {
     [ "$PM" = "npm" ] && npm test || "$PM" test
+    RAN=1
   }
 
   node -e "const s=require('./package.json').scripts||{}; process.exit(s.build?0:1)" && {
     [ "$PM" = "npm" ] && npm run build || "$PM" run build
+    RAN=1
   }
+
+  if [ "$RAN" -eq 0 ]; then
+    echo ""
+    echo "ERROR: package.json defines no check, typecheck, lint, test or build script yet."
+    echo "Replace this branch in ./init.sh with the project's real verification command."
+    echo "Until then ./init.sh MUST fail: a gate that cannot fail is not a gate."
+    exit 1
+  fi
 elif [ -f pyproject.toml ] || [ -f requirements.txt ]; then
   echo "=== Running Python verification ==="
   PY="$(command -v python3 || command -v python)"
@@ -90,9 +115,9 @@ fi
 echo "=== Verification Complete ==="
 echo ""
 echo "Next steps:"
-echo "1. Read feature_list.json to see current feature state"
-echo "2. Read progress.md for current status, blockers and next steps"
+echo "1. Read the state artifacts listed under 仓库结构 in AGENTS.md"
+echo "2. Read current status, blockers and next steps from them"
 echo "3. Read a handoff doc in .scratch/ if one exists"
-echo "4. Pick ONE unfinished feature to work on"
-echo "5. Implement only that feature"
+echo "4. Pick ONE unfinished item to work on — one feature, or one ticket"
+echo "5. Implement only that item"
 echo "6. Re-run verification before claiming done"
