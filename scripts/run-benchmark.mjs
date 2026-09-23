@@ -155,10 +155,16 @@ const FORBIDDEN_IN_AGENTS_MD = [
   { name: 'tracking-policy section', pattern: /产物追踪策略/ },
   { name: 'controlled release', pattern: /受控放行/ },
   { name: 'governance modes', pattern: /两种模式|--mode\b/ },
-  { name: 'extracted agent-doc layer', pattern: /tracking-policy\.md|escalation\.md/ }
+  { name: 'extracted agent-doc layer', pattern: /tracking-policy\.md|escalation\.md/ },
+  // Added 09-23 on the user's ruling that the owners are assumed installed: a render that checks
+  // whether another skill is present is doing the neighbour's job. The pattern is deliberately
+  // narrow — it must not fire on the correct render, which says "承接方默认已安装，本技能不检查、
+  // 不安装" (a negation). Matching a bare 已安装 would make the gate reject its own correct output.
+  { name: 'owner-installation check', pattern: /承接方.{0,10}(未安装|是否已安装)|提示安装|检查.{0,4}是否已安装/ }
 ];
 const SEEDED_VIOLATION = '\n状态写入 feature_list.json 与 progress.md；产物追踪策略；'
-  + '五落点；受控放行；两种模式；分册 tracking-policy.md 与 escalation.md。';
+  + '五落点；受控放行；两种模式；分册 tracking-policy.md 与 escalation.md；'
+  + '承接方未安装时提示安装。';
 
 // Declared at module scope, ahead of the runSelfCheck() call: a const sitting next to the function
 // that reads it would still be in its temporal dead zone at that call site.

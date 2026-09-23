@@ -107,7 +107,7 @@ node <技能目录>/scripts/run-benchmark.mjs --target /path/to/project --html /
 | 运行环境无 Node | 按 `templates/` 手工创建产物，交付模板内容与手工验证命令 |
 | 无法创建文件（权限/只读） | 改为输出确切文件内容与命令，并标注目标路径 |
 | `run-benchmark` 自检 FAIL | 视为 skill 自身损坏——先修脚本，再谈交付 |
-| 承接方（工程 skill）未安装 | 明确告知缺什么、需要哪个 skill，不自行补一个替代品 |
+| 用户问某个承接方装了没 / 装在哪 | **不管**：承接方默认已安装。本技能不检查、不列举、不安装其他 skill，也不为缺失提供替代品——它只管 harness 产物 |
 
 ## 设计规则
 
