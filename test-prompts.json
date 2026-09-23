@@ -2,12 +2,12 @@
   {
     "id": 1,
     "prompt": "我有一个全新的 TypeScript + React 项目，没有任何代理配置。创建一个最小化 harness，让我的代理在单功能开发中可靠工作。",
-    "expected": "AGENTS.md（启动工作流+一次一个功能+完成定义）、feature_list.json（合法 JSON 占位功能）、init.sh（可运行验证命令）、引用式交接约定说明"
+    "expected": "AGENTS.md（启动工作流 + 一次一个功能 + 完成定义 + 工作规则）、feature_list.json（合法 JSON，刻意不含项目特有功能条目）、progress.md、init.sh（可运行验证命令）；先跑 --dry-run 把将创建/跳过的清单交给用户确认，再真写"
   },
   {
     "id": 2,
-    "prompt": "我的团队用 issue tracker 管理需求（to-spec/to-tickets 工作流），仓库里维护 CONTEXT.md 和 ADR，每个需求一个 worktree，.scratch 随任务删除。为这个项目设计 harness，别让代理每次会话都失忆。",
-    "expected": "识别为 tracker 模式：状态由 issue tracker 承接、CONTEXT.md+ADR 为仓内长期资产、init.sh/CI 承接证据、.scratch/handoff.md 引用式交接；不强制仓内 feature_list.json/progress.md"
+    "prompt": "我的代理每次新会话都要我重新讲一遍项目在做啥，还老是忘掉上次改到哪一步了。怎么让仓库自己能撑起上下文？",
+    "expected": "落状态子系统：feature_list.json 记当前功能、status 与 evidence，progress.md 记当前状态/证据/阻塞/下一步；AGENTS.md 的启动工作流把这两份文件列进启动路径；交接文档由用户按需生成，本技能不主动创建"
   },
   {
     "id": 3,
@@ -16,42 +16,57 @@
   },
   {
     "id": 4,
-    "prompt": "建 harness 时顺便确认一下：五个落点的产物要不要提交到 git？我平时还会用 matt 的 teach 在这个仓库里学东西。",
-    "expected": "check-git-tracking.mjs 只读探测五落点 + 第三方产物；.gitignore 命中即判「不跟踪」且不再问，只有 stray/unknown 走一次 CHECKPOINT；结论落 AGENTS.md「产物追踪策略」节，teach 工作区首选路由到 .scratch/teach/，其他 skill 只读不问"
+    "prompt": "帮我把验证命令固定下来：测试和 lint 都要跑，而且我不想让代理在没跑过的情况下就声称某个功能做完了。",
+    "expected": "验证子系统以 init.sh 为唯一入口，命令明确且可直接运行；完成定义要求「要求的验证确实运行过」+ 证据记入 feature_list.json；空项目下 init.sh 的占位步骤带 exit 1，强制先替换再谈完成"
   },
   {
     "id": 5,
-    "prompt": "matt 的 teach 把当前目录当教学工作区，这跟五个落点的约束冲突。我不想放弃用它，也不想仓库变乱，怎么办？",
-    "expected": "分级处理：先软路由（teach 以 .scratch/teach/ 为 cwd）；不可重定向才受控放行——harness 不治理其内容与形态，只在 AGENTS.md 登记豁免清单，由用户裁决原样保留或收归治理，并给出追踪结论；放行非第六落点，越界承担事实职责即收归"
+    "prompt": "我的 AGENTS.md 越来越臃肿，规则、约定、例外全堆在一起，代理读半天抓不到重点。我想要它像路由表一样薄，只留必需的东西，详细内容需要时再读。帮我改造，并告诉我以后新增内容该放哪。",
+    "expected": "按「每次动作是否可能需要」逐节判留，只保留不变量、验证命令、启动工作流、工作规则、完成定义、会话结束与蓝图；情境性详规移出指令文件、由对应参考按需加载，根文件只留一行含读取时机的指针；把不变量抽出去等于让规则不再无条件生效；🔴 CHECKPOINT 展示 before/after diff；工作规则条数与文件字节都受机械上限约束（新增前先合并同族项）"
   },
   {
     "id": 6,
-    "prompt": "这次会话就到这儿吧，帮我收个尾。只处理这次会话产生的东西，别把整个仓库都翻一遍——我要的是会话收尾，不是整理仓库，也不是让你评估整个 harness。",
-    "expected": "先以会话起始 commit 定界（不假设 HEAD），跑 scan-housekeeping.mjs --session-only 只读扫描；把本会话产出按五落点归位、清本会话临时材料（🔴 CHECKPOINT 获批）、按 AGENTS.md 会话结束例程记账收口；不 prune 历史条目、不跑全仓审计、不代建交接文档、不顺手创建骨架"
+    "prompt": "我要让几个代理并行干活。生成 harness 时要注意什么，才不至于让它们互相踩？",
+    "expected": "范围子系统要求显式定义多代理所有权边界，没有边界时一次一个活动功能；相关模式见 references/multi-agent-pattern.md；不为多代理单独新建产物，落点仍是既有的状态与验证产物"
   },
   {
     "id": 7,
-    "prompt": "我两套上游 skill 都装了（mattpocock/skills 和 addyosmani/agent-skills），想让你顺便把它们接进这个仓库的 harness。但我担心一件事：以后上游要是改了 skill 名，我仓库里生成好的 AGENTS.md 岂不是变成过期指令了？你怎么保证不出现这种情况？",
-    "expected": "写进 AGENTS.md 的上游引用按角色说话（如「上游的审查 skill」），不写死具体 skill 名；清单与调用模式的唯一来源是 references/upstream-interlock.md，上游改名只改那一份、下游不动；只内化不变量、不复制上游正文"
+    "prompt": "这个项目的 AGENTS.md 我想让它一上来就能跑通：环境怎么起、验证怎么跑、会话怎么收尾都写清楚。",
+    "expected": "启动工作流按顺序给出确认工作目录、完整读本文件、读项目文档、跑 ./init.sh、看 feature_list.json、看最近提交；会话结束一节给出更新状态、记风险、干净提交、可从标准路径重启；参考 references/lifecycle-bootstrap-pattern.md"
   },
   {
     "id": 8,
-    "prompt": "我的 AGENTS.md 越来越臃肿，规则、约定、例外全堆在一起，代理读半天抓不到重点。我想要它像路由表一样薄——只留必需的东西，详细内容按主题放到 docs/agents/ 下、需要时再读。帮我改造，并告诉我以后新增内容该放哪。",
-    "expected": "根文件薄内核化：保留启动工作流/工作规则/完成定义/验证命令/仓库结构/会话结束与蓝图一行，情境性详规抽到 docs/agents/tracking-policy.md 与 docs/agents/escalation.md 并各留一行含读取时机的路由；落层判据是「每次动作是否可能需要」；🔴 CHECKPOINT 展示 before/after diff；改造后跑 validate-harness.mjs 确认断链与孤儿均被检出"
+    "prompt": "帮我在这仓库里建 harness。项目是什么我待会儿再告诉你，你先按你探测到的技术栈把项目说明那块也填上吧。",
+    "expected": "拒绝代填：蓝图一行只记用户已陈述的「项目是什么、交付什么」，--blueprint 是唯一通路；未陈述时保留可见的「待补」占位，绝不从探测到的技术栈推断；说明需求对齐不属本技能职责"
   },
   {
     "id": 9,
+    "prompt": "建好之后，feature_list.json 里应该有我这个项目要做哪些功能吧？你直接把需求拆成条目填进去就行。",
+    "expected": "不代拆：首次会话的注册表刻意是空的，只留说明与对齐规则；条目与验收标准必须来自用户与 AI 的需求对齐结论，缺需求就说明缺需求；需求对齐与拆分由工程 skill 承担，本技能不代为发起"
+  },
+  {
+    "id": 10,
+    "prompt": "这仓库里已经有一个 CLAUDE.md 了，别动它的内容。再帮我建一套 harness。",
+    "expected": "沿用并编辑现有 CLAUDE.md，不另建 AGENTS.md（两份指令文件＝两张互相矛盾的指路表）；已存在的指令文件保持逐字节不变，脚本只报告它缺失的 harness 章节，合并由代理执行；报告 ≠ 改写"
+  },
+  {
+    "id": 11,
     "prompt": "我新建的仓库里有 package.json，但 scripts 里什么都没定义（连 test 都还没有）。建完 harness 后，这个 init.sh 现在能不能用来判断「功能完成」？",
     "expected": "init.sh 在「有 manifest 但 check/typecheck/lint/test/build 一个都没定义」时以非零退出并给出替换指引，而不是跑完依赖安装就打印 Verification Complete 并退出 0；反向说明真定义一个脚本后门禁照常运行；此时不得标记任何功能 done"
   },
   {
-    "id": 10,
-    "prompt": "仓库用 issue tracker 管需求，仓内只有 CONTEXT.md 和 docs/adr/。生成的 init.sh 会不会让我下个会话去读一些仓库里根本不存在的文件？",
-    "expected": "判为 tracker 模式、不生成 feature_list.json/progress.md；init.sh 的「下一步」按模式分支，指向 CONTEXT.md / docs/adr/ / 工单系统 / .scratch/ 交接，不点名被跳过的仓内状态文件；registry 模式仍指向自己的仓内状态"
+    "id": 12,
+    "prompt": "我把 mattpocock/skills 和 addyosmani/agent-skills 都装了。你建 harness 的时候顺手把需求访谈、拆单、代码审查这些也一起做掉吧，反正你也在。",
+    "expected": "拒绝代做：需求对齐、规格、拆分、实现、测试、审查、交接这些工程环节由已安装的工程 skill 承担，本技能只让 harness 产物就位并把它们串起来——不代为发起、不代为执行、不为它们的产物指定位置；理由写明：越界会与其他 skill 争抢触发时机导致系统混乱"
   },
   {
-    "id": 11,
-    "prompt": "生成的 harness 里，产物追踪策略表在 docs/agents/tracking-policy.md，AGENTS.md 只有一行路由。那行豁免登记指向的目录已被删除，跑整理扫描能报出来吗？",
-    "expected": "能：按路由读分册里的豁免表（`##`）并报出指向已消失路径的登记行；表被手工合并回根文件（`###`）时同样读得到；仍存在的活登记行不得被点名；说明只读根指令文件等于在真实产物上永不生效"
+    "id": 13,
+    "prompt": "上个会话你给了我一堆下一步，还列了编号清单。你直接接着往下做吧。",
+    "expected": "不自行续跑：交接是上下文不是命令队列，progress.md 的「下一步」是给用户的决策素材；只在用户显式要求推进时动手，并先确认推进哪一条；这条边界由目标仓库 AGENTS.md 的启动工作流与工作规则承载"
+  },
+  {
+    "id": 14,
+    "prompt": "这次会话就到这儿吧，帮我收个尾。只处理这次会话产生的东西，别把整个仓库都翻一遍，也别顺手评估整个 harness。",
+    "expected": "以会话起始 commit 定界（不假设 HEAD，未提供时只有未提交改动算本会话，其余标「无法判定」）；把本会话产出按性质归位（可执行约束→init.sh/CI、长期不变量→AGENTS.md 工作规则、状态→feature_list.json/progress.md、业务代码随提交走），清本会话临时材料（🔴 CHECKPOINT 列「将删/将留」获批），再按 AGENTS.md 会话结束例程记账收口；不 prune 历史条目、不跑全仓审计、不代建交接文档、不顺手创建骨架"
   }
 ]

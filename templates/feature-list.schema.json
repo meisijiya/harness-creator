@@ -27,7 +27,7 @@
             "items": {
               "type": "string"
             },
-            "description": "验收标准：本条完成时必须逐条验证通过的判据。拆条目时写，不留到声称完成时补——缺它就无法判断 done（见 references/task-advancement-pattern.md）"
+            "description": "验收标准：本条完成时必须逐条验证通过的判据。与用户对齐时写，不留到声称完成时补——缺它就无法判断 done"
           },
           "dependencies": {
             "type": "array",

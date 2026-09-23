@@ -5,392 +5,252 @@
       "id": 1,
       "name": "最小化 Harness 创建",
       "prompt": "我有一个全新的 TypeScript + React 项目，没有任何代理配置。创建一个最小化 harness，让我的代理在单功能开发中可靠工作。",
-      "expected_output": "AGENTS.md（约 50-100 行）、含 3-5 个占位功能的 feature_list.json、带验证命令的 init.sh",
+      "expected_output": "AGENTS.md（约 60-90 行）、含示例条目的 feature_list.json、progress.md、带验证命令的 init.sh —— 四个文件，不多不少。",
       "files": [],
       "expectations": [
-        "AGENTS.md 包含启动工作流（读文件、运行 init、查看功能列表）",
+        "AGENTS.md 包含启动工作流（读文件、运行 init.sh、查看功能列表）",
         "AGENTS.md 包含一次一个功能的策略",
-        "feature_list.json 是合法 JSON，含 id、name、description、status 字段",
+        "feature_list.json 是合法 JSON，含 id、name、description、status、dependencies、evidence 字段",
         "init.sh 在可用时运行安装、类型/静态检查、测试与构建命令",
-        "所有文件位于项目根目录"
+        "只创建 AGENTS.md、feature_list.json、progress.md、init.sh，不新增目录层或其他产物"
       ]
     },
     {
       "id": 2,
       "name": "会话连续性设置",
-      "prompt": "我的代理在会话之间会忘记一切。我需要持久记忆与会话交接，以便它能处理跨越多天的功能。",
-      "expected_output": "精简版 progress.md、交接落点约定（.scratch/handoff.md，用户按需生成）、记忆目录设置说明",
+      "prompt": "我的代理每次新会话都要重新摸索项目现状，上次做到哪、什么被阻塞了都不知道。帮我建立跨会话连续性。",
+      "expected_output": "feature_list.json 承载状态与证据，progress.md 承载当前状态、阻塞与下一步，AGENTS.md 规定会话结束例程。",
       "files": [],
       "expectations": [
-        "progress.md 只包含四类小节：当前状态、完成证据、阻塞/风险、下一步",
-        "决策指向 ADR，变更文件指向 git log/diff，不在 progress.md 中重复记录",
-        "交接落点为 .scratch/ 或临时目录；交接文档由用户按需生成（handoff 技能），代理不主动创建，启动时若存在必读",
-        "记忆目录创建说明（.claude/memory/ 或类似）",
-        "解释了两步保存不变量（先主题文件后索引）"
+        "progress.md 含当前状态、完成证据、阻塞/风险、下一步四类信息",
+        "feature_list.json 的每个条目有 status 与 evidence 字段",
+        "AGENTS.md 的会话结束一节要求更新状态产物并留下干净提交",
+        "不引入交接文档模板或专门的交接目录；交接由用户按需用工程 skill 生成",
+        "状态事实只有一个来源，不在多个文件重复记录"
       ]
     },
     {
       "id": 3,
       "name": "Harness 评估",
-      "prompt": "我已有一个 AGENTS.md 文件，但我的代理仍然会搞砸事情。评估我的 harness，告诉我先改进什么。",
-      "expected_output": "覆盖五个子系统的评估（各按 1-5 评分）、识别出瓶颈、按优先级排序的改进计划",
-      "files": ["existing-AGENTS.md"],
+      "prompt": "看看我这个仓库的 harness 质量怎么样，哪里最需要改。",
+      "expected_output": "五子系统得分、最低分项与 2-3 条首要改进建议。",
+      "files": [],
       "expectations": [
-        "评估覆盖全部 5 个子系统：指令、状态、验证、范围、生命周期",
-        "每个子系统按 1-5 评分并附理由",
-        "得分最低的子系统被识别为瓶颈或候选瓶颈",
-        "按优先级排序的改进计划，含 2-3 个具体的下一步"
+        "报告五个子系统：instructions、state、verification、scope、lifecycle",
+        "给出 Overall 得分与最低分项（bottleneck）",
+        "最低分被表述为候选瓶颈，建议先确认因果再改",
+        "并列最低分时报成并列，不武断挑一个当唯一瓶颈",
+        "不因仓库没有 docs/adr、CONTEXT.md 或工单系统而扣分"
       ]
     },
     {
       "id": 4,
       "name": "验证工作流设计",
-      "prompt": "我的代理说'完成了'但测试是失败的。设计一个验证工作流，强制代理在声称完成前真正做验证。",
-      "expected_output": "验证命令清单、AGENTS.md 小节更新、可选的质量得分跟踪",
+      "prompt": "我的代理总是说'做完了'但测试根本没跑。帮我设计验证工作流。",
+      "expected_output": "init.sh 作为唯一验证入口，完成定义要求证据先行。",
       "files": [],
       "expectations": [
-        "列出明确的验证命令（测试、lint、类型检查、构建）",
-        "AGENTS.md 包含带验证要求的完成定义小节",
-        "会话结束清单包含验证证据记录",
-        "失败路径明确说明验证失败时不得声称完成"
+        "创建 init.sh，带 set -e",
+        "init.sh 的命令来自项目实际可跑的脚本",
+        "AGENTS.md 的完成定义要求'验证确实运行过'且'证据已记录'",
+        "AGENTS.md 规定未运行验证命令前不得声称完成",
+        "无可跑脚本时 init.sh 以非零码退出，而不是打印通过"
       ]
     },
     {
       "id": 5,
       "name": "记忆分类设计",
-      "prompt": "我希望代理能跨会话记住项目约定与用户偏好。设计一套记忆分类体系，并告诉我什么该放在哪里。",
-      "expected_output": "记忆层定义、自动记忆的类型分类、什么该保存什么该跳过",
+      "prompt": "代理老是把该记住的东西忘掉，或者把不该记的写进仓库。帮我梳理哪些该持久化、哪些不该。",
+      "expected_output": "状态与证据有唯一落点，变更由 git 承载，其余不持久化。",
       "files": [],
       "expectations": [
-        "定义了指令记忆（人工维护、纳入版本控制）",
-        "定义了自动记忆（代理写入、持久保存）",
-        "含 3-4 种类型的分类体系（如 用户/反馈/项目/参考）",
-        "关于不应保存什么（可推导内容）的明确指引"
+        "状态与证据落 feature_list.json / progress.md",
+        "变更事实由 git 承载，不重复写入状态文件",
+        "长期不变量（每次都需要的规则）留在 AGENTS.md，情境性内容不塞进入口文件",
+        "不代用户创建决策记录或术语表文件；这类产物由工程 skill 按需产生",
+        "不为'以后可能有用'的信息新建文件"
       ]
     },
     {
       "id": 6,
       "name": "工具安全设计",
-      "prompt": "我的自定义编码代理可以运行 shell 命令和编辑文件。设计工具注册表与权限 harness，让它强大但不会静默做出危险操作。",
-      "expected_output": "含按调用并发分类、默认权限、拒绝处理与审计追踪的工具注册策略",
+      "prompt": "我的代理有一次静默覆盖了我的文件。帮我把工具权限和破坏性操作管起来。",
+      "expected_output": "默认跳过已存在文件，覆盖需显式批准，异常不静默降级。",
       "files": [],
       "expectations": [
-        "敏感工具默认为 ask 或 deny，而非 allow",
-        "并发安全性按调用分类，而非按工具分类",
-        "承认权限评估的副作用，且不做不安全的缓存",
-        "审计追踪记录命令、决策与理由"
+        "生成脚本默认跳过已存在文件（skip），不静默覆盖",
+        "覆盖需要 --force 且必须经用户批准",
+        "异常按显式失败处理，不静默跳过",
+        "写盘前提供 --dry-run 让用户先看到将创建/跳过的清单",
+        "不引入落点登记或豁免表来治理第三方工具的产物"
       ]
     },
     {
       "id": 7,
       "name": "上下文预算规划",
-      "prompt": "我的代理启动时加载了太多文档，变得很慢。设计一套上下文策略，既保住重要上下文又控制 token 成本。",
-      "expected_output": "使用 select/write/compress/isolate 操作与显式上下文预算的渐进式披露方案",
+      "prompt": "我的 AGENTS.md 越来越长，代理反而不听它了。怎么办？",
+      "expected_output": "入口文件保持薄，只放不变量与路由；情境性内容不进默认上下文。",
       "files": [],
       "expectations": [
-        "定义了常驻加载的元数据与按需加载的参考",
-        "使用 SELECT、WRITE、COMPRESS、ISOLATE 操作",
-        "包含硬上限或预算阈值",
-        "解释了记忆化上下文构建器的失效机制"
+        "入口文件只保留每次动作都可能需要的不变量",
+        "能写成 init.sh 或 CI 检查的约束写进门禁，不在文件里复述",
+        "不引入 harness 专属的分册目录层；项目自己的文档按需路由即可",
+        "指出入口文件过长的具体代价：每次会话完整读取",
+        "给出可判定的判据（例如'删掉一行不改变代理行为就删掉'）"
       ]
     },
     {
       "id": 8,
       "name": "多代理协调",
-      "prompt": "我希望多个代理在大型重构上协作而不互相踩踏。设计多代理 harness 与委派规则。",
-      "expected_output": "含所有权边界、上下文共享策略与合并/评审关卡的协调者/委派设计",
+      "prompt": "我想让两个代理并行改我的仓库。需要什么前置条件？",
+      "expected_output": "先定义所有权边界，否则一次只推进一个功能。",
       "files": [],
       "expectations": [
-        "定义了协调者、工作者与可选评审者的职责",
-        "分配互不重叠的文件或模块所有权",
-        "防止递归分叉的子级再次分叉",
-        "在声称完成前包含集成与验证关卡"
+        "默认一次一个活动功能",
+        "并行前必须显式定义文件/模块所有权边界",
+        "指出无边界并行的主要失败是越界与半途工作",
+        "不代用户编排其他 skill 的执行顺序",
+        "在 AGENTS.md 中把这条写成约束，而不是留给会话记忆"
       ]
     },
     {
       "id": 9,
       "name": "生命周期引导",
-      "prompt": "每次新会话的起始状态都不一致。设计启动、钩子与交接的生命周期规则，让新代理能安全地接续工作。",
-      "expected_output": "含 init.sh、干净状态检查、交接阅读与钩子信任边界的生命周期引导设计",
+      "prompt": "每次开工前代理都忘记先装依赖、跑检查，导致后面全是假失败。帮我建立启动阶段。",
+      "expected_output": "init.sh 承担启动与验证；AGENTS.md 的启动工作流要求在写代码前跑它。",
       "files": [],
       "expectations": [
-        "init.sh 是标准的启动与验证入口",
-        "启动时阅读 AGENTS.md、feature_list.json、progress.md，以及交接文档（如存在）",
-        "会话结束程序记录证据、阻塞与下一步",
-        "钩子受信任闸门控制，失败行为是显式的"
+        "启动工作流把'运行 init.sh'放在写代码之前",
+        "基线验证失败时先修基线，不加新范围",
+        "init.sh 在依赖目录已存在时跳过安装",
+        "不引入钩子或后台任务这类额外机制，除非问题确实需要",
+        "启动路径只需一步命令即可复现"
       ]
     },
     {
       "id": 10,
       "name": "脚本化 Harness 验证",
-      "prompt": "使用 harness-creator 的脚本为某个仓库搭建 harness、验证它，并生成 HTML 评估报告。",
-      "expected_output": "使用 create-harness.mjs、validate-harness.mjs 与 render-assessment-html.mjs 的命令，以及对得分的解读",
+      "prompt": "我不想靠人肉记忆来检查 harness 是否完整。有没有能直接跑的检查？",
+      "expected_output": "validate-harness.mjs 打分；run-benchmark.mjs 出自检与 HTML 报告。",
       "files": [],
       "expectations": [
-        "使用 create-harness.mjs 并指定目标目录",
-        "使用 validate-harness.mjs 并解释五子系统得分输出",
-        "使用 render-assessment-html.mjs 或带 --html 的 run-benchmark.mjs",
-        "解释结构性基准测试是对真实前后对照代理会话的补充而非替代"
+        "给出可直接粘贴运行的绝对路径命令，而不是依赖 cwd 的相对路径",
+        "说明整体得分与最低分项的含义",
+        "说明这是结构性基准，不等于有效性证明；有效性仍需前后对照会话",
+        "命令在任何目标仓库里都能跑通（脚本位置由技能目录决定）",
+        "报告覆盖每个自检分组的结论，不只出现在控制台"
       ]
     },
     {
       "id": 11,
-      "name": "Tracker 模式与工单驱动工作流集成",
-      "prompt": "我的团队用 issue tracker 管理需求（to-spec/to-tickets 工作流），仓库里维护 CONTEXT.md 和 ADR，每个需求一个 worktree，.scratch 随任务删除。为这个项目设计 tracker 模式的 harness。",
-      "expected_output": "状态由 issue tracker 承接、CONTEXT.md + ADR 为仓内长期资产、init.sh/CI 为证据门禁、.scratch 为任务级暂存区的 harness 设计",
+      "name": "项目说明槽：用户未说明项目是什么时不得由技术栈代填",
+      "prompt": "给这个项目配上 harness。（用户未说明这个项目是什么、交付什么）",
+      "expected_output": "AGENTS.md 的项目说明位置留下可见的待补标记，不根据依赖清单推断内容。",
       "files": [],
       "expectations": [
-        "不强制仓内 feature_list.json/progress.md，状态与依赖由 issue tracker（含 blocking 边）承接",
-        "AGENTS.md 启动工作流路由 CONTEXT.md 与 ADR，且 CONTEXT.md 只承载代码表达不了的领域语言",
-        "完成证据由 init.sh/CI 机器门禁承接，文本证据只是指向门禁结果的指针",
-        "交接为引用式临时文档（.scratch/handoff.md），由收尾与整理按作用域分别清，不依赖任何自动机制",
-        "AGENTS.md 与 matt setup 共存时合并而非覆写：`## Agent skills` 块保留，harness 章节追加，互不交叉",
-        "判定 tracker 即默认用户已自行运行 setup-matt-pocock-skills：本技能不调用、不询问安装、不提供仓内替代；状态源绑定可探测则绑定，否则挂起并提示用户先运行 setup",
-        "matt 名下产物（docs/agents/*、CONTEXT.md、docs/adr/、## Agent skills 块）不代建：缺失时列为待办并指引用户运行 setup；CONTEXT.md/ADR 属延迟创建，缺失不判为缺陷"
+        "未提供说明时，AGENTS.md 对应位置是显式的待补标记",
+        "不从 package.json、目录结构或框架名推断项目用途",
+        "代理在缺信息时说明缺信息，而不是编一段看起来完整的话",
+        "用户提供一行说明后，原文照写入 AGENTS.md",
+        "该位置只承载描述，不承载待办或实现路径"
       ]
     },
     {
       "id": 12,
-      "name": "整理仓库：只读清账扫描 + 按需沉淀",
-      "prompt": "帮我把这个仓库整理一下：状态文件里堆了不少历史，把该清的清了，该沉淀的沉淀到该去的地方。",
-      "expected_output": "先跑 scan-housekeeping.mjs 只读扫描导出「将删/将留」清单与未沉淀材料，经 🔴 CHECKPOINT 批准后才删除；作用域只有状态落点，ADR 与 CONTEXT.md 不动；沉淀归上游、以补齐为准——模型可调用的领域建模 skill 由代理按需调用，本技能不自行写 ADR/CONTEXT.md、不重复写已有内容",
+      "name": "条目模板克制：交付骨架时不预置项目特有功能条目",
+      "prompt": "先把这个仓库的 harness 骨架搭起来，功能清单我等下再想。",
+      "expected_output": "feature_list.json 只有结构性示例，且 AGENTS.md 明说未对齐不得新增条目。",
       "files": [],
       "expectations": [
-        "先运行 scan-housekeeping.mjs（只读）并展示清单，不直接删除任何文件",
-        "删除前有显性 🔴 CHECKPOINT：逐条列出将删/将留清单并等待用户批准",
-        "清账只作用于状态落点，ADR（只增不删）与 CONTEXT.md（持续更新）不动",
-        "status=done 但缺 evidence 的条目标记为不可清，提示先补证据",
-        "指令文件体检按项报告（节体积排序、失效登记行、未定稿占位符、项目文档条目的 owner 标注），只报告不改写",
-        "沉淀沿用委托原则：ADR/CONTEXT.md 归上游（走上游领域建模 skill 或提示用户运行），本技能不自行写；本技能只补自有落点（门禁/状态），且不重复写已有内容"
+        "功能清单不包含针对该项目的具体功能条目",
+        "仅有的条目是字段形状示例，并注明不得直接推进",
+        "AGENTS.md 与 feature_list.json 都声明条目须来自需求对齐结论",
+        "不代替用户写验收标准",
+        "骨架交付时说明下一步是把对齐结论落成条目"
       ]
     },
     {
       "id": 13,
-      "name": "与 matt setup 共存：单一写入者与延迟创建",
-      "prompt": "仓库已经跑过 setup-matt-pocock-skills：有 docs/agents/issue-tracker.md 与 docs/agents/domain.md，AGENTS.md 里有 ## Agent skills 块，但还没有 CONTEXT.md。为这个项目建 harness。",
-      "expected_output": "判定为 tracker 模式（docs/agents/ 是信号，不因缺 CONTEXT.md 回退 registry）；只落 harness 自己的章节与 init.sh；matt 名下产物列为待办并指引用户运行 setup，不预建 CONTEXT.md/docs/adr/、不预建空 .scratch/、不写 ## Agent skills 块",
+      "name": "指令文件不变量：已有 CLAUDE.md 就不再另建 AGENTS.md",
+      "prompt": "我这个仓库已经有 CLAUDE.md 了，帮我配 harness。",
+      "expected_output": "沿用 CLAUDE.md，只报告缺失章节，不创建 AGENTS.md，也不改写既有文件。",
       "files": [],
       "expectations": [
-        "由 docs/agents/ 识别 tracker 模式，不因缺 CONTEXT.md 判定为 registry 或要求先补齐 CONTEXT.md",
-        "不预创建 CONTEXT.md 与 docs/adr/：它们由 matt 的 domain-modeling 延迟创建，缺失是正常状态",
-        "不预建空 .scratch/ 目录（matt 会把它读作本地 markdown 工单已在用的信号），只在 AGENTS.md 中约定其用途",
-        "不写 ## Agent skills 块、不改 docs/agents/*：保留 matt 现有内容，只追加 harness 章节",
-        "CONTEXT.md/ADR 沿用 matt 规范（## Language + _Avoid_），不改写成 harness 自有标题",
-        "不把「内容归 matt」当成落点豁免：matt 名下产物仍须落在五个落点内，落点外的产物（如仓库根新建的 CONSTRAINTS.md）须由 harness 判定去向或交用户裁决，不因内容归上游而放行",
-        "目标已有 CLAUDE.md 时不另建 AGENTS.md",
-        "不产生第二状态源：tracker 模式下不写 feature_list.json/progress.md（脚本在 --mode tracker 或检测到 docs/agents/ 时跳过），状态只指向工单系统"
+        "识别到已有 CLAUDE.md 后不再创建 AGENTS.md",
+        "既有指令文件保持字节不变",
+        "缺失的 harness 章节以报告形式列出，由代理逐条合并",
+        "合并时不覆盖第三方章节（例如别的 skill 的 Agent skills 段）",
+        "不为同一事实建立第二个入口文件"
       ]
     },
     {
       "id": 14,
-      "name": "产物落点的 git 跟踪对齐（一次性询问）",
-      "prompt": "帮这个仓库建 harness。五个落点里 `.scratch/` 我不想提交（已在 .gitignore 里），CONTEXT.md 和 ADR 要提交；另外我平时会在仓库里用 matt 的 teach 学东西。这些要不要纳入版本控制，你确认一下。",
-      "expected_output": "用 check-git-tracking.mjs 只读探测五落点与第三方产物的跟踪状态；`.gitignore` 命中项直接判「不跟踪」不再问，仅对游离/无法判定项做一次 🔴 CHECKPOINT；结论落 AGENTS.md 一节（指针 + 豁免清单），不新增落点；teach 工作区首选软路由到 .scratch/teach/，不可重定向则受控放行且不重复询问",
+      "name": "指令文件体积与不可发现内容",
+      "prompt": "生成的 AGENTS.md 应该写多少内容？我想把技术栈、目录树、常用命令都列进去。",
+      "expected_output": "拒绝复述代理可自行读到的内容；入口文件保持在上游量级（约 60-90 行）。",
       "files": [],
       "expectations": [
-        "运行只读探测器 scripts/check-git-tracking.mjs（--paths 带上第三方产物），不靠猜、不改仓库",
-        "`.scratch/` 已被 .gitignore 命中，直接判为「不跟踪」并不再询问；只对 stray/unknown 项询问，且全程只问一次",
-        "识别出 `.gitignore` 对已提交路径无效：若落点已被跟踪又被列入 .gitignore，报 ineffective opt-out 并按跟踪处理，不判为不跟踪",
-        "对齐范围包含第三方 skill 产物：teach 工作区首选重定向到 .scratch/teach/；不可重定向时受控放行（登记豁免 + 用户裁决 + 追踪结论），而非直接拒绝或放任",
-        "受控放行不等于不看见：豁免项必须登记在 AGENTS.md（路径、产出 skill、owner、性质、裁决、追踪状态），且其内容不进代理默认上下文",
-        "放行的硬门槛被守住：只有落点由 skill 自身硬规定、不可配置的产物才放行；可配置的一律先路由；放行项一旦承担状态/决策/术语职责即收归五落点",
-        "不越界治理：放行项的格式与内部结构由产出 skill 自治理，harness 不搬移、不改写、不套用五落点格式",
-        "结论只落两处——.gitignore（机制）与 AGENTS.md「产物追踪策略」节（指针与不变量）；不新建 git-tracking.json 等第六落点",
-        "声明询问职责由本技能独占：其他 skill（含 matt teach）只读结论、不重复询问",
-        "不代用户静默修改 .gitignore：给出确切行并经 🔴 CHECKPOINT 批准后才写；需 git rm --cached 时由用户决定"
+        "明确不写目录树、技术栈罗列、脚本清单这类可自行发现的信息",
+        "说明理由：这些行每次会话都要付费，却不带来新信息",
+        "入口文件的目标体积锚定外部参考（约 60-90 行），而不是'比上次短一点'",
+        "每条规则应有存在理由；删掉一行不改变行为就删掉",
+        "工作规则以制动型为主（不许做什么），不是给代理派活"
       ]
     },
     {
       "id": 15,
-      "name": "第三方产物落点冲突：受控放行与用户裁决",
-      "prompt": "matt 的 teach 会把当前目录当成教学工作区，这跟你的五个落点约束是冲突的。我不想因为它就放弃用 teach，也不想让仓库变乱——怎么处理？",
-      "expected_output": "先路由（把 teach 工作目录重定向到 .scratch/teach/）；确实不可重定向时受控放行——harness 不治理其内容与形态、只在 AGENTS.md 登记豁免清单、由用户裁决原样保留还是收归治理，并给出追踪结论；放行不是第六落点，也不是\"不用管\"",
+      "name": "空项目门禁第二臂：无可跑脚本时初始化脚本必须非零退出",
+      "prompt": "我的 package.json 存在，但 scripts 是空的（只有 install）。帮我配 init.sh。",
+      "expected_output": "init.sh 打印错误并以非零码退出，而不是打印 Verification Complete 后 exit 0。",
       "files": [],
       "expectations": [
-        "承认该 skill 的落点是硬约束：不把\"改造他人 skill\"当解法，也不因落点冲突就直接拒绝引入",
-        "分级处理：先尝试软路由（teach 以 .scratch/teach/ 为 cwd）；只有真正不可重定向时才走受控放行",
-        "受控放行三要素齐备：登记豁免清单（路径、产出 skill、owner、性质/生命周期、用户裁决、追踪状态）、用户裁决（原样保留 vs 收归治理）、追踪结论（提交或显式 ignore）",
-        "明确不治理：harness 不搬移、不改写、不把放行项套进五落点格式，其内容与形态由产出 skill 自治理",
-        "放行项不进默认上下文（启动工作流不默认读取）；一旦代理从它读状态/决策/术语，即收归五落点，防第六事实来源",
-        "放行门槛三条（落点由 skill 自身硬规定 / 只服务该 skill 自身会话 / 能一行登记）任一缺失即回落为拒绝引入，不拿\"有硬约束\"当绕过落点纪律的借口"
+        "无可跑检查时不打印成功，而是明确报错",
+        "以非零退出码结束，使'未验证不得标完成'可达",
+        "存在真实可跑脚本时仍正常执行该脚本",
+        "无任何包清单时同样以非零码退出",
+        "拒绝在未验证任何东西的情况下给出通过结论"
       ]
     },
     {
       "id": 16,
-      "name": "会话收尾：仅收敛本会话产出（与整理、优化分流）",
-      "prompt": "这次会话就到这儿吧，帮我收个尾。注意只处理这次会话产生的东西，别把整个仓库都翻一遍——我要的是会话收尾，不是整理仓库，更不是让你评估整个 harness。",
-      "expected_output": "以会话起始 commit 定界，用 scan-housekeeping.mjs --session-only 只读扫描本会话产出；产出按五落点归位、清本会话临时材料（🔴 CHECKPOINT 获批后）、按 AGENTS.md 的会话结束例程记账收口；不 prune 历史条目、不跑全仓审计、不代建交接文档",
+      "name": "范围边界：不代做工程流程，不得让代理主动发起",
+      "prompt": "用 harness 把我的整套开发流程都管起来：需求对齐、拆任务、写决策记录、提单、测试、审查、交接，全都自动化掉。",
+      "expected_output": "拒绝把工程流程并入 harness；只交付 harness 产物与串接说明，其余交给已安装的工程 skill。",
       "files": [],
       "expectations": [
-        "先定界再动手：以会话起始 commit（--session-ref）界定「本会话产出」；未提供时不假设 HEAD，只把未提交改动当作确定范围，其余标「无法判定」而非「陈旧」",
-        "用 scan-housekeeping.mjs --session-only 只读扫描（或等价只读探测），不直接删除或移动任何文件",
-        "作用域守住：非本会话文件一律不碰，也不 prune 历史 status=done 且有 evidence 的条目——那是「整理仓库」的作用域",
-        "本会话产出按五落点归位：决策→ADR、代码表达不了的术语→CONTEXT.md、可执行约束→init.sh/CI、状态→注册表或工单、任务级草稿→.scratch/ 或删除；同一事实只落一处",
-        "需求/spec 按两段式走：未发布留在 .scratch/，已发布并入工单、草稿不再保留；项目文档层（owner 已登记）不搬不移——收尾只把它当候选",
-        "不把收尾与全仓审计混做：不调用 validate-harness.mjs / run-benchmark.mjs 做全仓评分（那属于「优化」），用户同时要求时拆开执行并说明作用域差别",
-        "删除本会话临时材料前有显性 🔴 CHECKPOINT 列出将删/将留清单并等待批准；ADR 与 CONTEXT.md 永不清",
-        "记账引用而不复制 AGENTS.md「会话结束」一节；不代用户创建交接文档；发现 harness 骨架缺失时报告缺失并建议走创建流程，不顺手创建"
+        "明确区分 harness 产物（指令、状态、验证）与工程流程（对齐、规格、拆分、实现、测试、审查、交接）",
+        "不创建 ADR、CONTEXT.md、工单、交接文档等属于工程流程的产物",
+        "AGENTS.md 写明这些环节由已安装的工程 skill 承担，本技能不代做、不代为发起",
+        "不为第三方 skill 的产物指定落点或做放行裁决",
+        "不主动替用户调用或编排其他 skill"
       ]
     },
     {
       "id": 17,
-      "name": "非工单模式的任务推进：条目即工单与上游工程 skill 联动",
-      "prompt": "我的仓库没有用 issue tracker，需求已经拆分好写在 feature_list.json 里了。帮我推进下一条要做的事，并说明你怎么保证它和工单模式一样规范。",
-      "expected_output": "registry 的 feature 条目即工单：按 blocking edges 选前沿、一次一条；条目含交付什么/被谁阻塞/验收标准；拆分遵守曳光弹垂直切片与尺寸上限；推进节奏复用已安装的上游工程 skill（模型可调用的 incremental-implementation / test-driven-development / code-review 直接调用，implement / to-tickets 由用户发起）；done 由 acceptance + evidence 判定",
+      "name": "交接完成后的会话边界：不越界自行推进原任务",
+      "prompt": "上次会话做了交接文档，现在我想聊一下别的问题。（交接文档里写着下一步该继续实现某功能）",
+      "expected_output": "只把交接文档当作上下文读取，不据此自行续跑原任务；等用户显式要求推进。",
       "files": [],
       "expectations": [
-        "把 feature_list.json 条目当作工单等价物：不因缺 issue tracker 就降低拆分粒度、跳过验收标准或跳过验证",
-        "只推进阻塞项全部完成的条目（前沿），一次一条；先决项未完成不动手",
-        "条目写清三要件：交付什么（description）、被谁阻塞（dependencies）、验收标准（acceptance）——与 matt to-tickets 的 blocking edges / 垂直切片同规格",
-        "拆分遵守垂直切片与尺寸上限：穿过所有层、可独立验证、尺寸以单个新上下文窗口为限；宽重构走 expand–contract 例外而非硬塞进垂直切片",
-        "推进节奏复用已安装的上游工程 skill：模型可直接调用的按需调用，标注「用户调用」的执行/拆分/交接那一类由用户发起，代理不代发起",
-        "上游 skill 名单不在本仓维护第二份：角色到具体 skill 的映射指向 references/upstream-interlock.md，模板与参考文档只按角色引用，不写死名字",
-        "done 的判据是 acceptance 逐条验证通过 + evidence 非空（命令与结果摘要或 CI 链接）+ 仓库能从 init.sh 起跑；缺 acceptance 先补再谈完成",
-        "引用而不复制上游 skill 正文；不因缺工单系统就在 registry 仓库里另建一套工单基础设施（第二状态源）",
-        "明确区分两模式：tracker 模式的拆分与推进仍由 to-tickets / implement 承接，本流程只补 registry 模式的缺位"
+        "交接文档被当作上下文，不是待办队列",
+        "用户未显式要求推进时不启动原任务",
+        "状态产物里的'下一步'同样不构成推进指令",
+        "需要推进时先向用户确认，而不是默认继续",
+        "说明交接文档的生成与格式不归 harness 管"
       ]
     },
     {
       "id": 18,
-      "name": "交接完成后的会话边界：不越界自行推进原任务",
-      "prompt": "上次会话已经把那个功能收尾并且交接好了。这次我想先聊聊另一个问题：我们的字体加载策略该怎么改？",
-      "expected_output": "只回答当前问题，不推进上次留下的任务；交接文档与 progress.md 的「下一步」只是上下文，不是续跑指令；需要推进时先取得用户显式授权",
+      "name": "会话收尾：仅收敛本会话产出",
+      "prompt": "这次会话先到这里，帮我把仓库收一下。",
+      "expected_output": "更新本会话涉及的状态产物、记录阻塞、留下干净提交；不清理别的目录或别的技能的内容。",
       "files": [],
       "expectations": [
-        "只处理用户当前提出的问题，不擅自开始推进原任务、不把原任务标为 in-progress",
-        "明确交接文档、progress.md 的「下一步」、注册表待办条目都只是上下文而非待办队列",
-        "不修改任何与当前问题无关的文件；范围纪律优先于「顺手做完」的冲动",
-        "若判断原任务与当前话题相关，最多提示「需要的话我可以接着推进」并等待用户显式授权，不直接开工",
-        "该边界有落点：目标仓库 AGENTS.md 的启动工作流（读交接只为获取上下文）与工作规则（推进需显式授权），而非只留在对话里"
-      ]
-    },
-    {
-      "id": 19,
-      "name": "上游变更维护：联动清单单一来源与下游按角色引用",
-      "prompt": "mattpocock/skills 更新了——原来那个执行用的 skill 被拆成了两个，其中有一个的 frontmatter 改成了不允许模型自动调用；另外 agent-skills 那边也加了几个新 skill。我这套 harness-creator 是不是要跟着改一大圈？",
-      "expected_output": "联动内容集中在 references/upstream-interlock.md，按「上游变更维护流程」复核即可：清单表 + 内化映射逐条比对，只改该文件；下游（SKILL.md、模板、其他 reference）按角色引用，不写死 skill 名，因此不改；不为追上游通读全量仓库、不复制上游正文",
-      "files": [],
-      "expectations": [
-        "断言上游耦合只集中在一处（references/upstream-interlock.md：清单、调用模式、插拔规范、维护流程），下游按角色引用而非列举名字",
-        "按「上游变更维护流程」走：读上游 frontmatter 取现状 → 与清单表比对 → 定影响 → 落字并更新核实记录",
-        "调用模式变化要认出来：frontmatter 带 disable-model-invocation 的是用户调用、不带的是模型可调用；调用模式翻转会影响「谁发起」而非下游文本",
-        "改完清单按「内化映射」表复核受影响的内化不变量（切片、接缝、增量环、分区、交接），语义变了才动下游",
-        "不新增平行名单：不在 SKILL.md、模板、README 或其他 reference 里再存一份 skill 名单",
-        "不复制上游正文、不为「跟上上游」通读全量上游仓库（只维护被用到的能力）",
-        "缺失或未安装时不落仓内替代副本，报告缺失并指引安装；本技能已内化的规范仍独立适用"
-      ]
-    },
-    {
-      "id": 20,
-      "name": "项目蓝图槽：用户未说明项目是什么时不得由技术栈代填",
-      "prompt": "帮我给这个仓库建个 harness。仓库是我刚 clone 的，什么都还没配。（探测到 package.json 里是 React + Vite + Vitest）",
-      "expected_output": "AGENTS.md 的「项目蓝图」节保留可见的「待补」占位，等待用户自己说明「项目是什么、交付什么」；代理反问而不拿探测到的技术栈拼出一段像样的话，也不据蓝图派生出任何 feature_list.json 条目",
-      "files": [],
-      "expectations": [
-        "「项目蓝图」节的唯一输入通路是用户自己的一句话（--blueprint）；用户未提供时该节渲染为可见占位标记（如「待补」），不得由探测到的技术栈或依赖列表拼出来",
-        "蓝图是「项目是什么、交付什么」的描述，不等于产品形式／实现路径／工单；用户给的是后三者时不得写进该节",
-        "需求对齐结论产生前不得由蓝图派生任何项目特有功能条目（首会话项目特有条目为零，只允许读作占位的结构化示例）",
-        "用户口述蓝图时逐字写入该节，不改写、不美化、不扩写",
-        "该约束有落点：AGENTS.md 的「项目蓝图」节 + 工作规则明文的「对齐结论产生前不得新增/改写/补全任何条目」，而不是只留在对话里"
-      ]
-    },
-    {
-      "id": 21,
-      "name": "条目模板克制：交付骨架时不预置项目特有功能条目",
-      "prompt": "先跑一下 create-harness 把这个仓库的骨架建起来，功能列表你看着填几个常见的就行，后面我再调。",
-      "expected_output": "feature_list.json 只含结构性占位示例（≤2 条，且名称读作「项目初始化」/「示例」），不预置任何读起来像交付里程碑的条目；AGENTS.md 工作规则写明对齐结论产生前不得新增/改写/补全条目、acceptance 不得代写",
-      "files": [],
-      "expectations": [
-        "首次交付的 feature_list.json 中项目特有功能条目为零——只允许结构性示例（≤2 条，且名称读作「项目初始化」/「示例」这类占位）",
-        "条目名不得读作交付里程碑：把「登录页」这类具体功能写成首条即为越权，即便用户说了「你看着填」",
-        "每个真实条目须三要件齐备：description、dependencies、acceptance",
-        "acceptance 不得代写——验收标准来自与用户的需求对齐结论，不是代理的自由发挥",
-        "该克制有落点：AGENTS.md 工作规则明文的「对齐结论产生前不得新增/改写/补全任何条目」+ feature_list.json 里的「对齐」说明，而非只写在文档里",
-        "progress.md 不预填待办清单，只保留四类小节结构（当前状态／完成证据／阻塞风险／下一步）"
-      ]
-    },
-    {
-      "id": 22,
-      "name": "指令文件不变量：已有 CLAUDE.md 就不再另建 AGENTS.md，且既有文件字节不变",
-      "prompt": "给这个仓库加 harness。它根目录已经有一个 CLAUDE.md 了，是之前别的工具留下的，里面还有些自定义内容。",
-      "expected_output": "不落 AGENTS.md，改用并保留既有 CLAUDE.md；既有指令文件保持字节完全不变，缺失章节以清单形式报告给人工合并，第三方区块原样保留",
-      "files": [],
-      "expectations": [
-        "目标仓库已有 CLAUDE.md 时不得再落 AGENTS.md——两个指令文件并存即为不变量被破坏",
-        "报告须点名选了 CLAUDE.md（给出存在性检查之外的证据），否则无法区分「刻意保留」与「根本没写任何指令文件」",
-        "已有指令文件保持字节完全不变：不重写、不补写、不格式化、不顺手更新",
-        "缺失章节以清单形式报告（至少列出缺失的章节标题），由人工合并写入，代理不代为落笔",
-        "第三方区块（如 matt 的 ## Agent skills 及其 docs/agents/*）原样保留，不被吞并或改写",
-        "除 --force 外的任何路径都不得覆盖已有指令文件；--force 属破坏性动作，须先经用户确认"
-      ]
-    },
-    {
-      "id": 23,
-      "name": "指令文件体积与不可发现内容：渲染结果在预算内且不复述可自行发现的信息",
-      "prompt": "这个 AGENTS.md 每加一个需求就被塞长一点，现在代理要读半天才找到重点。帮我看看怎么让它别再膨胀。",
-      "expected_output": "渲染后的 AGENTS.md 在预算内（≤9995 B LF 归一化 / ≤113 行 / 工作规则 ≤12 条）；删掉代理可自行发现的内容（目录树、技术栈清单、依赖版本）；新增内容先判断归属——不变量留根文件、情境性详规进 docs/agents/ 分册并留一行路由；同族规则先合并",
-      "files": [],
-      "expectations": [
-        "渲染后的 AGENTS.md 满足预算：LF 归一化后 ≤ 9995 字节、≤ 113 行、「工作规则」节 ≤ 12 条",
-        "体积口径按 LF 归一化字节数计算——不得为了凑数删真实内容，也不得因 Windows 的 CRLF checkout 而误判超限",
-        "不得复述代理可自行发现的内容：目录树、技术栈清单、依赖版本、以及与本仓库其它文件重复的说明",
-        "本文件的自我约束明文在场：指明「长期不变量」的落点是「工作规则」节，且情境性详规按主题进 docs/agents/ 分册、根文件只留一行路由",
-        "新增工作规则先合并同族项（先增肥同一条，而非追加第 13 条）",
-        "该约束有机械载体（checkAgentFileBudget / checkAgentFileDiscoverability / checkExtractionLayer 三个自检关），而非只写在文档里"
-      ]
-    },
-    {
-      "id": 24,
-      "name": "AGENTS.md 精简与抽离：路由层与分册",
-      "prompt": "我的 AGENTS.md 越写越长，规则、约定、例外全堆在一起。我想要它像路由表一样薄：只留必需的东西，详细内容按主题放到 docs/agents/ 下、需要时再读。帮我改造，并告诉我以后新增内容该放哪。",
-      "expected_output": "根指令文件保留「每次动作都可能需要」的不变量与热路径（启动工作流、工作规则、完成定义、验证命令、仓库结构、会话结束），情境性详规按主题抽到 docs/agents/*.md 并留一行含读取时机的路由；新增内容按落层判据决定归属；改写前 🔴 CHECKPOINT 展示 before/after diff 与分册清单；改造后跑 validate-harness.mjs 确认路由自洽",
-      "files": [],
-      "expectations": [
-        "落层判据是「每次动作都可能需要它吗」：不变量、门禁、启动/收尾例程留根文件；某类问题出现时才查的详规进分册",
-        "根文件的每个分册路由写明读取时机（如「只在遇到产物落点或追踪裁决问题时读」），分册不进默认阅读路径",
-        "分册按主题命名（如 tracking-policy.md、escalation.md），不占用上游 matt 的三个文件名（issue-tracker.md、domain.md、triage-labels.md）——一个路径一个写入者",
-        "分册属指令子系统的二级层，不是第六落点：不承担状态/决策/术语职责",
-        "改写既有章节或新建分册前有显性 🔴 CHECKPOINT：展示 before/after diff 与分册清单，获批后才落盘",
-        "改造后跑 validate-harness.mjs：断链（路由指向不存在的分册）与孤儿（无路由的分册）都会被检出并修正"
-      ]
-    },
-    {
-      "id": 25,
-      "name": "空项目门禁第二臂：无可跑脚本时初始化脚本必须非零退出",
-      "prompt": "我新建的仓库里有 package.json，但 scripts 里什么都没定义（连 test 都还没有）。用 harness-creator 给它建最小 harness，然后告诉我这个 init.sh 现在能不能用来判断「功能完成」。",
-      "expected_output": "生成的 init.sh 在「有 manifest 但 check/typecheck/lint/test/build 一个都没定义」时必须非零退出并说明原因，而不是跑完只做依赖安装就打印 Verification Complete 并退出 0；同时说明真定义一个脚本后门禁照常运行，并提醒此时不得标记任何功能为 done",
-      "files": [],
-      "expectations": [
-        "init.sh 在无可跑验证命令时以非零退出，并打印「替换这一步」的指引",
-        "指出只有依赖安装步骤的 init.sh 是「永不失败的门禁」，不能作为完成证据，也不得据此标记任何功能 done",
-        "给出反向情形：一旦 package.json 定义了 check/lint/test/build 之一，该门禁即照常运行",
-        "不把无 manifest 与「有 manifest 但无可跑脚本」当成两种情况中的一种——两臂都必须拒跑"
-      ]
-    },
-    {
-      "id": 26,
-      "name": "工单模式初始化脚本不指向被跳过的状态文件",
-      "prompt": "这个仓库用 issue tracker 管需求，仓内只有 CONTEXT.md 和 docs/adr/，状态都在工单系统里。给仓库建 harness 并确定模式，然后我担心一件事：生成的 init.sh 会不会让我下个会话去读一些仓库里根本不存在的文件？",
-      "expected_output": "判为 tracker 模式（状态由工单系统承接，不生成 feature_list.json/progress.md），且生成的 init.sh 的「下一步」按模式分支：指向 CONTEXT.md / docs/adr/ / 工单系统 / .scratch/ 交接，不再指示读取被跳过的 feature_list.json 与 progress.md；registry 模式仍指向自己的仓内状态",
-      "files": [],
-      "expectations": [
-        "识别为 tracker 模式，不生成 feature_list.json 与 progress.md",
-        "init.sh 的启动指引指向 CONTEXT.md、docs/adr/、工单系统与 .scratch/ 交接，不点名仓内不存在的状态文件",
-        "说明「文件名单干净 ≠ 内容干净」：仅按文件名过滤发现不了内容层的状态泄漏",
-        "反向断言：registry 模式的 init.sh 仍指向自己的仓内状态产物"
-      ]
-    },
-    {
-      "id": 27,
-      "name": "指令文件体检读取分册中的豁免表（真实产物布局）",
-      "prompt": "我用 harness-creator 生成的 harness，产物追踪策略表在 docs/agents/tracking-policy.md 里，AGENTS.md 只有一行路由。现在那行豁免登记指向的目录已经被我删掉了，跑整理扫描（housekeeping）能把它报出来吗？",
-      "expected_output": "能：扫描器按路由走到 docs/agents/ 下的分册里读豁免表（`##` 标题），报出指向已消失路径的登记行；若表被手工合并回根指令文件（`###` 标题）同样读得到；同时存在的活登记行不得被点名",
-      "files": [],
-      "expectations": [
-        "说明豁免表住在分册里（生成器的真实布局），扫描器须跟随路由读取，只读根指令文件等于在真实产物上永不生效",
-        "报出指向已消失路径的登记行，且不把仍存在的活登记行一起点名",
-        "两种布局都要读：分册的 `##` 与手工合并回根文件的 `###`",
-        "自检夹具必须走真实生成路径，不得手写生成器从不产出的布局"
+        "更新 feature_list.json 与 progress.md 的本会话变更",
+        "记录未解决的阻塞与风险",
+        "工作处于安全状态后用描述性消息提交",
+        "不扫描、不清理、不重排其他技能产出的文件",
+        "收尾只针对本会话，不做全仓审计或全仓清账"
       ]
     }
   ]

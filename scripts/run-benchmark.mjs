@@ -9,7 +9,6 @@ import {
   bottleneckLabel,
   exists,
   formatScoreReport,
-  harnessAgentDocs,
   htmlReport,
   loadHarnessFiles,
   parseArgs,
@@ -30,31 +29,49 @@ const execFileAsync = promisify(execFile);
 // carrier is the thing this skill tells everyone else to fix.
 //
 // The baseline moved once, deliberately, and the multiplier was tightened at the same time: the
-// file grew past the old 150%-of-7889 ceiling while gaining a whole capability family (the
-// instruction-file extraction layer — templates, generator, scorer, maintenance flow, gates), and
-// three independent judges confirmed that the phrase-by-phrase compression paying for it had
-// deleted real content. Rather than keep trading content for bytes, the baseline is now the
-// previous stable SKILL.md and the allowance drops from 150% to 15% — the same multiplier the
+// file had grown past the old 150%-of-7889 ceiling while gaining a capability family that has since
+// been removed again, and three independent judges confirmed that the phrase-by-phrase compression
+// paying for it had deleted real content. Rather than keep trading content for bytes, the baseline
+// is the previous stable SKILL.md and the allowance drops from 150% to 15% — the same multiplier the
 // generated AGENTS.md gets. Net effect: less headroom in absolute terms than re-interpreting the
 // old 150% against the new baseline would have given, so the ratchet keeps biting.
-const SKILL_MD_BASELINE_BYTES = 11801;
+//
+// The baseline moved a second time, in the only direction that does not need the user: DOWN. The
+// scope reduction that removed the two governance modes, the five landing points, the extracted
+// agent-doc layer, git-tracking alignment and housekeeping took SKILL.md from 11801 to 9623 bytes.
+// Leaving the baseline where it was would have handed the deleted doctrine a 3.9 KB runway to grow
+// back into — the reduction would be undone by the next edit that "just adds one section back".
+// Lowering a cap is enforcement of a reduction already agreed; RAISING it is a scope decision for
+// the user, and so is widening this multiplier. The external comparison, for the record: upstream's
+// SKILL.md is 5188 bytes, and a Chinese rendering costs roughly 1.3x more bytes at an equal token
+// count, so 9623 is about 1.4x the upstream-equivalent — the difference is the boundary section,
+// the counterexample blacklist and the edge-case table, none of which upstream carries.
+const SKILL_MD_BASELINE_BYTES = 9623;
 const SKILL_MD_MAX_BYTES = Math.floor(SKILL_MD_BASELINE_BYTES * 1.15);
 
 // The generated instruction file gets the same treatment, for the same reason and with more at
-// stake: it is the largest artifact this skill ships into every target repo, it is read in full at
-// every session start, and nothing used to measure it — while the audit's instruction checks are
-// all presence checks, so extra text could only ever help. Measured on a default render (no
-// --blueprint, no --commands) because the cap must not depend on what a project happens to fill in.
+// stake: it is the largest artifact this skill ships into every target repo, and it is read in
+// full at every session start. Measured on a default render (no --blueprint, no --commands)
+// because the cap must not depend on what a project happens to fill in.
 //
-// Ratcheted down when the file became a routing layer: situation-specific detail moved into
-// docs/agents/*.md, so the default render should stay near the new, smaller baseline instead of
-// having the old, manual-shaped ceiling silently available as headroom for re-growth.
-const AGENTS_MD_BASELINE_BYTES = 8692;
+// The anchor is EXTERNAL, not a ratchet around whatever this template currently renders at. The
+// previous version set the baseline to the current render (8692 B) and the ceiling to 115% of it,
+// which was two failures in one: it turned a 3.6x-oversized file into the compliant baseline, and
+// it left no direction of travel except upward. A cap whose floor is the status quo can only ever
+// ratify. It now anchors on the upstream reference template (2438 B, 68 lines, ~423 tokens) plus
+// an allowance for CJK encoding — the same file costs roughly 1.3x more bytes in Chinese at an
+// equal token count — and lines are capped on the lecture's own 50–200 guidance, which is
+// language-neutral where bytes are not. Raising either number is a scope decision for the user,
+// not a side effect of the template growing.
+const AGENTS_MD_BASELINE_BYTES = 3200;
 const AGENTS_MD_MAX_BYTES = Math.floor(AGENTS_MD_BASELINE_BYTES * 1.15);
-const AGENTS_MD_MAX_LINES = 113;
-// The template states this limit in its own "本文件自我约束" rule; the check keeps the statement
-// honest, so a 13th rule has to displace something instead of just accumulating.
-const WORKING_RULES_MAX = 12;
+const AGENTS_MD_MAX_LINES = 90;
+// The template states this limit in its own self-restraint rule; the check keeps the statement
+// honest, so a 9th rule has to displace something instead of just accumulating. Eight is the point
+// where every remaining rule is a brake on the agent (stay in scope, verify before claiming done,
+// do not invent entries, do not start work unasked) rather than an assignment of new work — which
+// is what this skill is allowed to ship into someone else's repo.
+const WORKING_RULES_MAX = 8;
 
 // Content an instruction file must not restate, because the agent can read it from the repo
 // itself: the tree, the stack, the scripts. Every external guide leads with this, and the failure
@@ -79,9 +96,8 @@ const DISCOVERABLE_CONTENT = [
 // of it. Declared here, ahead of the runSelfCheck() call site, for the temporal-dead-zone reason
 // recorded above: a const sitting next to the function that reads it is still in its TDZ there.
 const SELF_CHECK_GROUPS = [
-  'budget', 'agentsBudget', 'agentsDiscover', 'extraction', 'tracker', 'gate', 'dryRun',
-  'selfRefs', 'bottleneckTies', 'blankGate', 'handoff', 'blueprint', 'entries', 'agentFile',
-  'housekeeping', 'modeReport'
+  'budget', 'agentsBudget', 'agentsDiscover', 'scopeBrake', 'dryRun', 'selfRefs',
+  'bottleneckTies', 'blankGate', 'blueprint', 'entries', 'agentFile'
 ];
 
 // One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
@@ -90,22 +106,42 @@ const SELF_CHECK_GROUPS = [
 // return '' for a missing group.
 const SELF_CHECK_REPORT_LINES = new Map([
   ['budget', (group) => ` SKILL.md sits at ${group.size}/${group.max} bytes (${group.pass ? 'within' : 'OVER'} budget).`],
-  ['agentsBudget', (group) => ` The generated AGENTS.md stays inside its byte, line and working-rule budgets (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['agentsBudget', (group) => ` The generated AGENTS.md stays inside its external byte, line and working-rule budgets (${group.pass ? 'verified' : 'FAILED'}).`],
   ['agentsDiscover', (group) => ` The instruction file does not restate what the agent can read for itself, and the detector is proven to have teeth by a seeded violation (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['extraction', (group) => ` The split-out instruction layer is scaffolded and routed, the scorer follows those routes, and a dangling route or an orphan doc is caught (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['tracker', (group) => ` A tracker-mode scaffold keeps no registry state and its init.sh routes to the ticket system rather than to files that mode skips (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['gate', (group) => ` A signal-free repo with no explicit --mode refuses to write, while both legitimate paths still pass (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['scopeBrake', (group) => ` The generated instruction file states that the engineering workflow belongs to the engineering skills and carries none of the removed doctrine (${group.pass ? 'verified' : `leaked ${(group.leaked || []).join(', ') || 'none'}; brake ${group.brake ? 'present' : 'MISSING'}; detector ${group.seeded?.length ? 'has teeth' : 'BLIND'}`}).`],
   ['dryRun', (group) => ` --dry-run writes nothing, reports the target's real state, and its plan matches the live run entry for entry (${group.pass ? 'verified' : 'FAILED'}).`],
   ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
   ['bottleneckTies', (group) => ` The bottleneck line names ${group.tieCount} tied subsystem(s) as a tie instead of picking one (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blankGate', (group) => ` A project with nothing to verify — no manifest, or a manifest with no runnable script — gets a placeholder step that exits non-zero instead of reporting a pass it did not earn (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['handoff', (group) => ` A handoff doc under .scratch/ is recognised regardless of filename, while one outside the landing points is ignored (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['blueprint', (group) => ` The project-blueprint slot stays a visible pending marker when the user has not stated one, rather than being filled from the detected stack (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['entries', (group) => ` A freshly scaffolded registry ships no project-shaped feature entries, and states the alignment rule before any entry may be added (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['housekeeping', (group) => ` The housekeeping scanner changes nothing, refuses to call uncommitted history stale without a --session-ref (and still marks history when given one), suppresses pruning during wrap-up, and never prunes a done-without-evidence entry (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['modeReport', (group) => ` The housekeeping scanner reads .scratch/ as work in progress rather than as a tracker signal, while a real tracker signal is still detected (${group.pass ? 'verified' : 'FAILED'}).`]
+  ['blueprint', (group) => ` The project-plain-description slot stays a visible pending marker when the user has not stated one, rather than being filled from the detected stack (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['entries', (group) => ` A freshly scaffolded harness ships no project-shaped feature entries, and states the alignment rule before any entry may be added (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`]
 ]);
+
+// The single behavior this skill must not have. A harness that detected governance modes, assigned
+// five landing points, routed ADRs and CONTEXT.md and handed out housekeeping duties did not merely
+// describe a repo — it assigned the agent work that belongs to the engineering skills, and that
+// assignment is exactly what collided with those skills over triggers. Two-sided on purpose: the
+// brake must be present in the render, AND none of the removed doctrine may reappear in it. An
+// assertion that only forbids is satisfied by an empty file; one that only requires is satisfied by
+// a template that goes on to hand out work. The detector is also shown a seed that trips every
+// pattern, because "found nothing" is worth nothing from a blind scanner.
+//
+// Declared up here, not next to checkScopeBoundary() below: a const read from a function invoked by
+// the top-level flow is still in its temporal dead zone there, and the run died with exactly that
+// error ("Cannot access 'FORBIDDEN_IN_AGENTS_MD' before initialization") the first time this check
+// was added. Same trap the notes above record twice already.
+const FORBIDDEN_IN_AGENTS_MD = [
+  { name: 'ticket-system mode', pattern: /工单系统|issue tracker|ticket system/ },
+  { name: 'ADR routing', pattern: /\bADR\b|docs\/adr/ },
+  { name: 'domain-language file', pattern: /CONTEXT\.md/ },
+  { name: 'scratch landing point', pattern: /\.scratch\// },
+  { name: 'extracted agent docs', pattern: /docs\/agents\// },
+  { name: 'landing-point doctrine', pattern: /落点/ },
+  { name: 'tracking-policy section', pattern: /产物追踪策略/ }
+];
+const SEEDED_VIOLATION = '\n状态由工单系统承接；决策进 docs/adr/；术语进 CONTEXT.md；'
+  + '材料入 .scratch/；详规落 docs/agents/；五落点；产物追踪策略。';
 
 // Declared at module scope, ahead of the runSelfCheck() call: a const sitting next to the function
 // that reads it would still be in its temporal dead zone at that call site.
@@ -121,85 +157,9 @@ const RELATIVE_SELF_REFERENCE = /(?:node\s+scripts\/[a-z0-9-]+\.mjs|skills\/harn
 // top-level flow would still be in the TDZ.
 const SKILL_RELATIVE_PATH = /(^|[^/\w.~])skills\/[a-z0-9][a-z0-9-]*\//im;
 
-// English tracker-mode fixture used by the self-check's second stage. Declared before
-// the top-level flow below — const initializers would still be in the TDZ otherwise.
-const ENGLISH_AGENTS_MD = `# AGENTS.md
 
-Project harness for reliable agent-assisted development.
 
-## Startup workflow
 
-Before writing code:
-
-1. Read this file in full
-2. Read \`CONTEXT.md\` for domain vocabulary and recent ADRs in \`docs/adr/\`
-3. Run \`./init.sh\` to verify the environment
-4. Read any handoff doc under \`.scratch/\` if one exists
-5. Check the issue tracker for ticket status and blocking edges
-
-## Working rules
-
-- One feature at a time: pick exactly one unfinished ticket
-- Dependencies are explicit: blocking edges are declared on tickets
-- Stay in scope: do not touch files unrelated to the current ticket
-- Decisions go to ADRs in \`docs/adr/\`, not into progress logs
-- Task materials live in \`.scratch/\` and are deleted when the task is done
-
-## Definition of done
-
-- [ ] Behavior implemented
-- [ ] Verification commands actually ran (tests, type checks)
-- [ ] Evidence recorded as a CI run link or command output summary
-- [ ] Repo restarts cleanly from \`./init.sh\`
-
-## Verification commands
-
-- \`npm test\`
-- \`npm run build\`
-
-## End of session
-
-1. Write a reference-style handoff under \`.scratch/\` (any filename): goal, current status, recommended next step; reference specs, ADRs and commits by path, never copy their content
-2. Record unresolved risks or blockers
-3. Commit with a descriptive message and leave the repo clean
-`;
-
-const ENGLISH_CONTEXT_MD = `# CONTEXT
-
-## Glossary
-
-- **Ticket**: the smallest unit of work in the issue tracker, declaring its blocking edges.
-- **Spec**: requirements published to the issue tracker via to-spec.
-
-## State convention
-
-Ticket status and dependencies live in the issue tracker; the repo keeps no feature_list.json.
-`;
-
-const ENGLISH_ADR_MD = `# ADR 0001: Adopt tracker mode
-
-The issue tracker is the source of truth for state. Long-lived repo assets are
-CONTEXT.md and this ADR directory only.
-`;
-
-const ENGLISH_HANDOFF_MD = `# Session handoff
-
-## Goal
-
-Implement ticket #12 (blocked by #9).
-
-## Current status
-
-Verification passed; evidence is the CI run linked from ticket #12.
-
-## Blockers / risks
-
-None.
-
-## Next steps
-
-1. Continue with the second tracer bullet of ticket #12.
-`;
 
 const args = parseArgs(process.argv.slice(2));
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -209,58 +169,42 @@ if (args.help) {
   console.log(`Usage: ${scriptCommand('run-benchmark.mjs')} [--target DIR] [--output FILE] [--html FILE] [--no-self-check]
 
 Runs a lightweight harness benchmark:
-  1. Self-check: scaffold a throwaway harness and confirm it validates, then score an English
-     tracker-mode fixture (proves the scripts work AND that scoring is bilingual).
+  1. Self-check: scaffold a throwaway harness into a temp directory and confirm it validates. This
+     is the only check that proves the bundled scripts work end-to-end rather than being present.
   2. Scores the current target harness.
   3. Checks eval coverage in evals/evals.json.
   4. Checks the SKILL.md size budget (${SKILL_MD_MAX_BYTES} bytes, 15% over the ${SKILL_MD_BASELINE_BYTES}-byte baseline).
-  5. Checks the generated AGENTS.md budget: the default render must stay within its byte and line
-     caps, and the working-rules list within the limit its own self-restraint rule states.
+  5. Checks the generated AGENTS.md budget against an EXTERNAL anchor: the default render must stay
+     inside byte, line and working-rule caps derived from the upstream reference template, not from
+     whatever this template happens to render at. A cap whose baseline is the status quo can only
+     ratify the status quo.
   6. Checks the generated AGENTS.md for restated, discoverable content — directory trees, stack
      descriptions — and proves the detector has teeth against a seeded violation.
-  7. Checks the extraction layer: the generator ships docs/agents/*.md and routes to it, the scorer
-     follows those routes (a harness-owned doc counts; the same content under an upstream-owned
-     name does not), a dangling route is caught, and an orphan doc is caught.
-  8. Scores a tracker-mode scaffold and checks its emitted-artifact invariants: no skill-repo-relative
-     path reaches a target repo, no registry state file is emitted, and — the leak a file-name check
-     cannot see — the generated init.sh routes to the ticket system instead of naming the two state
-     files this mode skips. A registry scaffold is checked in the same run so "delete the block"
-     cannot pass.
-  9. Checks the mode gate: a signal-free target given no explicit --mode must refuse to write (exit 1,
-     zero files), while an explicit --mode or a detected signal must still scaffold.
- 10. Checks --dry-run: it must change nothing, plan real artifacts rather than recite a template
+  7. Checks the scope brake: the generated instruction file must state that the engineering workflow
+     belongs to the engineering skills, and must carry none of the doctrine this skill used to ship
+     (governance modes, landing points, ADR/CONTEXT routing, tracking policy, housekeeping duties).
+     Seeded on both sides, because an assertion that only forbids is satisfied by an empty file.
+  8. Checks --dry-run: it must change nothing, plan real artifacts rather than recite a template
      list, and agree with the write that follows it.
- 11. Checks the skill's own shipped files: no command it prints may use a script path that only
+  9. Checks the skill's own shipped files: no command it prints may use a script path that only
      resolves from the skill directory (the agent's cwd is the target repo).
- 12. Checks the bottleneck headline: a tie must name every tied subsystem, a unique minimum must
+ 10. Checks the bottleneck headline: a tie must name every tied subsystem, a unique minimum must
      name one, and a complete harness must report none.
- 13. Checks the blank-project gate: the placeholder verification step must exit non-zero, a real
+ 11. Checks the blank-project gate: the placeholder verification step must exit non-zero, a real
      command must still run, and — asserted through the real generator, not a hand-written string —
      a manifest that defines no check/typecheck/lint/test/build also refuses instead of exiting 0
      having verified nothing. A gate that cannot fail is not a gate.
- 14. Checks handoff recognition: a doc under .scratch/ is recognised by what it is, not by one
-     filename, while a doc outside the landing points is ignored.
- 15. Checks the blueprint slot: omitting --blueprint must leave a visible pending marker rather
-     than stack-derived text, and a supplied blueprint must reach AGENTS.md verbatim.
- 16. Checks the entry template: a fresh registry scaffold must not ship project-shaped feature
-     entries, and must state the alignment rule before any entry may be added.
- 17. Checks the instruction-file invariant: an existing CLAUDE.md must not get a second AGENTS.md
+ 12. Checks the plain-description slot: omitting --blueprint must leave a visible pending marker
+     rather than stack-derived text, and a supplied description must reach AGENTS.md verbatim.
+ 13. Checks the entry template: a fresh scaffold must not ship project-shaped feature entries, and
+     must state the alignment rule before any entry may be added.
+ 14. Checks the instruction-file invariant: an existing CLAUDE.md must not get a second AGENTS.md
      beside it, and an existing instruction file must stay byte-identical while its missing
      harness sections are still reported.
- 18. Checks the housekeeping scanner: it must change nothing, must not treat history as prunable
-     when no --session-ref is given, must still mark history when one is, must never prune a
-     done-without-evidence entry, and must report the instruction file's own health — ranked
-     sections, unfilled placeholders — without editing it. Dangling exemption rows are read from the
-     split-out doc the generator actually writes AND from an inline table in the root file, because
-     reading only one of the two is how this stayed green over a shape no real harness has.
- 19. Checks the housekeeping scanner's mode report against the authoritative detector: `.scratch/`
-     must not count as a tracker signal, feature_list.json must win over a signal, and a real
-     tracker signal — including the AGENTS.md vocabulary of the lazily-created window — must still
-     be detected. A detector that only ever answers "registry" must not pass.
- 20. Checks the self-check's own coverage: every group in SELF_CHECK_GROUPS must have a bound check,
+ 15. Checks the self-check's own coverage: every group in SELF_CHECK_GROUPS must have a bound check,
      a place in the pass conjunction, and a line in the shareable HTML report. A gate that only ever
-     prints is half a carrier, and seven groups had drifted into exactly that.
- 21. Produces a JSON report and optional HTML report.
+     prints is half a carrier.
+ 16. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -287,7 +231,7 @@ await writeText(output, `${JSON.stringify(report, null, 2)}\n`);
 console.log(`Benchmark report written to ${output}`);
 console.log('');
 if (!selfCheck.skipped) {
-  console.log(`Self-check: ${selfCheck.pass ? 'PASS' : 'FAIL'} — scaffolded harness scored ${selfCheck.score}/100, English tracker fixture scored ${selfCheck.englishScore ?? 0}/100`);
+  console.log(`Self-check: ${selfCheck.pass ? 'PASS' : 'FAIL'} — scaffolded harness scored ${selfCheck.score}/100`);
   if (selfCheck.budget) {
     const { size, max, pass, rawSize, crlfCount, lineEndingInvariant } = selfCheck.budget;
     console.log(`  SKILL.md budget: ${pass ? 'PASS' : 'FAIL'} — ${size}/${max} bytes LF-normalized (${max - size >= 0 ? `${max - size} left` : `${size - max} over`})${crlfCount ? `; checkout is CRLF (${crlfCount} lines → raw ${rawSize})` : ''}; line-ending invariant: ${lineEndingInvariant ? 'ok' : 'NO'}`);
@@ -300,17 +244,9 @@ if (!selfCheck.skipped) {
     const { pass, offenders = [], selfRestraintStated, seededCaught, error } = selfCheck.agentsDiscover;
     console.log(`  AGENTS.md discoverability: ${pass ? 'PASS' : 'FAIL'} — default render free of restated content: ${offenders.length === 0 ? 'ok' : `NO (${offenders.join(', ')})`}; self-restraint rule stated: ${selfRestraintStated ? 'ok' : 'NO'}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
-  if (selfCheck.extraction) {
-    const { pass, scaffolded, followsRoutes, upstreamNotCounted, sanePasses, danglingCaught, orphanCaught, docCount, error } = selfCheck.extraction;
-    console.log(`  Instruction extraction: ${pass ? 'PASS' : 'FAIL'} — ${docCount ?? 0} doc(s) scaffolded and routed: ${scaffolded ? 'ok' : 'NO'}; scorer follows routes: ${followsRoutes ? 'ok' : 'NO'}; upstream doc cannot substitute: ${upstreamNotCounted ? 'ok' : 'NO'}; clean split passes: ${sanePasses ? 'ok' : 'NO'}; dangling route caught: ${danglingCaught ? 'ok' : 'NO'}; orphan doc caught: ${orphanCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
-  }
-  if (selfCheck.tracker) {
-    const { pass, score, offenders = [], leakedState = [], trackerNamesNoRegistry, registryNamesItsState, error } = selfCheck.tracker;
-    console.log(`  Tracker scaffold: ${pass ? 'PASS' : 'FAIL'} — scored ${score}/100; tracker init.sh routes to its own state, not the registry files: ${trackerNamesNoRegistry ? 'ok' : 'NO'}; registry init.sh still routes to its own state: ${registryNamesItsState ? 'ok' : 'NO'}${offenders.length ? ` — skill-relative path in ${offenders.join(', ')}` : ''}${leakedState.length ? ` — registry state leaked into tracker mode: ${leakedState.join(', ')}` : ''}${error ? ` — ${error}` : ''}`);
-  }
-  if (selfCheck.gate) {
-    const { pass, refused, explicitOk, signalOk, wrote = [], error } = selfCheck.gate;
-    console.log(`  Mode gate: ${pass ? 'PASS' : 'FAIL'} — signal-free with no --mode refused: ${refused ? 'yes' : 'NO'}${wrote.length ? ` (but still wrote: ${wrote.join(', ')})` : ''}; explicit --mode registry: ${explicitOk ? 'ok' : 'NO'}; CONTEXT.md signal: ${signalOk ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+  if (selfCheck.scopeBrake) {
+    const { pass, brake, leaked = [], seeded = [], error } = selfCheck.scopeBrake;
+    console.log(`  Scope brake: ${pass ? 'PASS' : 'FAIL'} — engineering workflow delegated in the generated AGENTS.md: ${brake ? 'ok' : 'NO'}; doctrine carried over from the removed scope: ${leaked.length === 0 ? 'none' : `LEAKED (${leaked.join(', ')})`}; detector catches a seeded violation: ${seeded.length >= 7 ? 'ok' : `BLIND (${seeded.length}/7 patterns)`}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.dryRun) {
     const { pass, changesNothing, previewedFiles, reflectsState, planMatchesRun, wrote = [], error } = selfCheck.dryRun;
@@ -328,10 +264,6 @@ if (!selfCheck.skipped) {
     const { pass, placeholderFails, realRuns, scriptlessRefuses, withTestRuns } = selfCheck.blankGate;
     console.log(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}; a manifest with no runnable script refuses too: ${scriptlessRefuses ? 'ok' : 'NO'}; a manifest with a real script still runs: ${withTestRuns ? 'ok' : 'NO'}`);
   }
-  if (selfCheck.handoff) {
-    const { pass, recognized, strayIgnored, error } = selfCheck.handoff;
-    console.log(`  Handoff recognition: ${pass ? 'PASS' : 'FAIL'} — timestamped doc under .scratch/ recognised: ${recognized ? 'ok' : 'NO'}; doc outside the landing points ignored: ${strayIgnored ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
-  }
   if (selfCheck.blueprint) {
     const { pass, pendingMarked, noInventedFill, verbatim, error } = selfCheck.blueprint;
     console.log(`  Blueprint slot: ${pass ? 'PASS' : 'FAIL'} — omitted --blueprint stays a pending marker: ${pendingMarked ? 'ok' : 'NO'}; no stack-derived fill: ${noInventedFill ? 'ok' : 'NO'}; supplied blueprint reaches AGENTS.md verbatim: ${verbatim ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
@@ -343,14 +275,6 @@ if (!selfCheck.skipped) {
   if (selfCheck.agentFile) {
     const { pass, noSecondFile, choseClaude, untouched, missingReported, error } = selfCheck.agentFile;
     console.log(`  Agent-file invariant: ${pass ? 'PASS' : 'FAIL'} — existing CLAUDE.md means no AGENTS.md is created: ${noSecondFile && choseClaude ? 'ok' : 'NO'}; existing instruction file left byte-identical: ${untouched ? 'ok' : 'NO'}; missing sections still reported: ${missingReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
-  }
-  if (selfCheck.housekeeping) {
-    const { pass, readOnly, noRefMeansUnverified, refMarksHistory, pruneActive, pruneSuppressed, noEvidenceNeverPruned, porcelainPathIntact, instructionReported, danglingExemptionReported, placeholderReported, docEntryReported, error } = selfCheck.housekeeping;
-    console.log(`  Housekeeping safety: ${pass ? 'PASS' : 'FAIL'} — scan changes nothing: ${readOnly ? 'ok' : 'NO'}; no --session-ref means unverified, not stale: ${noRefMeansUnverified ? 'ok' : 'NO'}; a ref still marks history: ${refMarksHistory ? 'ok' : 'NO'}; housekeeping still emits prune candidates: ${pruneActive ? 'ok' : 'NO'}; wrap-up suppresses prune: ${pruneSuppressed ? 'ok' : 'NO'}; done-without-evidence never pruned: ${noEvidenceNeverPruned ? 'ok' : 'NO'}; porcelain path keeps its first character: ${porcelainPathIntact ? 'ok' : 'NO'}; instruction file reported with ranked sections: ${instructionReported ? 'ok' : 'NO'}; dangling exemption rows named in both layouts (split-out doc + inline), live one left alone: ${danglingExemptionReported ? 'ok' : 'NO'}; unfilled placeholder surfaced: ${placeholderReported ? 'ok' : 'NO'}; document entry: unowned + dangling named, compliant ones left alone: ${docEntryReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
-  }
-  if (selfCheck.modeReport) {
-    const { pass, scratchIsNotSignal, trackerDetected, registryWins, windowCaseDetected, error } = selfCheck.modeReport;
-    console.log(`  Housekeeping mode report: ${pass ? 'PASS' : 'FAIL'} — .scratch/ is not a tracker signal: ${scratchIsNotSignal ? 'ok' : 'NO'}; a real tracker signal is still detected: ${trackerDetected ? 'ok' : 'NO'}; feature_list.json wins over a signal: ${registryWins ? 'ok' : 'NO'}; tracker vocabulary in the setup window detected: ${windowCaseDetected ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.reportCoverage) {
     const { pass, unbound = [], missingLines = [], orphanLines = [] } = selfCheck.reportCoverage;
@@ -380,12 +304,10 @@ if (
 // Prove the bundled scripts actually work end-to-end: scaffold a harness into a throwaway
 // directory, then score it. A structural eval-coverage check can't catch a broken
 // create-harness.mjs — this can. Failure here means the skill ships broken, not just thin.
-// The second stage guards bilingual scoring: upstream toolchains
-// produce English artifacts, so an English tracker-mode harness must
-// score just as well as the Chinese registry-mode scaffold. The third stage keeps the skill's
-// own instruction file inside its size budget, the next keeps every command the skill prints
-// runnable from the target repo (the failure that silently disabled the mode gate), and the last
-// keeps the audit's headline from asserting a ranking the scores do not support.
+// The remaining groups keep the skill's own instruction file inside its size budget, keep every
+// command the skill prints runnable from the target repo, keep the generated instruction file
+// inside its external budgets and free of restated content — and keep it free of any instruction
+// that would send the agent off to run the project's engineering workflow.
 async function runSelfCheck() {
   let dir;
   try {
@@ -394,35 +316,26 @@ async function runSelfCheck() {
       path.join(dir, 'package.json'),
       JSON.stringify({ name: 'selfcheck', scripts: { check: 'tsc', test: 'vitest run', build: 'vite build' } })
     );
-    // --mode is explicit here on purpose: this fixture is signal-free, which is exactly the case the
-    // mode gate refuses. Before that gate existed this call was the bypass's own regression test —
-    // it scaffolded registry on a bare directory and called it a pass. The gate is asserted
-    // separately by checkModeGate().
-    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir, '--mode', 'registry']);
+    // A bare directory with a manifest is the plain case: no mode flag, no fixture project, no
+    // signal to detect. If this call ever needs a flag again, a concept has crept back in.
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
     const scored = scoreHarness(await loadHarnessFiles(dir));
-    const english = await scoreEnglishTrackerFixture(dir);
     const minScore = Number(args.minSelfCheckScore || 90);
     // Driven by SELF_CHECK_GROUPS rather than a hand-written conjunction: the previous version listed
     // each group three times (call, conjunction, return object), so a new group could be computed and
-    // printed while never joining the pass — a gate that reports and gates nothing. Lazy entries
-    // because checkTrackerScaffold needs minScore.
+    // printed while never joining the pass — a gate that reports and gates nothing.
     const groupChecks = {
       budget: () => checkSkillBudget(),
       agentsBudget: () => checkAgentFileBudget(),
       agentsDiscover: () => checkAgentFileDiscoverability(),
-      extraction: () => checkExtractionLayer(),
-      tracker: () => checkTrackerScaffold(minScore),
-      gate: () => checkModeGate(),
+      scopeBrake: () => checkScopeBoundary(),
       dryRun: () => checkDryRun(),
       selfRefs: () => checkSelfReferencePaths(),
       bottleneckTies: () => checkBottleneckTies(),
       blankGate: () => checkBlankProjectGate(),
-      handoff: () => checkHandoffRecognition(),
       blueprint: () => checkBlueprintSlot(),
       entries: () => checkEntryTemplateRestraint(),
-      agentFile: () => checkAgentFileInvariant(),
-      housekeeping: () => checkHousekeepingSafety(),
-      modeReport: () => checkHousekeepingMode()
+      agentFile: () => checkAgentFileInvariant()
     };
     const groups = {};
     for (const key of SELF_CHECK_GROUPS) groups[key] = await groupChecks[key]();
@@ -441,14 +354,13 @@ async function runSelfCheck() {
     };
     const failedGroups = SELF_CHECK_GROUPS.filter((key) => !groups[key]?.pass);
     return {
-      pass: scored.overall >= minScore && english.overall >= minScore && reportCoverage.pass && failedGroups.length === 0,
+      pass: scored.overall >= minScore && reportCoverage.pass && failedGroups.length === 0,
       failedGroups,
       reportCoverage,
       score: scored.overall,
-      englishScore: english.overall,
       ...groups,
-      bottleneck: scored.bottleneck ?? english.bottleneck,
-      bottlenecks: scored.bottlenecks.length ? scored.bottlenecks : english.bottlenecks
+      bottleneck: scored.bottleneck,
+      bottlenecks: scored.bottlenecks
     };
   } catch (error) {
     return {
@@ -499,7 +411,7 @@ async function checkAgentFileBudget() {
   let dir;
   try {
     dir = await mkdtemp(path.join(os.tmpdir(), 'harness-agents-budget-'));
-    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir, '--mode', 'registry']);
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
     const raw = await readText(path.join(dir, 'AGENTS.md'));
     const text = raw.replace(/\r\n/g, '\n');
     const size = Buffer.byteLength(text, 'utf8');
@@ -543,7 +455,7 @@ async function checkAgentFileDiscoverability() {
   let dir;
   try {
     dir = await mkdtemp(path.join(os.tmpdir(), 'harness-agents-discover-'));
-    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir, '--mode', 'registry']);
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
     const rendered = await readText(path.join(dir, 'AGENTS.md'));
     const offenders = discoverableOffenders(rendered);
     // The self-restraint rule is the only thing in the shipped file that tells a future editor to
@@ -559,75 +471,26 @@ async function checkAgentFileDiscoverability() {
   }
 }
 
-// The instruction subsystem is two layers: the root file routes, and docs/agents/*.md carries the
-// situation-specific detail. Four things have to hold or the split silently degrades into either a
-// manual again or a place detail disappears into:
-//   - the generator ships the layer, and the root file carries routes to it;
-//   - the scorer follows the routes (reading only the root file would score extraction as deletion,
-//     which is the incentive that grew the file in the first place) — asserted as a differential
-//     pair so it cannot pass by accident: the same body must count under a harness-owned path and
-//     must NOT count under one of matt's names, which harness content cannot hide behind;
-//   - a route to a missing file is caught (dangling);
-//   - a doc nothing routes to is caught (orphan).
-async function checkExtractionLayer() {
+async function checkScopeBoundary() {
   let dir;
   try {
-    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-extraction-'));
-    const create = () => execFileAsync('node', [
-      path.join(scriptDir, 'create-harness.mjs'), '--target', dir, '--mode', 'registry', '--force'
-    ]);
-    await create();
-
-    const rendered = await readText(path.join(dir, 'AGENTS.md'));
-    const docPaths = await harnessAgentDocs();
-    const routed = [...new Set(
-      [...rendered.matchAll(/docs\/agents\/([A-Za-z0-9._-]+\.md)/g)].map((match) => `docs/agents/${match[1]}`)
-    )];
-    let shipped = 0;
-    for (const doc of docPaths) if (await exists(path.join(dir, doc))) shipped += 1;
-    const scaffolded = docPaths.length > 0 && shipped === docPaths.length && routed.length > 0;
-
-    const ownCheck = (result, message) => result.subsystems.instructions.checks
-      .find((check) => check.message === message).pass;
-    const doneMessage = 'Definition of done documented';
-    const body = '## 完成定义\n\n- [ ] proof\n';
-    const followsRoutes = ownCheck(scoreHarness([
-      { path: 'AGENTS.md', content: '# x\n' },
-      { path: `${docPaths[0]}`, content: body, role: 'instruction-doc' }
-    ]), doneMessage) === true;
-    const upstreamNotCounted = ownCheck(scoreHarness([
-      { path: 'AGENTS.md', content: '# x\n' },
-      { path: 'docs/agents/issue-tracker.md', content: body }
-    ]), doneMessage) === false;
-
-    const routingCheck = (result) => result.subsystems.instructions.checks
-      .find((check) => check.message.startsWith('Instruction routing')).pass;
-    const sanePasses = routingCheck(scoreHarness(await loadHarnessFiles(dir))) === true;
-
-    await rm(path.join(dir, docPaths[0]));
-    const danglingCaught = routingCheck(scoreHarness(await loadHarnessFiles(dir))) === false;
-
-    await create();
-    const docName = path.basename(docPaths[0]);
-    const withoutRoute = (await readText(path.join(dir, 'AGENTS.md')))
-      .split(/\r?\n/)
-      .filter((line) => !line.includes(`docs/agents/${docName}`))
-      .join('\n');
-    await writeFile(path.join(dir, 'AGENTS.md'), withoutRoute, 'utf8');
-    const orphanCaught = routingCheck(scoreHarness(await loadHarnessFiles(dir))) === false;
-
+    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-scope-'));
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
+    const text = await readText(path.join(dir, 'AGENTS.md'));
+    // The brake: the file must say the engineering workflow belongs to the engineering skills.
+    const brake = /工程\s*skill/.test(text) && /不代做/.test(text);
+    const leaked = FORBIDDEN_IN_AGENTS_MD.filter(({ pattern }) => pattern.test(text)).map(({ name }) => name);
+    const seeded = FORBIDDEN_IN_AGENTS_MD
+      .filter(({ pattern }) => pattern.test(`${text}${SEEDED_VIOLATION}`))
+      .map(({ name }) => name);
     return {
-      pass: scaffolded && followsRoutes && upstreamNotCounted && sanePasses && danglingCaught && orphanCaught,
-      scaffolded,
-      followsRoutes,
-      upstreamNotCounted,
-      sanePasses,
-      danglingCaught,
-      orphanCaught,
-      docCount: docPaths.length
+      pass: brake && leaked.length === 0 && seeded.length === FORBIDDEN_IN_AGENTS_MD.length,
+      brake,
+      leaked,
+      seeded
     };
   } catch (error) {
-    return { pass: false, error: error.message };
+    return { pass: false, brake: false, leaked: [], seeded: [], error: error.message };
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
   }
@@ -649,8 +512,7 @@ async function checkSelfReferencePaths() {
     ...await collect('references', 'references/', (name) => name.endsWith('.md')),
     ...await collect('scripts', 'scripts/', (name) => name.endsWith('.mjs')),
     ...await collect('scripts/lib', 'scripts/lib/', (name) => name.endsWith('.mjs')),
-    ...await collect('templates', 'templates/', () => true),
-    ...await collect('templates/agent-docs', 'templates/agent-docs/', (name) => name.endsWith('.md'))
+    ...await collect('templates', 'templates/', () => true)
   ];
   const offenders = [];
   let checked = 0;
@@ -663,119 +525,9 @@ async function checkSelfReferencePaths() {
   return { pass: offenders.length === 0, offenders, checked };
 }
 
-// Stage four: the tracker-mode template is a separate rendering path from the registry scaffold
-// above — different repo-layout block, different state vocabulary, no registry artifacts — so it is
-// generated and scored here instead of assumed. Two invariants ride along: the generator must not
-// emit skill-repo-relative paths into a target repo (a `skills/` path is dead there — the skill
-// lives in the runtime's skills directory), and tracker mode must not emit registry state files,
-// which would create a second state source. The path defect class already regressed once, so it
-// gets a mechanical carrier rather than a convention — the same reason the SKILL.md byte cap above
-// is enforced here instead of recorded as a note.
-async function checkTrackerScaffold(minScore) {
-  let dir;
-  try {
-    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-tracker-'));
-    const trackerDir = path.join(dir, 'tracker');
-    const registryDir = path.join(dir, 'registry');
-    await mkdir(trackerDir, { recursive: true });
-    await mkdir(registryDir, { recursive: true });
-    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', trackerDir, '--mode', 'tracker']);
-    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', registryDir, '--mode', 'registry']);
-    const emitted = await loadHarnessFiles(trackerDir);
-    const offenders = emitted.filter(({ content }) => SKILL_RELATIVE_PATH.test(content)).map(({ path: file }) => file);
-    const leakedState = emitted
-      .map(({ path: file }) => file)
-      .filter((file) => ['feature_list.json', 'feature-list.json', 'progress.md'].includes(file));
-    // The artifact list was clean while the contents were not: init.sh still told the agent to read
-    // the two files that same run had reported as SKIPPED, so every tracker repo shipped a startup
-    // script pointing at files that do not exist. The guard reads the startup script's own text
-    // instead of the file list, because that is where the leak lived. AGENTS.md and
-    // tracking-policy.md name the registry artifacts on purpose — they draw the mode boundary — so
-    // the guard is scoped to the one file whose entire job is telling the agent what to do first.
-    const nextStepsOf = async (target) => (await readText(path.join(target, 'init.sh'))).split(/Next steps:/)[1] || '';
-    const namesRegistryArtifacts = (text) => /feature_list\.json|progress\.md/.test(text);
-    const trackerNamesNoRegistry = !namesRegistryArtifacts(await nextStepsOf(trackerDir));
-    // The other direction: registry mode must still route to its own state, so "delete the whole
-    // next-steps block" cannot pass this guard.
-    const registryNamesItsState = namesRegistryArtifacts(await nextStepsOf(registryDir));
-    const score = scoreHarness(emitted).overall;
-    return {
-      pass: offenders.length === 0 && leakedState.length === 0 && trackerNamesNoRegistry && registryNamesItsState && score >= minScore,
-      score,
-      offenders,
-      leakedState,
-      trackerNamesNoRegistry,
-      registryNamesItsState
-    };
-  } catch (error) {
-    return {
-      pass: false,
-      score: 0,
-      offenders: [],
-      leakedState: [],
-      trackerNamesNoRegistry: false,
-      registryNamesItsState: false,
-      error: error.message
-    };
-  } finally {
-    if (dir) await rm(dir, { recursive: true, force: true });
-  }
-}
-
-// Stage five: the mode gate. The design says a repo with no mode signal must not get a silent
-// default — the mode is a decision the agent has to obtain from the user. That rule used to be
-// prose-only, and it lost every live test: agents scaffolded registry into bare directories and
-// moved on, because a successful write beats an instruction every time. So the gate became
-// mechanical (create-harness.mjs refuses to write when nothing can be inferred) and is asserted
-// here. Both failure directions matter equally: the signal-free case must NOT write, and the two
-// legitimate paths must NOT become collateral damage — a gate that blocks everything would sail
-// through a naive "did it refuse?" check.
-async function checkModeGate() {
-  let blank;
-  let signal;
-  try {
-    blank = await mkdtemp(path.join(os.tmpdir(), 'harness-gate-blank-'));
-    signal = await mkdtemp(path.join(os.tmpdir(), 'harness-gate-signal-'));
-
-    // 1. Signal-free with no --mode must refuse. execFile rejects on non-zero exit, so triggering
-    //    that rejection IS the assertion; catching it is the check, not an error path.
-    let refused = false;
-    try {
-      await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', blank]);
-    } catch (error) {
-      refused = error.code === 1;
-    }
-    const wrote = await listDir(blank);
-
-    // 2. An explicit --mode registry on that same signal-free directory must still scaffold.
-    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', blank, '--mode', 'registry']);
-    const explicitFiles = await listDir(blank);
-    const explicitOk = explicitFiles.includes('AGENTS.md') && explicitFiles.includes('feature_list.json');
-
-    // 3. A detected signal must still infer the mode with no --mode — and infer tracker, not
-    //    registry: landing here with a feature registry would be a second state source.
-    await writeText(path.join(signal, 'CONTEXT.md'), '# Context\n');
-    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', signal]);
-    const signalFiles = await listDir(signal);
-    const signalOk = signalFiles.includes('AGENTS.md') && !signalFiles.includes('feature_list.json');
-
-    return {
-      pass: refused && wrote.length === 0 && explicitOk && signalOk,
-      refused,
-      explicitOk,
-      signalOk,
-      wrote
-    };
-  } catch (error) {
-    return { pass: false, refused: false, explicitOk: false, signalOk: false, wrote: [], error: error.message };
-  } finally {
-    for (const dir of [blank, signal]) if (dir) await rm(dir, { recursive: true, force: true });
-  }
-}
-
-// A raw listing rather than loadHarnessFiles: the gate's claim is "no files were written", and a
-// known-name list would silently miss anything unexpected that did get written. A missing directory
-// is itself the strongest pass — it means even mkdir never ran.
+// A raw listing rather than loadHarnessFiles: the checks below assert "no files were written" and
+// "the plan matches the run", and a known-name list would silently miss anything unexpected that
+// did get written. A missing directory is itself the strongest pass — it means even mkdir never ran.
 async function listDir(dir) {
   try {
     return await readdir(dir);
@@ -784,11 +536,11 @@ async function listDir(dir) {
   }
 }
 
-// Stage six: --dry-run. SKILL.md's pre-write CHECKPOINT asks the agent to show the artifact list
-// and get approval *before* anything is written; the generator used to write as it went and print
-// the list afterwards, so that gate was unsatisfiable — the prose demanded an order the tool could
-// not produce. --dry-run supplies the missing order. A preview can fail in three independent ways,
-// so all three are asserted: it can write anyway, it can recite a static template list that ignores
+// --dry-run. SKILL.md's pre-write CHECKPOINT asks the agent to show the artifact list and get
+// approval *before* anything is written; the generator used to write as it went and print the list
+// afterwards, so that gate was unsatisfiable — the prose demanded an order the tool could not
+// produce. --dry-run supplies the missing order. A preview can fail in three independent ways, so
+// all three are asserted: it can write anyway, it can recite a static template list that ignores
 // the target's real state, or it can disagree with the run it previews.
 async function checkDryRun() {
   let dir;
@@ -800,22 +552,22 @@ async function checkDryRun() {
 
     // 1. A preview on an empty target must change nothing — not even the target directory itself.
     dir = await mkdtemp(path.join(os.tmpdir(), 'harness-dryrun-'));
-    const preview = await capture(['--target', dir, '--mode', 'registry', '--dry-run']);
+    const preview = await capture(['--target', dir, '--dry-run']);
     const wrote = await listDir(dir);
     const changesNothing = wrote.length === 0;
     const previewedFiles = /^WRITTEN /m.test(preview);
 
     // 2. The preview is a plan, not a recital. After a real run every artifact exists, so the next
     //    preview must report SKIPPED — a static list would still claim WRITTEN here.
-    await execFileAsync('node', [script, '--target', dir, '--mode', 'registry']);
-    const second = await capture(['--target', dir, '--mode', 'registry', '--dry-run']);
+    await execFileAsync('node', [script, '--target', dir]);
+    const second = await capture(['--target', dir, '--dry-run']);
     const reflectsState = /^SKIPPED /m.test(second) && !/^WRITTEN /m.test(second);
 
     // 3. The plan must equal the run it previews, or the user approves a different action than the
     //    one that executes. Both runs target the same fresh directory, so the comparison is exact.
     pair = await mkdtemp(path.join(os.tmpdir(), 'harness-dryrun-pair-'));
-    const plan = await capture(['--target', pair, '--mode', 'registry', '--dry-run']);
-    const real = await capture(['--target', pair, '--mode', 'registry']);
+    const plan = await capture(['--target', pair, '--dry-run']);
+    const real = await capture(['--target', pair]);
     const planMatchesRun = planLines(plan) === planLines(real) && planLines(plan).length > 0;
 
     return {
@@ -833,19 +585,6 @@ async function checkDryRun() {
   }
 }
 
-// Convert the scaffold in-place to an English tracker-mode harness: state lives in the
-// issue tracker, long-lived assets are CONTEXT.md + ADRs, and the handoff is a
-// reference-style doc in .scratch/. No feature_list.json, no progress.md.
-async function scoreEnglishTrackerFixture(dir) {
-  await rm(path.join(dir, 'feature_list.json'));
-  await rm(path.join(dir, 'progress.md'));
-  await writeText(path.join(dir, 'AGENTS.md'), ENGLISH_AGENTS_MD);
-  await writeText(path.join(dir, 'CONTEXT.md'), ENGLISH_CONTEXT_MD);
-  await writeText(path.join(dir, 'docs', 'adr', '0001-tracker-mode.md'), ENGLISH_ADR_MD);
-  await writeText(path.join(dir, '.scratch', 'handoff.md'), ENGLISH_HANDOFF_MD);
-  return scoreHarness(await loadHarnessFiles(dir));
-}
-
 function scoreEvals(evalsJson) {
   const cases = Array.isArray(evalsJson.evals) ? evalsJson.evals : [];
   const checks = [];
@@ -853,44 +592,37 @@ function scoreEvals(evalsJson) {
   // This list is the coverage contract, and it must grow whenever a capability family ships —
   // otherwise the headline score keeps reading 100% while a new family has no behavioural case at
   // all. It went stale twice: the first entries were written when the skill was smaller, so later
-  // families had gates but no case; and checking the reverse direction found 17 of the 23 cases
-  // then in the file unprotected — deleting them left the headline at 100%. A gate proves a
-  // SCRIPT is right; only a case shows what an AGENT does. The entries are data, not inline
-  // predicates, because the guards below reuse them for both pairing directions. Each entry keeps
-  // a distinct message so a counter-example shows exactly which one broke.
+  // families had gates but no case; and checking the reverse direction found cases the file left
+  // unprotected — deleting them left the headline at 100%. A gate proves a SCRIPT is right; only a
+  // case shows what an AGENT does. The entries are data, not inline predicates, because the guards
+  // below reuse them for both pairing directions. Each entry keeps a distinct message so a
+  // counter-example shows exactly which one broke.
+  //
+  // The list is one-for-one with the eval file and covers the scope this skill now claims: the five
+  // subsystems, the safety and measurement properties of its own tooling, and — case 16 — the
+  // boundary that keeps it from handing the agent work belonging to the engineering skills. Cases
+  // for the removed scope (tracker mode, landing points, ADR/CONTEXT routing, housekeeping, the
+  // upstream interlock lists) were deleted with that scope; keeping them would have asserted the
+  // behaviour this skill no longer wants to have.
   const familyEntries = [
-    ['Covers minimal harness creation', /minimal|creation|最小化/i],
-    ['Covers session continuity', /session|continuity|连续性/i],
-    ['Covers harness assessment', /assessment|score|评估|得分/i],
-    ['Covers verification workflow', /verification|验证工作流/i],
-    ['Covers memory taxonomy', /memory|记忆/i],
-    ['Covers tool safety', /tool|permission|safety|工具|权限|安全/i],
-    ['Covers multi-agent coordination', /multi-agent|delegation|coordination|多代理|协调|委派/i],
-    ['Covers scripted validation tooling', /脚本化|scripted/i],
-    ['Covers the blueprint slot', /蓝图|blueprint/i],
-    ['Covers entry-template restraint', /条目模板|克制|restraint/i],
-    ['Covers the instruction-file invariant', /指令文件不变量|CLAUDE|instruction.file invariant/i],
-    ['Covers instruction-file size and discoverability', /不可发现|discoverab/i],
-    ['Covers instruction extraction', /抽离|extraction|精简/i],
-    ['Covers context budgeting', /上下文预算|context budget/i],
-    ['Covers lifecycle bootstrap', /生命周期|lifecycle/i],
-    ['Covers tracker mode', /tracker/i],
-    ['Covers repo housekeeping', /整理仓库|清账|housekeeping/i],
-    ['Covers matt coexistence', /共存|coexist|matt/i],
-    ['Covers artifact tracking alignment', /跟踪|tracking/i],
-    ['Covers third-party artifact routing', /受控放行|放行|第三方|third-party/i],
-    ['Covers session wrap-up', /收尾|wrap.?up/i],
-    ['Covers task advancement', /任务推进|advancement|条目即工单/i],
-    ['Covers the post-handoff boundary', /交接/i],
-    ['Covers upstream maintenance', /上游变更|upstream/i],
-    // The three families below close coverage for defects found by auditing the scripts rather than
-    // the prose — the blank-project gate's second arm, the content-level state leak in a tracker
-    // startup script, and the exemption table read from where the generator actually puts it. Each
-    // was a reproduced defect that no case exercised, which is how it survived with the headline
-    // reading 100%.
-    ['Covers the gate that refuses when nothing can run', /无可跑脚本|必须失败/i],
-    ['Covers mode-aware startup state routing', /不指向被跳过|状态文件/i],
-    ['Covers the exemption table in its real location', /豁免表|exemption/i]
+    ['Covers minimal harness creation', /最小化/],
+    ['Covers session continuity', /连续性/],
+    ['Covers harness assessment', /评估/],
+    ['Covers verification workflow', /验证工作流/],
+    ['Covers memory taxonomy', /记忆/],
+    ['Covers tool safety', /工具/],
+    ['Covers context budgeting', /上下文预算/],
+    ['Covers multi-agent coordination', /多代理/],
+    ['Covers lifecycle bootstrap', /生命周期/],
+    ['Covers scripted validation tooling', /脚本化/],
+    ['Covers the plain-description slot', /项目说明/],
+    ['Covers entry-template restraint', /条目模板/],
+    ['Covers the instruction-file invariant', /指令文件不变量/],
+    ['Covers instruction-file size and discoverability', /不可发现/],
+    ['Covers the gate that refuses when nothing can run', /无可跑脚本/],
+    ['Covers the scope brake against doing the engineering workflow', /范围边界/],
+    ['Covers the post-handoff boundary', /交接/],
+    ['Covers session wrap-up', /收尾/]
   ];
   for (const [message, pattern] of familyEntries) {
     checks.push({ pass: cases.some((item) => pattern.test(item.name)), message });
@@ -998,33 +730,7 @@ async function checkBlankProjectGate() {
   };
 }
 
-// Stage ten: the handoff is identified by what it is, not by one hardcoded filename. Scaffolding
-// writes `.scratch/handoff.md`, but the doc is produced later at the user's request and may be
-// timestamped — upstream's own handoff skill timestamps it. If recognition keyed on the exact
-// name, a repo holding a perfectly good handoff would score as having none and the startup
-// checklist would never read it. Landing point stays enforced: only `.scratch/` is scanned.
-async function checkHandoffRecognition() {
-  let dir;
-  try {
-    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-handoff-'));
-    await mkdir(path.join(dir, '.scratch'), { recursive: true });
-    await writeText(path.join(dir, '.scratch', 'handoff-20260101-000000.md'), '# Handoff\n');
-    const loaded = await loadHarnessFiles(dir);
-    const recognized = loaded.some(({ path: file }) => file === '.scratch/handoff-20260101-000000.md');
-    // A stray doc outside the landing points must NOT be picked up: the five-landing-point rule is
-    // the reason the check reads .scratch/ only, and widening it would quietly legitimise docs/.
-    await writeText(path.join(dir, 'handoff-at-root.md'), '# Handoff\n');
-    const afterStray = await loadHarnessFiles(dir);
-    const strayIgnored = !afterStray.some(({ path: file }) => file === 'handoff-at-root.md');
-    return { pass: recognized && strayIgnored, recognized, strayIgnored };
-  } catch (error) {
-    return { pass: false, recognized: false, strayIgnored: false, error: error.message };
-  } finally {
-    if (dir) await rm(dir, { recursive: true, force: true });
-  }
-}
-
-// Stage eleven: the blueprint slot. AGENTS.md's one place that answers "what is this project"
+// The plain-description slot. AGENTS.md's one place that answers "what is this project"
 // used to be assembled from the detected stack, so a repo could ship a filled-in-looking blueprint
 // that carried no project fact at all — and an agent holding a project-shaped blank went on to
 // write feature entries nobody had agreed to. The slot is now fed by the user's own statement
@@ -1041,14 +747,14 @@ async function checkBlueprintSlot() {
     const script = path.join(scriptDir, 'create-harness.mjs');
     const blueprint = 'Probe project: delivers one thing the probe names itself.';
 
-    await execFileAsync('node', [script, '--target', dir, '--mode', 'registry']);
+    await execFileAsync('node', [script, '--target', dir]);
     const omitted = await readText(path.join(dir, 'AGENTS.md'));
     // Pending must be explicit and must not smuggle in stack-derived boilerplate.
     const pendingMarked = omitted.includes('待补');
     const noInventedFill = !/agent-assisted development/i.test(omitted);
 
     supplied = await mkdtemp(path.join(os.tmpdir(), 'harness-blueprint-set-'));
-    await execFileAsync('node', [script, '--target', supplied, '--mode', 'registry', '--blueprint', blueprint]);
+    await execFileAsync('node', [script, '--target', supplied, '--blueprint', blueprint]);
     const verbatim = (await readText(path.join(supplied, 'AGENTS.md'))).includes(blueprint);
 
     return {
@@ -1076,7 +782,7 @@ async function checkEntryTemplateRestraint() {
   let dir;
   try {
     dir = await mkdtemp(path.join(os.tmpdir(), 'harness-entries-'));
-    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir, '--mode', 'registry']);
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
     const raw = await readText(path.join(dir, 'feature_list.json'));
     const parsed = JSON.parse(raw);
     const entries = Array.isArray(parsed.features) ? parsed.features : [];
@@ -1119,7 +825,7 @@ async function checkAgentFileInvariant() {
 
     claudeDir = await mkdtemp(path.join(os.tmpdir(), 'harness-agentfile-claude-'));
     await writeText(path.join(claudeDir, 'CLAUDE.md'), '# Claude\n\n## Startup workflow\n\nExisting content.\n');
-    const claudeRun = await execFileAsync('node', [script, '--target', claudeDir, '--mode', 'registry']);
+    const claudeRun = await execFileAsync('node', [script, '--target', claudeDir]);
     // The absence of AGENTS.md is the invariant; the report naming CLAUDE.md is what proves the
     // choice was made deliberately rather than by never writing an instruction file at all.
     const noSecondFile = !(await exists(path.join(claudeDir, 'AGENTS.md')));
@@ -1129,7 +835,7 @@ async function checkAgentFileInvariant() {
     const existing = '# AGENTS.md\n\n## Agent skills\n\nThird-party block that must survive.\n';
     const agentsPath = path.join(agentsDir, 'AGENTS.md');
     await writeText(agentsPath, existing);
-    const agentsRun = await execFileAsync('node', [script, '--target', agentsDir, '--mode', 'registry']);
+    const agentsRun = await execFileAsync('node', [script, '--target', agentsDir]);
     const untouched = (await readText(agentsPath)) === existing;
     // At least one missing section heading must be listed; keying on the literal names would break
     // every time a section is renamed, while "lists nothing" is the actual defect.
@@ -1149,307 +855,8 @@ async function checkAgentFileInvariant() {
   }
 }
 
-// Stage fifteen: the housekeeping scanner's safety invariants. `scan-housekeeping.mjs` is the one
-// script allowed to look at artefacts with deletion in mind, and every guardrail around it lived in
-// prose — "扫描器均只读", "不删 done 无 evidence 条目", "--session-ref 不默认 HEAD", "收尾不 prune
-// 历史". None had a mechanical carrier, so all four could be reverted in a single commit with every
-// gate still green. The failure is asymmetric: a scanner that reports too little gets noticed, a
-// scanner that quietly widens its own delete scope does not.
-// Both directions are asserted, because a suppression that can never be lifted is its own defect:
-// given a ref the scanner MUST be able to identify history (stale) and MUST emit prune candidates;
-// without one it must refuse both. Asserting only the refusal would pass a scanner that never prunes
-// anything — the "会拦下一切的闸门是最没用的闸门" trap.
-async function checkHousekeepingSafety() {
-  const fixtures = [];
-  const buildFixture = async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'harness-housekeep-'));
-    fixtures.push(dir);
-    await mkdir(path.join(dir, '.scratch'), { recursive: true });
-    await mkdir(path.join(dir, 'scripts', 'deep'), { recursive: true });
-    await writeText(path.join(dir, '.scratch', 'old-note.md'), '# Old note\n');
-    await writeText(path.join(dir, 'scripts', 'deep', 'tool.mjs'), 'export const v = 1;\n');
-    await writeText(path.join(dir, 'feature_list.json'), JSON.stringify({
-      features: [
-        { id: 'f1', name: 'shipped', status: 'done', evidence: 'npm test passes' },
-        { id: 'f2', name: 'noproof', status: 'done' },
-        { id: 'f3', name: 'pending', status: 'in_progress' }
-      ]
-    }, null, 2));
-    // The instruction file is a routing doc, not a landing point, so nothing else in this scan
-    // would ever look at it. This fixture gives it one dangling exemption row, one live row and an
-    // unfilled placeholder, so the report has to tell the two rows apart instead of counting them —
-    // a count would also pass on a scanner that flagged every row. The document-entry list gets the
-    // same treatment: a compliant entry that exists, one missing its owner annotation, and one whose
-    // path is gone — flagging every entry and flagging none must both fail.
-    await mkdir(path.join(dir, 'teach-notes'), { recursive: true });
-    await mkdir(path.join(dir, 'docs', 'agents'), { recursive: true });
-    await writeText(path.join(dir, 'docs', 'live-doc.md'), '# Live doc\n');
-    // The exemption table is written where the generator actually puts it: the root file keeps a
-    // routing line and the table itself lives in the split-out doc under docs/agents/. This fixture
-    // used to inline it as `### 放行豁免清单` in AGENTS.md — a layout create-harness.mjs never
-    // produces — so the check stayed green while reading a shape no real harness has, and every
-    // generated repo went unscanned. The inline table is kept too, because that is what a
-    // hand-merged repo looks like; both rows must be found or the check silently lost a path again.
-    await writeText(path.join(dir, 'docs', 'agents', 'tracking-policy.md'), [
-      '# 产物追踪策略（分册）',
-      '',
-      '## 放行豁免清单（由产出 skill 自治理）',
-      '',
-      '| 路径 | 产出 skill | owner | 性质 / 生命周期 | 用户裁决 | 追踪状态 | 复审触发 |',
-      '|---|---|---|---|---|---|---|',
-      '| `teach-notes/` | teach | 使用方 | 教学状态 | 原样保留 | ignored | 用户改主意时 |',
-      '| `gone-workspace/` | teach | 使用方 | 教学状态 | 原样保留 | ignored | 用户改主意时 |',
-      ''
-    ].join('\n'));
-    await writeText(path.join(dir, 'AGENTS.md'), [
-      '# AGENTS.md',
-      '',
-      '## 启动工作流',
-      '',
-      '1. **确认工作目录**：运行 `pwd`',
-      '',
-      '5. **阅读项目文档（如存在）**——长期维护的活文档逐条列出并标出 owner：',
-      '   - `docs/live-doc.md`（owner: 架构组）',
-      '   - `docs/orphan-doc.md`',
-      '   - `docs/gone-doc.md`（owner: 架构组）',
-      '',
-      '## 工作规则',
-      '',
-      '- **一次一个功能**：从 `feature_list.json` 挑一个未完成项',
-      '- **必须验证**：未运行验证命令前不得声称完成',
-      '',
-      '## 验证命令',
-      '',
-      '- `npm test`',
-      '',
-      '## 产物追踪策略',
-      '',
-      '- 当前结论：待对齐',
-      '',
-      '裁决规则、豁免清单与只读探测命令见 `docs/agents/tracking-policy.md`——只在遇到产物落点归属或追踪裁决问题时读。',
-      '',
-      '### 放行豁免清单（由产出 skill 自治理）',
-      '',
-      '| 路径 | 产出 skill | owner | 性质 / 生命周期 | 用户裁决 | 追踪状态 | 复审触发 |',
-      '|---|---|---|---|---|---|---|',
-      '| `inline-gone/` | teach | 使用方 | 教学状态 | 原样保留 | ignored | 用户改主意时 |',
-      ''
-    ].join('\n'));
-    const git = (rest) => execFileAsync('git', rest, { cwd: dir });
-    const who = ['-c', 'user.email=bench@local', '-c', 'user.name=bench'];
-    await git(['init', '-q']);
-    await git([...who, 'add', '-A']);
-    await git([...who, 'commit', '-q', '-m', 'fixture']);
-    // An uncommitted edit below the repo root. `git status --porcelain` renders it ` M scripts/...`,
-    // so the scanner must drop the two status columns AND their separating space. Trimming first
-    // eats the separator and shaves the path's leading character, which then reads as "not in this
-    // session" — live work marked for deletion because of a whitespace bug.
-    await writeText(path.join(dir, 'scripts', 'deep', 'tool.mjs'), 'export const v = 2;\n');
-    return dir;
-  };
-
-  // .git/ is skipped deliberately: `git status` may rewrite the index, which is git bookkeeping
-  // rather than the scanner touching the user's files.
-  const snapshot = async (root) => {
-    const files = {};
-    const walk = async (relative) => {
-      for (const entry of await readdir(path.join(root, relative), { withFileTypes: true })) {
-        if (entry.name === '.git') continue;
-        const child = relative ? `${relative}/${entry.name}` : entry.name;
-        if (entry.isDirectory()) await walk(child);
-        else files[child] = await readText(path.join(root, child));
-      }
-    };
-    await walk('');
-    return files;
-  };
-  const unchanged = (before, after) => {
-    const keys = Object.keys(before);
-    return keys.length === Object.keys(after).length && keys.every((key) => after[key] === before[key]);
-  };
-
-  const scan = async (dir, extra) => {
-    const { stdout } = await execFileAsync('node', [
-      path.join(scriptDir, 'scan-housekeeping.mjs'), '--target', dir, '--json', ...extra
-    ]);
-    return JSON.parse(stdout.slice(stdout.indexOf('{')));
-  };
-
-  const scratchState = (report) => report.scratch.find((entry) => entry.path === '.scratch/old-note.md')?.state;
-  const DONE_WITH_EVIDENCE = 'f1 shipped';
-  const DONE_WITHOUT_EVIDENCE = 'f2 noproof';
-
-  try {
-    const arms = [];
-    const arm = async (extra) => {
-      const dir = await buildFixture();
-      const before = await snapshot(dir);
-      const report = await scan(dir, extra);
-      arms.push({ report, readOnly: unchanged(before, await snapshot(dir)) });
-      return report;
-    };
-
-    const plain = await arm([]);
-    const withRef = await arm(['--session-ref', 'HEAD']);
-    const wrapupNoRef = await arm(['--session-only']);
-    const wrapupWithRef = await arm(['--session-ref', 'HEAD', '--session-only']);
-
-    const readOnly = arms.every(({ readOnly: ok }) => ok);
-    // Without a ref nothing outside uncommitted work is verifiable, and "unverified" must not be
-    // rounded up to "stale" — that is the whole distance between reporting and marking for deletion.
-    const noRefMeansUnverified = scratchState(plain) === 'unverified' && scratchState(wrapupNoRef) === 'unverified';
-    // A ref lifts it, and wrap-up refuses to judge history at all (out-of-scope) — a deliberately
-    // different verdict from stale.
-    const refMarksHistory = scratchState(withRef) === 'stale' && scratchState(wrapupWithRef) === 'out-of-scope';
-    const pruneActive = plain.featureList.prune.includes(DONE_WITH_EVIDENCE)
-      && withRef.featureList.prune.includes(DONE_WITH_EVIDENCE);
-    const pruneSuppressed = wrapupNoRef.featureList.pruneSuppressed === true
-      && wrapupWithRef.featureList.pruneSuppressed === true
-      && wrapupNoRef.featureList.prune.length === 0
-      && wrapupWithRef.featureList.prune.length === 0;
-    // done-without-evidence is never deletable in any mode: the missing evidence is the defect, and
-    // deleting the entry would erase the only record of it.
-    const noEvidenceNeverPruned = arms.every(({ report }) => !report.featureList.prune.includes(DONE_WITHOUT_EVIDENCE)
-      && report.featureList.doneWithoutEvidence.includes(DONE_WITHOUT_EVIDENCE));
-    const porcelainPathIntact = [plain, wrapupNoRef].every(
-      (report) => report.session.uncommitted.includes('scripts/deep/tool.mjs')
-    );
-    // The instruction-file health report. Sections must be produced and ranked (a scanner that
-    // lists them unordered is not doing the one job this branch exists for), the dangling row must
-    // be named while the live one is left alone, and an unfilled placeholder must surface.
-    const instruction = plain.instructionFile || {};
-    const sections = instruction.sections || [];
-    const instructionReported = instruction.name === 'AGENTS.md'
-      && sections.length === 4
-      && sections.every((item, index) => index === 0 || sections[index - 1].bytes >= item.bytes)
-      && instruction.ruleCount === 2;
-    // The rows are reported as written (path cell minus its backticks), so the assertion uses the
-    // verbatim form rather than a normalised one. Both layouts must be read — the split-out doc the
-    // generator actually writes, and an inline table a hand-merged repo has — while the live row in
-    // the split-out doc is left alone. Reading only one of the two is the regression that kept this
-    // green for as long as it was.
-    const danglingExemptions = instruction.danglingExemptions || [];
-    const danglingExemptionReported = ['gone-workspace/', 'inline-gone/'].every((row) => danglingExemptions.includes(row))
-      && !danglingExemptions.includes('teach-notes/');
-    const placeholderReported = (instruction.placeholders || []).includes('待对齐');
-    // The document-entry list under 启动工作流: an existing entry must carry an owner annotation, an
-    // annotated entry must really exist, and the compliant entry must escape both lists. Naming the
-    // wrong file — or every file — fails here.
-    const docEntries = instruction.docEntries || {};
-    const missingOwner = docEntries.missingOwner || [];
-    const danglingDocs = docEntries.dangling || [];
-    const docEntryReported = missingOwner.includes('docs/orphan-doc.md')
-      && !missingOwner.includes('docs/live-doc.md')
-      && !missingOwner.includes('docs/gone-doc.md')
-      && danglingDocs.includes('docs/gone-doc.md')
-      && !danglingDocs.includes('docs/live-doc.md');
-
-    return {
-      pass: readOnly && noRefMeansUnverified && refMarksHistory && pruneActive
-        && pruneSuppressed && noEvidenceNeverPruned && porcelainPathIntact
-        && instructionReported && danglingExemptionReported && placeholderReported
-        && docEntryReported,
-      readOnly,
-      noRefMeansUnverified,
-      refMarksHistory,
-      pruneActive,
-      pruneSuppressed,
-      noEvidenceNeverPruned,
-      porcelainPathIntact,
-      instructionReported,
-      danglingExemptionReported,
-      placeholderReported,
-      docEntryReported
-    };
-  } catch (error) {
-    return {
-      pass: false,
-      readOnly: false,
-      noRefMeansUnverified: false,
-      refMarksHistory: false,
-      pruneActive: false,
-      pruneSuppressed: false,
-      noEvidenceNeverPruned: false,
-      porcelainPathIntact: false,
-      instructionReported: false,
-      danglingExemptionReported: false,
-      placeholderReported: false,
-      docEntryReported: false,
-      error: error.message
-    };
-  } finally {
-    for (const dir of fixtures) await rm(dir, { recursive: true, force: true });
-  }
-}
-
-// scan-housekeeping.mjs 自己实现了一套模式信号探测，而 harness-utils.mjs 的 trackerMode 是权威版
-// （create-harness、validate 与这里的 scoreHarness 都用它）。两套一旦分叉，同一个仓库会收到两份
-// 互相矛盾的模式结论，且危害是单向的：registry 仓被报成 tracker 时，扫描器会连带打印「仓内可清
-// 的只有 .scratch/」，把用户从 feature_list.json 的 prune 候选上引开——恰是 D4 打掉的那类 wrong-mode。
-// 四臂各隔离一条性质，两个方向都断言：只断言「registry 不被误判成 tracker」的话，一个永远只报
-// registry 的探测器也能通过（会拦下一切的闸门是最没用的闸门）。
-async function checkHousekeepingMode() {
-  const fixtures = [];
-  const build = async (files) => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'harness-mode-'));
-    fixtures.push(dir);
-    for (const [relative, content] of Object.entries(files)) {
-      const full = path.join(dir, relative);
-      await mkdir(path.dirname(full), { recursive: true });
-      await writeText(full, content);
-    }
-    return dir;
-  };
-  const modeOf = async (dir) => {
-    const { stdout } = await execFileAsync('node', [
-      path.join(scriptDir, 'scan-housekeeping.mjs'), '--target', dir, '--json'
-    ]);
-    return JSON.parse(stdout.slice(stdout.indexOf('{'))).mode;
-  };
-  const RULES = '# AGENTS.md\n\n## 工作规则\n\n- **一次一个功能**\n';
-  try {
-    // ① `.scratch/` 不是信号：一个刚放过草稿、此外什么都没有的仓仍是 registry。
-    const scratchIsNotSignal = await modeOf(await build({
-      '.scratch/spec.md': '# draft\n',
-      'AGENTS.md': RULES
-    })) === 'registry';
-    // ② 反向：tracker 信号存在且仓内没有注册表时，必须判 tracker。
-    const trackerDetected = await modeOf(await build({
-      'CONTEXT.md': '# Language\n',
-      'AGENTS.md': RULES
-    })) === 'tracker';
-    // ③ 仓内已有注册表时信号不得推翻它（harness-utils 的 `!featureList` 前置）。
-    const registryWins = await modeOf(await build({
-      'CONTEXT.md': '# Language\n',
-      'feature_list.json': '{"features":[]}\n',
-      'AGENTS.md': RULES
-    })) === 'registry';
-    // ④ 窗口期：骨架刚生成，matt 名下产物尚未延迟创建，唯一证据是 AGENTS.md 里的工单词汇。
-    const windowCaseDetected = await modeOf(await build({
-      'AGENTS.md': `${RULES}\n状态与依赖由工单系统承接。\n`
-    })) === 'tracker';
-    return {
-      pass: scratchIsNotSignal && trackerDetected && registryWins && windowCaseDetected,
-      scratchIsNotSignal,
-      trackerDetected,
-      registryWins,
-      windowCaseDetected
-    };
-  } catch (error) {
-    return {
-      pass: false,
-      scratchIsNotSignal: false,
-      trackerDetected: false,
-      registryWins: false,
-      windowCaseDetected: false,
-      error: error.message
-    };
-  } finally {
-    for (const dir of fixtures) await rm(dir, { recursive: true, force: true });
-  }
-}
-
-function recommend(harnessResult, evalResult) {  if (harnessResult.overall >= 85 && evalResult.score >= 90) {
+function recommend(harnessResult, evalResult) {
+  if (harnessResult.overall >= 85 && evalResult.score >= 90) {
     return 'Ready for realistic before/after agent-session benchmarking.';
   }
   if (harnessResult.overall < 70) {
@@ -1468,12 +875,11 @@ function recommend(harnessResult, evalResult) {  if (harnessResult.overall >= 85
 }
 
 function renderBenchmarkHtml(report) {
-  // Built from SELF_CHECK_REPORT_LINES rather than one hand-written line per gate. Nine of the
-  // sixteen groups had drifted out of this report while the comment below kept promising they were
-  // here — extraction, tracker, the mode gate, --dry-run, the two generated-file budgets and the
-  // scanner's mode reading were console-only, so the artifact a round is reviewed from said nothing
-  // about them. Generating the lines from the same list the pass conjunction uses means a new gate
-  // cannot be half-carried again.
+  // Built from SELF_CHECK_REPORT_LINES rather than one hand-written line per gate. Most groups had
+  // drifted out of this report while the comment below kept promising they were here — they were
+  // console-only, so the artifact a round is reviewed from said nothing about them. Generating the
+  // lines from the same list the pass conjunction uses means a new gate cannot be half-carried
+  // again.
   const selfCheckLines = SELF_CHECK_GROUPS
     .map((key) => {
       const group = report.selfCheck?.[key];
@@ -1488,7 +894,7 @@ function renderBenchmarkHtml(report) {
     ? ''
     : `<section>
       <h2>Script Self-Check <span>${report.selfCheck.pass ? 'PASS' : 'FAIL'}</span></h2>
-      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100, plus an English tracker-mode fixture at ${report.selfCheck.englishScore ?? 0}/100 — confirms the bundled scripts run end-to-end and scoring is bilingual.${coverageLine}${selfCheckLines}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
+      <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100 — confirms the bundled scripts run end-to-end rather than merely being present.${coverageLine}${selfCheckLines}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
     </section>`;
   const evalHtml = htmlReport(report.harness, `Harness Benchmark: ${path.basename(report.target)}`)
     .replace('</main>', `${selfCheckSection}<section>

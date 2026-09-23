@@ -6,8 +6,8 @@ set -e
 # This file is the MANUAL fallback: create-harness.mjs generates init.sh itself from the detected
 # stack (see scripts/lib/harness-utils.mjs), and this template is what you copy by hand when the
 # runtime has no Node. It probes the stack at run time instead of being generated for one, so it
-# deliberately stays stack-generic — including its "Next steps" block, which points at whatever
-# AGENTS.md lists under 仓库结构 rather than naming one mode's state files.
+# deliberately stays stack-generic — its "Next steps" block names the state artifacts create-harness
+# actually writes (feature_list.json, progress.md), nothing else.
 
 echo "=== Harness Initialization ==="
 
@@ -115,9 +115,8 @@ fi
 echo "=== Verification Complete ==="
 echo ""
 echo "Next steps:"
-echo "1. Read the state artifacts listed under 仓库结构 in AGENTS.md"
-echo "2. Read current status, blockers and next steps from them"
-echo "3. Read a handoff doc in .scratch/ if one exists"
-echo "4. Pick ONE unfinished item to work on — one feature, or one ticket"
-echo "5. Implement only that item"
-echo "6. Re-run verification before claiming done"
+echo "1. Read feature_list.json for current feature state and blockers"
+echo "2. Read progress.md for status, evidence and the recommended next step"
+echo "3. Pick ONE unfinished feature"
+echo "4. Implement only that feature, staying inside its scope"
+echo "5. Re-run verification before claiming done"

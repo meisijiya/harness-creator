@@ -1,3 +1,3 @@
 .workbuddy/
-# 自检/基准运行产物：一次性生成，不是落点（见 SKILL.md 五落点）
+# 自检/基准运行产物：每次运行重新生成，不是本技能的交付物
 harness-benchmark.json

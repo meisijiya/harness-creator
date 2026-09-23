@@ -94,8 +94,8 @@ export function markdownSections(markdown) {
 
 // Sections the template carries that an existing instruction file does not. Used to REPORT a
 // merge gap, never to write one: a text match cannot tell whether the existing file already
-// covers the section in English or in another wording, so appending would produce two startup
-// paths — the drift references/matt-coexistence.md warns about.
+// covers the section in English or in another wording, so appending would produce a second
+// startup path that contradicts the one already there.
 export function diffSections(templateMarkdown, existingMarkdown) {
   const existing = existingMarkdown.toLowerCase();
   return markdownSections(templateMarkdown)
@@ -234,30 +234,19 @@ export function verificationCommands(project, explicitPackageManager) {
   return [install, ...real];
 }
 
-export function initScriptFromCommands(commands, options = {}) {
+export function initScriptFromCommands(commands) {
   const body = commands.map(renderVerificationStep).join('\n\n');
-  // The next-steps block is the only part of this file that names state, and the two modes keep
-  // state in different places. Hardcoding the registry files here shipped every tracker-mode repo
-  // a startup script telling the agent to read feature_list.json and progress.md — the two files
-  // the very same run reported as SKIPPED. The file-name guard could not catch it: the artifact
-  // list was clean, the leak was in the contents of a file that IS expected to exist.
-  const nextSteps = options.tracker
-    ? [
-      '1. Read CONTEXT.md for the domain language',
-      '2. Read the relevant docs/adr/ record before changing a decision',
-      '3. Read your issue tracker for the ticket you are working on',
-      '4. Read a handoff doc in .scratch/ if one exists',
-      '5. Work one ticket at a time',
-      '6. Re-run verification before claiming done'
-    ]
-    : [
-      '1. Read feature_list.json to see current feature state',
-      '2. Read progress.md for current status, blockers and next steps',
-      '3. Read a handoff doc in .scratch/ if one exists',
-      '4. Pick ONE unfinished feature to work on',
-      '5. Implement only that feature',
-      '6. Re-run verification before claiming done'
-    ];
+  // The next-steps block names state, so it names exactly the artifacts this skill writes and
+  // nothing else. A startup script that tells the agent to read a file this skill never creates is
+  // a dangling instruction, and the artifact list stays clean because the leak sits in the
+  // contents of a file that IS expected to exist.
+  const nextSteps = [
+    '1. Read feature_list.json to see current feature state',
+    '2. Read progress.md for current status, blockers and next steps',
+    '3. Pick ONE unfinished feature to work on',
+    '4. Implement only that feature, staying inside its scope',
+    '5. Re-run verification before claiming done'
+  ];
   return `#!/bin/bash
 set -e
 
@@ -353,79 +342,15 @@ export function dedupe(values) {
 export function scoreHarness(files) {
   const byPath = new Map(files.map((file) => [file.path, file.content]));
   const allText = files.map((file) => `${file.path}\n${file.content}`).join('\n\n');
-  const instructionFile = byPath.get('AGENTS.md') || byPath.get('CLAUDE.md') || '';
-  // The instruction subsystem is two layers: the root file (routing + invariants) and the
-  // harness-owned docs/agents/*.md it routes to (situation-specific detail). Checks that ask
-  // "is X documented" read both — reading only the root file would score extraction as deletion,
-  // which is the incentive that made the file grow without bound in the first place. The two-way
-  // routing is asserted separately (the extraction check below), so this widening cannot be
-  // satisfied by an orphaned doc that no startup path ever reaches.
-  const instructionDocFiles = files.filter((file) => file.role === 'instruction-doc');
-  const agents = `${instructionFile}\n${instructionDocFiles.map((file) => file.content).join('\n')}`;
+  const agents = byPath.get('AGENTS.md') || byPath.get('CLAUDE.md') || '';
   const featureList = byPath.get('feature_list.json') || byPath.get('feature-list.json') || '';
   const progress = byPath.get('progress.md') || '';
   const init = byPath.get('init.sh') || '';
-  // Tracker-mode and handoff artifacts. session-handoff.md is the legacy in-repo
-  // template; .scratch/handoff.md and CONTEXT.md follow the reference-style,
-  // ephemeral convention. Either satisfies the same checks.
-  const legacyHandoff = byPath.get('session-handoff.md') || '';
-  const scratchHandoff = byPath.get('.scratch/handoff.md') || '';
-  const contextDoc = byPath.get('CONTEXT.md') || '';
-  // The upstream setup skill owns docs/agents/* and creates CONTEXT.md/ADRs only
-  // lazily. Either artifact therefore proves tracker mode on its own:
-  // a repo where setup ran before harness-creator has docs/agents/ but no CONTEXT.md yet.
-  const domainRouting = byPath.get('docs/agents/domain.md') || '';
-  const issueTracker = byPath.get('docs/agents/issue-tracker.md') || '';
-  const adrDir = byPath.has('docs/adr/');
-  const handoffMaterial = `${scratchHandoff}\n${legacyHandoff}`;
-  const stateDocs = `${progress}\n${handoffMaterial}\n${contextDoc}`;
 
-  // Tracker mode: no feature registry, so the state artifact is CONTEXT.md or the tracker
-  // routing matt owns, and continuity lives in the ticket system + the AGENTS.md session-end
-  // routine. Scoring a tracker harness with registry-shaped checks would report a false
-  // "state" bottleneck and push users toward feature_list.json — the wrong mode. When tracker
-  // mode is detected, the state/scope checks below read AGENTS.md too and accept tracker
-  // vocabulary, and never require harness-shaped markers inside files matt owns.
-  // Those files appear only once the upstream setup runs, which this skill deliberately does not
-  // do — so in the window right after `create-harness --mode tracker` the generated AGENTS.md is
-  // the only evidence of the mode. Read it too, keyed on the vocabulary a human reads there
-  // ("state lives in the ticket system"), never on a marker invented to satisfy the scorer.
-  const trackerStateVocab = structuredHas(agents, ['工单系统', 'issue tracker', 'ticket system'], '');
-  const trackerMode = !featureList && Boolean(contextDoc || domainRouting || issueTracker || adrDir || trackerStateVocab.pass);
-  const stateScope = trackerMode ? `${stateDocs}\n${agents}` : stateDocs;
-
-  const stateArtifactStructured = () => {
-    if (jsonFeatureList(featureList, '').pass) return true;
-    // The upstream tracker routing is a generated, structured spec — accept it as-is rather than
-    // forcing a glossary heading that the upstream format never produces.
-    if (issueTracker.trim().length > 0) return true;
-    // A tracker harness whose long-lived files do not exist yet is structured by construction:
-    // its AGENTS.md routes state to the ticket system and the repo is meant to hold no registry.
-    // Demanding a file here is what scored a correct tracker harness as a broken one.
-    if (trackerMode) return true;
-    // CONTEXT.md: accept the upstream canonical format (## Language + **Term**: + _Avoid_) as well
-    // as harness vocabulary, so an upstream-authored file scores without edits.
-    return structuredHas(contextDoc, ['## Language', '## Terms', '术语', 'glossary', 'domain', '领域'], '').pass;
-  };
-
-  // Routing has to hold in both directions, or the split becomes a place detail disappears into: a
-  // "See docs/agents/x.md" route to a missing file is a dangling instruction (the agent is told to
-  // read something that is not there), and a doc nothing routes to is unreachable by construction.
-  // Dangling is checked across every docs/agents/*.md route — that includes matt's files, and a
-  // missing one is equally broken. Orphans are checked only on the harness-owned set: matt's files
-  // are created by their own skill and are not this skill's to require routes for.
-  const routedDocs = [...new Set(
-    [...instructionFile.matchAll(/docs\/agents\/([A-Za-z0-9._-]+\.md)/g)].map((match) => `docs/agents/${match[1]}`)
-  )];
-  const danglingRoutes = routedDocs.filter((route) => !byPath.has(route));
-  const orphanDocs = instructionDocFiles
-    .map((file) => file.path)
-    .filter((docPath) => !routedDocs.includes(docPath));
-  const extraction = {
-    pass: danglingRoutes.length === 0 && orphanDocs.length === 0,
-    danglingRoutes,
-    orphanDocs
-  };
+  // A harness is scored on the artifacts a harness ships. Nothing below reads CONTEXT.md,
+  // docs/adr/ or docs/agents/*: those belong to whichever skill produces them, and reading them
+  // here made this scorer treat another skill's output as this one's evidence — which in turn
+  // pushed the template toward writing those files itself, so the scorer would find them.
 
   const checks = {
     instructions: [
@@ -433,28 +358,16 @@ export function scoreHarness(files) {
       structuredHas(agents, ['Startup Workflow', 'Before writing code', '启动工作流', '编写代码前'], 'Startup workflow documented'),
       structuredHas(agents, ['Definition of Done', 'done only when', '完成定义'], 'Definition of done documented'),
       structuredHas(agents, ['Verification Commands', '验证命令', './init.sh', 'test', 'verify', '测试'], 'Verification commands discoverable'),
-      structuredHas(agents, ['feature_list.json', 'progress.md', 'CONTEXT.md', 'docs/agents/domain.md'], 'State artifacts routed from instructions'),
-      {
-        pass: extraction.pass,
-        message: 'Instruction routing is well-formed (routed docs/agents files exist; harness docs are routed to)'
-      }
+      structuredHas(agents, ['feature_list.json', 'progress.md'], 'State artifacts routed from instructions')
     ],
     state: [
-      trackerMode
-        ? { pass: true, message: 'State artifact exists (AGENTS.md routes state to the ticket system; no in-repo registry by design)' }
-        : hasFile(byPath, ['feature_list.json', 'feature-list.json', 'CONTEXT.md', 'docs/agents/issue-tracker.md'], 'State artifact exists (feature registry, CONTEXT.md, or tracker routing)'),
-      { pass: stateArtifactStructured(), message: 'State artifact is structured (valid feature JSON, CONTEXT.md glossary, or tracker routing)' },
+      hasFile(byPath, ['feature_list.json', 'feature-list.json'], 'State artifact exists (feature registry)'),
+      { pass: jsonFeatureList(featureList, '').pass, message: 'State artifact is structured (valid feature JSON)' },
+      hasFile(byPath, ['progress.md'], 'Continuity artifact exists (progress log)'),
+      structuredHas(`${progress}\n${agents}`, ['Current State', '当前状态', 'Status', '现状', '状态', 'Where things stand', 'Where we are'], 'Current state snapshot recorded'),
       {
-        pass: trackerMode
-          ? hasFile(byPath, ['.scratch/handoff.md', 'session-handoff.md'], '').pass
-            || structuredHas(agents, ['handoff', '交接'], '').pass
-          : hasFile(byPath, ['progress.md', '.scratch/handoff.md', 'session-handoff.md'], '').pass,
-        message: 'Continuity artifact exists (progress log, handoff file, or tracker-mode handoff convention)'
-      },
-      structuredHas(stateScope, ['Current State', '当前状态', 'Status', '现状', '状态', 'Where things stand', 'Where we are'], 'Current state snapshot recorded'),
-      {
-        pass: structuredHas(`${stateDocs}\n${agents}`, ['Blockers', '阻塞', '依赖', 'Risks', '风险', 'Open questions', 'Remaining'], '').pass
-          && structuredHas(`${stateDocs}\n${agents}`, ['Next', '下一步', '接下来', '需求进度', '继续'], '').pass,
+        pass: structuredHas(`${progress}\n${agents}`, ['Blockers', '阻塞', '依赖', 'Risks', '风险', 'Open questions', 'Remaining'], '').pass
+          && structuredHas(`${progress}\n${agents}`, ['Next', '下一步', '接下来', '继续'], '').pass,
         message: 'Blockers and next step captured'
       }
     ],
@@ -467,7 +380,7 @@ export function scoreHarness(files) {
     ],
     scope: [
       structuredHas(agents, ['One feature at a time', 'one-feature-at-a-time', 'one requirement at a time', 'one ticket at a time', '一次一个功能', '一次一个需求', '一次一个工单'], 'One-feature-at-a-time rule exists'),
-      textHas(featureList + contextDoc + agents, ['dependencies', '依赖', 'blocking'], 'Dependencies or blocking edges tracked'),
+      textHas(featureList + agents, ['dependencies', '依赖', 'blocking'], 'Dependencies or blocking edges tracked'),
       textHas(agents + featureList, ['status', '状态'], 'Feature status is explicit'),
       structuredHas(agents, ['Stay in scope', 'scope', '保持在范围内', '范围'], 'Scope boundary documented'),
       structuredHas(agents, ['Definition of Done', '完成定义'], 'Completion gate limits scope closure')
@@ -475,12 +388,11 @@ export function scoreHarness(files) {
     lifecycle: [
       hasFile(byPath, ['init.sh'], 'Startup script exists'),
       structuredHas(agents, ['End of Session', 'Before ending', '会话结束', '结束会话前'], 'End-of-session procedure exists'),
-      {
-        pass: legacyHandoff.length > 0 || scratchHandoff.length > 0
-          || structuredHas(agents, ['handoff', '交接'], '').pass,
-        message: 'Handoff path documented (reference-style convention or file)'
-      },
-      structuredHas(`${progress}\n${handoffMaterial}\n${agents}`, ['Last Updated', '最后更新', 'Current Objective', '当前目标', 'Recommended Next Step', '推荐的下一步', '下一步', '需求进度', 'Goal', 'Objective', 'Next steps'], 'Session restart markers exist'),
+      // Handoff is a convention owned by the engineering skills, so what the harness must state is
+      // the ownership, not a path. Requiring a file was what pulled handoff documents into this
+      // skill's own scaffolding, and with it a second place where "where does this go" is decided.
+      structuredHas(agents, ['handoff', '交接'], 'Handoff ownership documented (produced on request, not by this skill)'),
+      structuredHas(`${progress}\n${agents}`, ['Last Updated', '最后更新', 'Current Objective', '当前目标', 'Recommended Next Step', '推荐的下一步', '下一步', 'Goal', 'Objective', 'Next steps'], 'Session restart markers exist'),
       textHas(agents + init, ['restartable', 'clean', 'Next steps', '重新启动', '干净'], 'Clean restart path documented')
     ]
   };
@@ -592,80 +504,25 @@ export async function detectAgentFile(root, explicit) {
   return 'AGENTS.md';
 }
 
-// A handoff doc is identified by what it is, not by one hardcoded filename. The scaffolding
-// writes `.scratch/handoff.md`, but the doc is produced later by a different skill at the user's
-// request, and it may be timestamped or renamed. Keying on the name alone would mark a repo that
-// holds a perfectly good handoff as having none — and worse, the startup checklist would never
-// read it. Landing point is still enforced: only `.scratch/` is scanned, because the repo root
-// and `docs/` are not landing points (see the five-landing-point rule).
-async function handoffCandidates(root) {
-  let entries = [];
-  try {
-    entries = await readdir(path.join(root, '.scratch'), { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  return entries
-    .filter((entry) => entry.isFile() && /\.(md|markdown)$/i.test(entry.name))
-    .map((entry) => `.scratch/${entry.name}`);
-}
-
-// The extracted detail layer of the instruction subsystem: the root instruction file keeps routing
-// and invariants, and situation-specific detail lives in docs/agents/<name>.md, reached by a
-// one-line "See ..." route. The template directory — not a second list in code — is the single
-// source for that set, so a topic cannot be generated but unscored (which would penalise extraction)
-// or scored but never generated. matt's three names in the same directory are deliberately excluded:
-// they are upstream content and must not be able to satisfy harness instruction checks by themselves.
-export async function harnessAgentDocs() {
-  let entries = [];
-  try {
-    entries = await readdir(path.join(TEMPLATE_DIR, 'agent-docs'));
-  } catch {
-    return [];
-  }
-  return entries
-    .filter((name) => name.endsWith('.md'))
-    .map((name) => `docs/agents/${name}`)
-    .sort();
-}
-
+// The harness artifacts are a closed, known set: the instruction file, the two state files and the
+// verification entrypoint. Nothing here probes for directories owned by other skills — scanning for
+// them was how this loader used to end up reading CONTEXT.md, docs/adr/ and docs/agents/* and
+// scoring them as if this skill had produced them. A harness is scored on what a harness ships.
 export async function loadHarnessFiles(root) {
-  // The extracted instruction layer is loaded by name, so the scorer reads exactly what the
-  // generator ships, and tagged, so scoreHarness can tell harness-owned docs apart from matt's
-  // files in the same directory (which must never substitute for harness content).
-  const instructionDocs = await harnessAgentDocs();
   const candidates = [
     'AGENTS.md',
     'CLAUDE.md',
-    ...instructionDocs,
-    'CONTEXT.md',
     'feature_list.json',
     'feature-list.json',
     'progress.md',
-    '.scratch/handoff.md',
-    'session-handoff.md',
-    'docs/agents/domain.md',
-    'docs/agents/issue-tracker.md',
-    'init.sh',
-    // Handoff docs a conforming producer may write under .scratch/ with any name (upstream's
-    // handoff skill defaults to `docs/handoff-<timestamp>.md` or the repo root, neither of which
-    // is a landing point here; the convention on this side is ".scratch/, name it what you like").
-    ...await handoffCandidates(root)
+    'init.sh'
   ];
   const files = [];
   for (const candidate of candidates) {
     const fullPath = path.join(root, candidate);
     if (await exists(fullPath)) {
-      const entry = { path: candidate, content: await readText(fullPath) };
-      if (instructionDocs.includes(candidate)) entry.role = 'instruction-doc';
-      files.push(entry);
+      files.push({ path: candidate, content: await readText(fullPath) });
     }
-  }
-  // matt creates docs/adr/ lazily — it can exist while CONTEXT.md still does not — so an ADR
-  // directory alone must still mark the repo as tracker. A directory is not readable as text,
-  // so record a marker entry that only the tracker-mode probe consults.
-  if (await exists(path.join(root, 'docs/adr'))) {
-    files.push({ path: 'docs/adr/', content: '', kind: 'dir' });
   }
   return files;
 }
