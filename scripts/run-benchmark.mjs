@@ -109,7 +109,7 @@ const DISCOVERABLE_CONTENT = [
 // a file the skill no longer writes is the same "check and template on the same side" defect one
 // level up: the gate would be asserting the existence of the thing that was removed.
 const SELF_CHECK_GROUPS = [
-  'budget', 'agentsBudget', 'agentsDiscover', 'scopeBrake', 'dryRun', 'selfRefs',
+  'budget', 'agentsBudget', 'agentsDiscover', 'scopeBrake', 'maintenance', 'dryRun', 'selfRefs',
   'bottleneckTies', 'blankGate', 'blueprint', 'agentFile', 'reportContract'
 ];
 
@@ -122,6 +122,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['agentsBudget', (group) => ` The generated AGENTS.md stays inside its external byte, line and working-rule budgets (${group.pass ? 'verified' : 'FAILED'}).`],
   ['agentsDiscover', (group) => ` The instruction file does not restate what the agent can read for itself, and the detector is proven to have teeth by a seeded violation (${group.pass ? 'verified' : 'FAILED'}).`],
   ['scopeBrake', (group) => ` The generated instruction file names the owners it delegates to — to-tickets, handoff and their setup prerequisite — and carries none of the removed doctrine (${group.pass ? 'verified' : `leaked ${(group.leaked || []).join(', ') || 'none'}; brake ${group.brake ? 'present' : 'MISSING'}; detector ${group.seeded?.length ? 'has teeth' : 'BLIND'}`}).`],
+  ['maintenance', (group) => ` Harness maintenance has a moment to happen: the generated instruction file tells the agent to re-assess the harness at wrap-up when it touched the harness files, and the detector is proven to have teeth by removing that line (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; detector ${group.teeth ? 'has teeth' : 'BLIND'}`}).`],
   ['dryRun', (group) => ` --dry-run writes nothing, reports the target's real state, and its plan matches the live run entry for entry (${group.pass ? 'verified' : 'FAILED'}).`],
   ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
   ['bottleneckTies', (group) => ` The bottleneck line names ${group.tieCount} tied subsystem(s) as a tie instead of picking one (${group.pass ? 'verified' : 'FAILED'}).`],
@@ -197,6 +198,31 @@ const SKILL_RELATIVE_PATH = /(^|[^/\w.~])skills\/[a-z0-9][a-z0-9-]*\//im;
 const SUBSYSTEM_COUNT = 'three';
 const SUBSYSTEM_CLAIM = /\b(one|two|three|four|five|six|seven|eight|nine|ten)-subsystem\b/gi;
 
+// The console is a fourth place a group has to appear, and it was the one place nothing checked.
+// A group could be computed, join the pass conjunction and reach the shareable report while being
+// absent from the console a human actually reads — the same half-carrier defect the report-coverage
+// check closes, from the other side. It was not hypothetical: a group shipped with a report line and
+// no console line, and every existing guard stayed green, because the console block is hand-written
+// and its lines carry per-group detail. The block is now rendered by consoleSelfCheckLines() and the
+// labels in this map are asserted against SELF_CHECK_GROUPS, so a new group has to declare its
+// console label or the coverage check names it. Declared ahead of the runSelfCheck() call site, for
+// the temporal-dead-zone reason recorded above: this map is read from a function that the top-level
+// flow already invoked by then.
+const CONSOLE_GROUP_LABELS = new Map([
+  ['budget', 'SKILL.md budget'],
+  ['agentsBudget', 'AGENTS.md budget'],
+  ['agentsDiscover', 'AGENTS.md discoverability'],
+  ['scopeBrake', 'Scope brake'],
+  ['maintenance', 'Maintenance trigger'],
+  ['dryRun', 'Dry run'],
+  ['selfRefs', 'Self-reference paths'],
+  ['bottleneckTies', 'Bottleneck ties'],
+  ['blankGate', 'Blank-project gate'],
+  ['blueprint', 'Blueprint slot'],
+  ['agentFile', 'Agent-file invariant'],
+  ['reportContract', 'Report contract']
+]);
+
 
 
 
@@ -240,13 +266,18 @@ Runs a lightweight harness benchmark:
      beside it, and an existing instruction file must stay byte-identical while its missing
      harness sections are still reported.
  14. Checks the self-check's own coverage: every group in SELF_CHECK_GROUPS must have a bound check,
-     a place in the pass conjunction, and a line in the shareable HTML report. A gate that only ever
-     prints is half a carrier.
+     a place in the pass conjunction, a line in the shareable HTML report, and a line on the console
+     a human actually reads — four registration points, asserted as one set equality. A gate that
+     only ever prints is half a carrier; a gate that is only ever printed is the other half.
  15. Checks the report contract: the renderer must honour the output path it is handed rather than
      reporting success at the default one, and the report a human reads must name the subsystem
      count the model actually has — seeded on both sides, since a detector that finds nothing is
      indistinguishable from one that looks for nothing.
- 16. Produces a JSON report and optional HTML report.
+ 16. Checks the maintenance trigger: the generated instruction file must tell the agent to re-assess
+     the harness at wrap-up when the session touched the harness files, so maintenance has a signal
+     instead of relying on someone remembering. Seeded by removing that line, because a presence
+     check that would also pass on a blind scanner is worth nothing.
+ 17. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -273,57 +304,7 @@ await writeText(output, `${JSON.stringify(report, null, 2)}\n`);
 console.log(`Benchmark report written to ${output}`);
 console.log('');
 if (!selfCheck.skipped) {
-  console.log(`Self-check: ${selfCheck.pass ? 'PASS' : 'FAIL'} — scaffolded harness scored ${selfCheck.score}/100`);
-  if (selfCheck.budget) {
-    const { size, max, pass, rawSize, crlfCount, lineEndingInvariant, multiplierSane } = selfCheck.budget;
-    console.log(`  SKILL.md budget: ${pass ? 'PASS' : 'FAIL'} — ${size}/${max} bytes LF-normalized (${max - size >= 0 ? `${max - size} left` : `${size - max} over`})${crlfCount ? `; checkout is CRLF (${crlfCount} lines → raw ${rawSize})` : ''}; line-ending invariant: ${lineEndingInvariant ? 'ok' : 'NO'}; growth ${SKILL_MD_GROWTH}x: ${multiplierSane ? 'ok' : 'UNSANE'}`);
-  }
-  if (selfCheck.agentsBudget) {
-    const { pass, size, max, lines, maxLines, ruleCount, maxRules, rawSize, crlfCount, lineEndingInvariant, error } = selfCheck.agentsBudget;
-    console.log(`  AGENTS.md budget: ${pass ? 'PASS' : 'FAIL'} — ${size}/${max} bytes LF-normalized (${max - size >= 0 ? `${max - size} left` : `${size - max} over`}); ${lines}/${maxLines} lines; working rules ${ruleCount}/${maxRules}${crlfCount ? `; rendered CRLF (raw ${rawSize})` : ''}; line-ending invariant: ${lineEndingInvariant ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
-  }
-  if (selfCheck.agentsDiscover) {
-    const { pass, offenders = [], selfRestraintStated, seededCaught, error } = selfCheck.agentsDiscover;
-    console.log(`  AGENTS.md discoverability: ${pass ? 'PASS' : 'FAIL'} — default render free of restated content: ${offenders.length === 0 ? 'ok' : `NO (${offenders.join(', ')})`}; self-restraint rule stated: ${selfRestraintStated ? 'ok' : 'NO'}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
-  }
-  if (selfCheck.scopeBrake) {
-    const { pass, brake, leaked = [], seeded = [], error } = selfCheck.scopeBrake;
-    console.log(`  Scope brake: ${pass ? 'PASS' : 'FAIL'} — engineering workflow delegated in the generated AGENTS.md: ${brake ? 'ok' : 'NO'}; doctrine carried over from the removed scope: ${leaked.length === 0 ? 'none' : `LEAKED (${leaked.join(', ')})`}; detector catches a seeded violation: ${seeded.length >= 7 ? 'ok' : `BLIND (${seeded.length}/7 patterns)`}${error ? ` — ${error}` : ''}`);
-  }
-  if (selfCheck.dryRun) {
-    const { pass, changesNothing, previewedFiles, reflectsState, planMatchesRun, wrote = [], error } = selfCheck.dryRun;
-    console.log(`  Dry run: ${pass ? 'PASS' : 'FAIL'} — writes nothing: ${changesNothing ? 'ok' : `NO (still wrote ${wrote.join(', ') || 'files'})`}; plans artifacts: ${previewedFiles ? 'ok' : 'NO'}; reflects existing state: ${reflectsState ? 'ok' : 'NO'}; plan matches the real run: ${planMatchesRun ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
-  }
-  if (selfCheck.selfRefs) {
-    const { pass, offenders = [], checked, error } = selfCheck.selfRefs;
-    console.log(`  Self-reference paths: ${pass ? 'PASS' : 'FAIL'} — ${checked} shipped file(s) checked${offenders.length ? `; relative script path in ${offenders.join(', ')}` : ''}${error ? ` — ${error}` : ''}`);
-  }
-  if (selfCheck.bottleneckTies) {
-    const { pass, tieCount, uniqueCount, noneCount, tieLabel } = selfCheck.bottleneckTies;
-    console.log(`  Bottleneck ties: ${pass ? 'PASS' : 'FAIL'} — tie names all 3 subsystems: ${tieCount === 3 ? 'ok' : `NO (${tieCount})`}; unique minimum names one: ${uniqueCount === 1 ? 'ok' : `NO (${uniqueCount})`}; complete harness reports none: ${noneCount === 0 ? 'ok' : `NO (${noneCount})`} — ${tieLabel}`);
-  }
-  if (selfCheck.blankGate) {
-    const { pass, placeholderFails, realRuns, scriptlessRefuses, withTestRuns } = selfCheck.blankGate;
-    console.log(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}; a manifest with no runnable script refuses too: ${scriptlessRefuses ? 'ok' : 'NO'}; a manifest with a real script still runs: ${withTestRuns ? 'ok' : 'NO'}`);
-  }
-  if (selfCheck.blueprint) {
-    const { pass, pendingMarked, noInventedFill, verbatim, error } = selfCheck.blueprint;
-    console.log(`  Blueprint slot: ${pass ? 'PASS' : 'FAIL'} — omitted --blueprint stays a pending marker: ${pendingMarked ? 'ok' : 'NO'}; no stack-derived fill: ${noInventedFill ? 'ok' : 'NO'}; supplied blueprint reaches AGENTS.md verbatim: ${verbatim ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
-  }
-  if (selfCheck.agentFile) {
-    const { pass, noSecondFile, choseClaude, untouched, missingReported, error } = selfCheck.agentFile;
-    console.log(`  Agent-file invariant: ${pass ? 'PASS' : 'FAIL'} — existing CLAUDE.md means no AGENTS.md is created: ${noSecondFile && choseClaude ? 'ok' : 'NO'}; existing instruction file left byte-identical: ${untouched ? 'ok' : 'NO'}; missing sections still reported: ${missingReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
-  }
-  if (selfCheck.reportContract) {
-    const { pass, honouredFlag, reported = [], claimsModel, seededCaught, error } = selfCheck.reportContract;
-    console.log(`  Report contract: ${pass ? 'PASS' : 'FAIL'} — --html honoured by the renderer: ${honouredFlag ? 'ok' : 'DROPPED (wrote to the default path)'}; report names the model's subsystem count: ${claimsModel ? 'ok' : 'NO'}; contradicting claim: ${reported.length === 0 ? 'none' : `FOUND (${reported.join(', ')})`}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
-  }
-  if (selfCheck.reportCoverage) {
-    const { pass, unbound = [], missingLines = [], orphanLines = [] } = selfCheck.reportCoverage;
-    console.log(`  Report coverage: ${pass ? 'PASS' : 'FAIL'} — every self-check group is bound, gated and reported: ${pass ? 'ok' : `NO (unbound: ${unbound.join(', ') || 'none'}; missing report line: ${missingLines.join(', ') || 'none'}; orphan line: ${orphanLines.join(', ') || 'none'})`}`);
-  }
-  if (!selfCheck.pass && selfCheck.error) console.log(`  ${selfCheck.error}`);
-  if (selfCheck.failedGroups?.length) console.log(`  Failing self-check group(s): ${selfCheck.failedGroups.join(', ')}`);
+  for (const line of consoleSelfCheckLines(selfCheck)) console.log(line);
 }
 console.log(formatScoreReport(harnessResult, target));
 console.log(`Eval coverage: ${evalResult.score}/100 (${evalResult.passed}/${evalResult.total})`);
@@ -350,6 +331,73 @@ if (
 // command the skill prints runnable from the target repo, keep the generated instruction file
 // inside its external budgets and free of restated content — and keep it free of any instruction
 // that would send the agent off to run the project's engineering workflow.
+// Renders the console block the human reads. Extracted from the top-level flow so the coverage
+// check reads the very lines that will be printed — a declared console label that the block never
+// emits is the "prose nothing backs" failure this suite refuses everywhere else. It takes the report
+// object rather than the individual groups so the check can call it on a preview before the real
+// print, and each arm stays guarded so a group that failed to compute prints nothing rather than
+// throwing while reporting a failure.
+function consoleSelfCheckLines(selfCheck) {
+  const lines = [];
+  if (!selfCheck || selfCheck.skipped) return lines;
+  lines.push(`Self-check: ${selfCheck.pass ? 'PASS' : 'FAIL'} — scaffolded harness scored ${selfCheck.score}/100`);
+  if (selfCheck.budget) {
+    const { size, max, pass, rawSize, crlfCount, lineEndingInvariant, multiplierSane } = selfCheck.budget;
+    lines.push(`  SKILL.md budget: ${pass ? 'PASS' : 'FAIL'} — ${size}/${max} bytes LF-normalized (${max - size >= 0 ? `${max - size} left` : `${size - max} over`})${crlfCount ? `; checkout is CRLF (${crlfCount} lines → raw ${rawSize})` : ''}; line-ending invariant: ${lineEndingInvariant ? 'ok' : 'NO'}; growth ${SKILL_MD_GROWTH}x: ${multiplierSane ? 'ok' : 'UNSANE'}`);
+  }
+  if (selfCheck.agentsBudget) {
+    const { pass, size, max, lines: agentLines, maxLines, ruleCount, maxRules, rawSize, crlfCount, lineEndingInvariant, error } = selfCheck.agentsBudget;
+    lines.push(`  AGENTS.md budget: ${pass ? 'PASS' : 'FAIL'} — ${size}/${max} bytes LF-normalized (${max - size >= 0 ? `${max - size} left` : `${size - max} over`}); ${agentLines}/${maxLines} lines; working rules ${ruleCount}/${maxRules}${crlfCount ? `; rendered CRLF (raw ${rawSize})` : ''}; line-ending invariant: ${lineEndingInvariant ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+  }
+  if (selfCheck.agentsDiscover) {
+    const { pass, offenders = [], selfRestraintStated, seededCaught, error } = selfCheck.agentsDiscover;
+    lines.push(`  AGENTS.md discoverability: ${pass ? 'PASS' : 'FAIL'} — default render free of restated content: ${offenders.length === 0 ? 'ok' : `NO (${offenders.join(', ')})`}; self-restraint rule stated: ${selfRestraintStated ? 'ok' : 'NO'}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+  }
+  if (selfCheck.scopeBrake) {
+    const { pass, brake, leaked = [], seeded = [], error } = selfCheck.scopeBrake;
+    lines.push(`  Scope brake: ${pass ? 'PASS' : 'FAIL'} — engineering workflow delegated in the generated AGENTS.md: ${brake ? 'ok' : 'NO'}; doctrine carried over from the removed scope: ${leaked.length === 0 ? 'none' : `LEAKED (${leaked.join(', ')})`}; detector catches a seeded violation: ${seeded.length >= 7 ? 'ok' : `BLIND (${seeded.length}/7 patterns)`}${error ? ` — ${error}` : ''}`);
+  }
+  if (selfCheck.maintenance) {
+    const { pass, stated, teeth, error } = selfCheck.maintenance;
+    lines.push(`  Maintenance trigger: ${pass ? 'PASS' : 'FAIL'} — wrap-up step tells the agent to re-assess the harness: ${stated ? 'ok' : 'MISSING'}; detector has teeth against the line being removed: ${teeth ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
+  }
+  if (selfCheck.dryRun) {
+    const { pass, changesNothing, previewedFiles, reflectsState, planMatchesRun, wrote = [], error } = selfCheck.dryRun;
+    lines.push(`  Dry run: ${pass ? 'PASS' : 'FAIL'} — writes nothing: ${changesNothing ? 'ok' : `NO (still wrote ${wrote.join(', ') || 'files'})`}; plans artifacts: ${previewedFiles ? 'ok' : 'NO'}; reflects existing state: ${reflectsState ? 'ok' : 'NO'}; plan matches the real run: ${planMatchesRun ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+  }
+  if (selfCheck.selfRefs) {
+    const { pass, offenders = [], checked, error } = selfCheck.selfRefs;
+    lines.push(`  Self-reference paths: ${pass ? 'PASS' : 'FAIL'} — ${checked} shipped file(s) checked${offenders.length ? `; relative script path in ${offenders.join(', ')}` : ''}${error ? ` — ${error}` : ''}`);
+  }
+  if (selfCheck.bottleneckTies) {
+    const { pass, tieCount, uniqueCount, noneCount, tieLabel } = selfCheck.bottleneckTies;
+    lines.push(`  Bottleneck ties: ${pass ? 'PASS' : 'FAIL'} — tie names all 3 subsystems: ${tieCount === 3 ? 'ok' : `NO (${tieCount})`}; unique minimum names one: ${uniqueCount === 1 ? 'ok' : `NO (${uniqueCount})`}; complete harness reports none: ${noneCount === 0 ? 'ok' : `NO (${noneCount})`} — ${tieLabel}`);
+  }
+  if (selfCheck.blankGate) {
+    const { pass, placeholderFails, realRuns, scriptlessRefuses, withTestRuns } = selfCheck.blankGate;
+    lines.push(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}; a manifest with no runnable script refuses too: ${scriptlessRefuses ? 'ok' : 'NO'}; a manifest with a real script still runs: ${withTestRuns ? 'ok' : 'NO'}`);
+  }
+  if (selfCheck.blueprint) {
+    const { pass, pendingMarked, noInventedFill, verbatim, error } = selfCheck.blueprint;
+    lines.push(`  Blueprint slot: ${pass ? 'PASS' : 'FAIL'} — omitted --blueprint stays a pending marker: ${pendingMarked ? 'ok' : 'NO'}; no stack-derived fill: ${noInventedFill ? 'ok' : 'NO'}; supplied blueprint reaches AGENTS.md verbatim: ${verbatim ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+  }
+  if (selfCheck.agentFile) {
+    const { pass, noSecondFile, choseClaude, untouched, missingReported, error } = selfCheck.agentFile;
+    lines.push(`  Agent-file invariant: ${pass ? 'PASS' : 'FAIL'} — existing CLAUDE.md means no AGENTS.md is created: ${noSecondFile && choseClaude ? 'ok' : 'NO'}; existing instruction file left byte-identical: ${untouched ? 'ok' : 'NO'}; missing sections still reported: ${missingReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+  }
+  if (selfCheck.reportContract) {
+    const { pass, honouredFlag, reported = [], claimsModel, seededCaught, error } = selfCheck.reportContract;
+    lines.push(`  Report contract: ${pass ? 'PASS' : 'FAIL'} — --html honoured by the renderer: ${honouredFlag ? 'ok' : 'DROPPED (wrote to the default path)'}; report names the model's subsystem count: ${claimsModel ? 'ok' : 'NO'}; contradicting claim: ${reported.length === 0 ? 'none' : `FOUND (${reported.join(', ')})`}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+  }
+  if (selfCheck.reportCoverage) {
+    const { pass, unbound = [], missingLines = [], orphanLines = [], missingConsole = [] } = selfCheck.reportCoverage;
+    lines.push(`  Report coverage: ${pass ? 'PASS' : 'FAIL'} — every self-check group is bound, gated, reported and shown on the console: ${pass ? 'ok' : `NO (unbound: ${unbound.join(', ') || 'none'}; missing report line: ${missingLines.join(', ') || 'none'}; orphan line: ${orphanLines.join(', ') || 'none'}; missing console line: ${missingConsole.join(', ') || 'none'})`}`);
+  }
+  if (!selfCheck.pass && selfCheck.error) lines.push(`  ${selfCheck.error}`);
+  if (selfCheck.failedGroups?.length) lines.push(`  Failing self-check group(s): ${selfCheck.failedGroups.join(', ')}`);
+  return lines;
+}
+
 async function runSelfCheck() {
   let dir;
   try {
@@ -371,6 +419,7 @@ async function runSelfCheck() {
       agentsBudget: () => checkAgentFileBudget(),
       agentsDiscover: () => checkAgentFileDiscoverability(),
       scopeBrake: () => checkScopeBoundary(),
+      maintenance: () => checkMaintenanceTrigger(),
       dryRun: () => checkDryRun(),
       selfRefs: () => checkSelfReferencePaths(),
       bottleneckTies: () => checkBottleneckTies(),
@@ -394,6 +443,16 @@ async function runSelfCheck() {
       missingLines,
       orphanLines
     };
+    // The console layer is asserted from the lines that will actually be printed, produced by the
+    // same function the flow above prints from: a declared label the block never emits is the
+    // "prose nothing backs" failure, and a group whose result never reaches the console is the
+    // console-only defect seen from the other side. Both were possible before this arm existed.
+    const consolePreview = consoleSelfCheckLines({ ...groups, reportCoverage, score: scored.overall, pass: true });
+    reportCoverage.missingConsole = SELF_CHECK_GROUPS.filter((key) => {
+      const label = CONSOLE_GROUP_LABELS.get(key);
+      return !label || !consolePreview.some((line) => line.startsWith(`  ${label}:`));
+    });
+    reportCoverage.pass = reportCoverage.pass && reportCoverage.missingConsole.length === 0;
     const failedGroups = SELF_CHECK_GROUPS.filter((key) => !groups[key]?.pass);
     return {
       pass: scored.overall >= minScore && reportCoverage.pass && failedGroups.length === 0,
@@ -546,6 +605,40 @@ async function checkScopeBoundary() {
     };
   } catch (error) {
     return { pass: false, brake: false, leaked: [], seeded: [], error: error.message };
+  } finally {
+    if (dir) await rm(dir, { recursive: true, force: true });
+  }
+}
+
+// Maintenance needs a moment to happen, and until now nothing in the shipped artifact supplied
+// one: the skill could assess a harness on request, but a repo's agent had no instruction telling
+// it when re-assessment was due. "After a long task, re-assess" carried only by prose is the exact
+// failure this suite exists to close — a rule with no mechanical carrier loses to one successful
+// wrong action — so the trigger is asserted in the artifact a target repo actually receives.
+//
+// Keyed on the skill NAME inside the wrap-up section, because that is the only form that resolves
+// from the target repo: a path relative to the skill repository is dead on arrival there, and a
+// concrete runtime path varies by host. Section-scoped rather than whole-file on purpose — the
+// name appears in the delegation section too, so a file-wide match would stay green after the
+// wrap-up step was deleted. The detector is then shown the render with those lines removed; a
+// presence check that would also pass on a scanner looking for nothing is worth nothing.
+function maintenanceTriggerStated(text) {
+  const section = text.split(/^##\s+/m).slice(1).find((part) => part.startsWith('会话结束')) || '';
+  return /harness-creator/.test(section);
+}
+
+async function checkMaintenanceTrigger() {
+  let dir;
+  try {
+    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-maintenance-'));
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
+    const rendered = await readText(path.join(dir, 'AGENTS.md'));
+    const stated = maintenanceTriggerStated(rendered);
+    const stripped = rendered.split('\n').filter((line) => !line.includes('harness-creator')).join('\n');
+    const teeth = stripped !== rendered && !maintenanceTriggerStated(stripped);
+    return { pass: stated && teeth, stated, teeth };
+  } catch (error) {
+    return { pass: false, stated: false, teeth: false, error: error.message };
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
   }
@@ -719,7 +812,11 @@ function scoreEvals(evalsJson) {
     ['Covers the gate that refuses when nothing can run', /无可跑脚本/],
     ['Covers the scope brake against doing the engineering workflow', /范围边界/],
     ['Covers the post-handoff boundary', /越界/],
-    ['Covers session wrap-up', /收尾/]
+    ['Covers session wrap-up', /收尾/],
+    // Added with the update task on the user's ruling: maintenance is a user-invoked entry with a
+    // trigger from the generated instruction file, so the family needs a behavioural case as well
+    // as the gate — a gate proves a script is right, only a case shows what an agent does.
+    ['Covers harness maintenance and update', /更新/]
   ];
   for (const [message, pattern] of familyEntries) {
     checks.push({ pass: cases.some((item) => pattern.test(item.name)), message });

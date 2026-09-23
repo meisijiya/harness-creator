@@ -53,6 +53,7 @@ license: MIT
 | 1 | 创建 | 产物清单 + 确认的参数 → `AGENTS.md` + `init.sh` |
 | 2 | 审计 | 目标仓路径 → 三子系统得分 + 候选瓶颈 + 前 2-3 项改动 |
 | 3 | 报告 | 目标仓路径 + 输出路径 → `--html` 报告（需分享时才做，按需） |
+| 4 | 更新 | 目标仓路径 → 候选改动清单，获批后落地 |
 
 ### 创建 harness
 
@@ -95,6 +96,7 @@ node <技能目录>/scripts/run-benchmark.mjs --target /path/to/project --html /
 - 上下文预算与渐进式披露：`context-engineering-pattern.md`
 - 任务委派与并行代理：`multi-agent-pattern.md`
 - 钩子、启动、长时间运行的工作：`lifecycle-bootstrap-pattern.md`
+- harness 维护：`harness-maintenance-pattern.md`
 - 不易察觉的失败模式：`gotchas.md`
 
 ## 异常与边界条件
