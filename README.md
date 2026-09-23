@@ -137,9 +137,11 @@ node ~/.agents/skills/harness-creator/scripts/validate-harness.mjs --target /pat
 
 ## 它会收尾什么
 
-「收尾」作用于**本次会话的产出**，不是整个仓库：按产物性质归位（可执行约束 → `init.sh`/CI，跨会话长期不变量 → `AGENTS.md` 的工作规则，状态与证据 → 承接方的 tracker 工单，业务代码随提交走），清掉本次会话已无价值的临时材料，再按 `AGENTS.md` 的「会话结束」记账收口。
+「收尾」的对象是**本技能所管的文件**——指令文件、`init.sh`、工作规则——中被本次会话改动的部分；不是整个仓库，也不是本次会话的全部产出。按产物性质归位（可执行约束 → `init.sh`/CI，跨会话长期不变量 → `AGENTS.md` 的工作规则，状态与证据 → 承接方的 tracker 工单，业务代码随提交走），清掉本次会话已无价值的临时材料，再按 `AGENTS.md` 的「会话结束」记账收口。
 
-**更新与优化是显式调用的一轮**：用户要求更新或优化 harness 时走「更新」任务——先取证拿到候选改动，按**作用域**分流（收尾＝本会话产出／优化＝跨会话的 harness 产物），列「将改 / 将删」清单走 🔴 CHECKPOINT 获批后落地，改完复验。流程见 [`references/harness-maintenance-pattern.md`](references/harness-maintenance-pattern.md)。
+跨会话交接**由用户调用 `handoff` 产生**——本技能不创建、也不管它的文档。所以「收尾」与 handoff 没有触发重叠：一个是整理本技能所管文件的内容，另一个是用户自己要的会话交接。
+
+**更新与优化是显式调用的一轮**：用户要求更新或优化 harness 时走「更新」任务——先取证拿到候选改动，按**作用域**分流（收尾＝本技能所管文件中本会话改动的部分／优化＝跨会话的 harness 产物），列「将改 / 将删」清单走 🔴 CHECKPOINT 获批后落地，改完复验。流程见 [`references/harness-maintenance-pattern.md`](references/harness-maintenance-pattern.md)。
 
 **触发不靠代理自觉**：生成物的「会话结束」节写明——本次会话改过指令文件、`init.sh` 或工作规则时，收口时要复盘一次 harness。这条有机械载体（见下表「维护触发」），所以它不会随模板改版静默消失。
 
