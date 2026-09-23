@@ -29,7 +29,7 @@
 本文件**不定义**状态产物与交接产物，它们由已安装的工程 skill 承接：
 
 - **状态与依赖** → `to-tickets`：把工作拆成 tracer-bullet 工单，每条自带**阻塞边**；发布到已配置的 tracker（GitHub / GitLab issues，或仓内本地 markdown）。
-- **会话交接** → `handoff`：写到操作系统临时目录，**不落本仓库**。
+- **会话交接** → `handoff`：它自己决定产物位置与格式，**本技能不指定、也不代建**。
 
 **前置**：以上能力要求 tracker 已配置。未配置时先运行 `/setup-matt-pocock-skills`（一次性；写出 `docs/agents/issue-tracker.md`、`docs/agents/domain.md`，并往本文件追加 `## Agent skills` 块）。本技能**不提供仓内替代**。
 

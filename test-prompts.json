@@ -7,7 +7,7 @@
   {
     "id": 2,
     "prompt": "我的代理每次新会话都要我重新讲一遍项目在做啥，还老是忘掉上次改到哪一步了。怎么让仓库自己能撑起上下文？",
-    "expected": "走委派：状态与阻塞边交给 to-tickets（发布到已配置的 tracker），会话交接交给 handoff（写到操作系统临时目录，不落本仓），前置是一次性运行 /setup-matt-pocock-skills 配置 tracker；本技能不落任何仓内状态或交接文件，也不派生条目/验收标准/决策"
+    "expected": "走委派：状态与阻塞边交给 to-tickets（发布到已配置的 tracker），会话交接交给 handoff（落点由承接方决定，本技能不指定），前置是一次性运行 /setup-matt-pocock-skills 配置 tracker；本技能不落任何仓内状态或交接文件，也不派生条目/验收标准/决策"
   },
   {
     "id": 3,
