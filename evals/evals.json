@@ -19,12 +19,12 @@
       "id": 2,
       "name": "状态与交接委派：本技能不落任何状态产物",
       "prompt": "我的代理每次新会话都要重新摸索项目现状，上次做到哪、什么被阻塞了都不知道。帮我建立跨会话连续性。",
-      "expected_output": "指路已安装的工程 skill：状态与阻塞边交给 to-tickets、会话交接交给 handoff（写到操作系统临时目录），并说明前置 /setup-matt-pocock-skills；本技能不落任何仓内状态或交接文件。",
+      "expected_output": "指路已安装的工程 skill：状态与阻塞边交给 to-tickets、会话交接交给 handoff，并说明前置 /setup-matt-pocock-skills；本技能不落任何仓内状态或交接文件，也不为承接方的产物指定位置。",
       "files": [],
       "expectations": [
         "指出状态与阻塞边由 to-tickets 承接，会话交接由 handoff 承接",
         "指出前置条件：tracker 未配置时先运行 /setup-matt-pocock-skills",
-        "说明 handoff 写到操作系统临时目录，不落在本仓库",
+        "说明 handoff 的产物位置与格式由承接方决定，本技能不指定",
         "本技能不创建 feature_list.json、progress.md 或任何仓内替代品",
         "不代用户派生条目、验收标准或决策；这些由承接方按需产生"
       ]
@@ -208,6 +208,7 @@
         "不创建 ADR、CONTEXT.md、工单、交接文档等属于工程流程的产物（承接方会按需产生它们）",
         "AGENTS.md 具名写出承接方：to-tickets（状态与阻塞边）、handoff（会话交接）及其前置 /setup-matt-pocock-skills",
         "不为第三方 skill 的产物指定落点或做放行裁决",
+        "承接方默认已安装：不检查其他 skill 是否存在、不提示安装、不为缺失提供替代品",
         "不主动替用户调用或编排其他 skill"
       ]
     },
