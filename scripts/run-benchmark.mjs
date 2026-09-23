@@ -46,8 +46,16 @@ const execFileAsync = promisify(execFile);
 // SKILL.md is 5188 bytes, and a Chinese rendering costs roughly 1.3x more bytes at an equal token
 // count, so 9623 is about 1.4x the upstream-equivalent — the difference is the boundary section,
 // the counterexample blacklist and the edge-case table, none of which upstream carries.
+//
+// The multiplier was widened 1.15 -> 1.25 on 2026-09-23 BY THE USER, not by this script. The trigger
+// was a measured dead end rather than a desire for a bigger file: SKILL.md sat at 11062/11066 with
+// 4 bytes of runway, and every dimension still carrying a weighted gap (frontmatter 7, failure-mode
+// encoding 12, checkpoint design 6) needs net-new prose instead of rewording — so 4 bytes of runway
+// blocks the whole remaining queue. It gets its own constant because it is the number a user
+// decision moves; the baseline is not.
 const SKILL_MD_BASELINE_BYTES = 9623;
-const SKILL_MD_MAX_BYTES = Math.floor(SKILL_MD_BASELINE_BYTES * 1.15);
+const SKILL_MD_GROWTH = 1.25; // widened from 1.15 by user decision, 2026-09-23
+const SKILL_MD_MAX_BYTES = Math.floor(SKILL_MD_BASELINE_BYTES * SKILL_MD_GROWTH);
 
 // The generated instruction file gets the same treatment, for the same reason and with more at
 // stake: it is the largest artifact this skill ships into every target repo, and it is read in
@@ -196,7 +204,7 @@ Runs a lightweight harness benchmark:
      is the only check that proves the bundled scripts work end-to-end rather than being present.
   2. Scores the current target harness.
   3. Checks eval coverage in evals/evals.json.
-  4. Checks the SKILL.md size budget (${SKILL_MD_MAX_BYTES} bytes, 15% over the ${SKILL_MD_BASELINE_BYTES}-byte baseline).
+  4. Checks the SKILL.md size budget (${SKILL_MD_MAX_BYTES} bytes = ${SKILL_MD_GROWTH}x the ${SKILL_MD_BASELINE_BYTES}-byte baseline).
   5. Checks the generated AGENTS.md budget against an EXTERNAL anchor: the default render must stay
      inside byte, line and working-rule caps derived from the upstream reference template, not from
      whatever this template happens to render at. A cap whose baseline is the status quo can only
@@ -254,8 +262,8 @@ console.log('');
 if (!selfCheck.skipped) {
   console.log(`Self-check: ${selfCheck.pass ? 'PASS' : 'FAIL'} — scaffolded harness scored ${selfCheck.score}/100`);
   if (selfCheck.budget) {
-    const { size, max, pass, rawSize, crlfCount, lineEndingInvariant } = selfCheck.budget;
-    console.log(`  SKILL.md budget: ${pass ? 'PASS' : 'FAIL'} — ${size}/${max} bytes LF-normalized (${max - size >= 0 ? `${max - size} left` : `${size - max} over`})${crlfCount ? `; checkout is CRLF (${crlfCount} lines → raw ${rawSize})` : ''}; line-ending invariant: ${lineEndingInvariant ? 'ok' : 'NO'}`);
+    const { size, max, pass, rawSize, crlfCount, lineEndingInvariant, multiplierSane } = selfCheck.budget;
+    console.log(`  SKILL.md budget: ${pass ? 'PASS' : 'FAIL'} — ${size}/${max} bytes LF-normalized (${max - size >= 0 ? `${max - size} left` : `${size - max} over`})${crlfCount ? `; checkout is CRLF (${crlfCount} lines → raw ${rawSize})` : ''}; line-ending invariant: ${lineEndingInvariant ? 'ok' : 'NO'}; growth ${SKILL_MD_GROWTH}x: ${multiplierSane ? 'ok' : 'UNSANE'}`);
   }
   if (selfCheck.agentsBudget) {
     const { pass, size, max, lines, maxLines, ruleCount, maxRules, rawSize, crlfCount, lineEndingInvariant, error } = selfCheck.agentsBudget;
@@ -408,8 +416,15 @@ async function checkSkillBudget() {
   // endings. Mixed endings are deliberately not detected here: they don't move the LF-normalized
   // size, so the cap stays honest and a line-ending hygiene check belongs elsewhere, if anywhere.
   const lineEndingInvariant = rawSize - size === crlfCount;
+  // The multiplier has no other mechanical carrier, so it gets asserted instead of trusted. Darwin —
+  // the tool that drove this file's reductions — caps an optimized SKILL.md at 150% of the size it
+  // started from, so a multiplier above 1.5 breaks that contract, and one at or below 1.0 would mean
+  // the file may only ever shrink. Either is a typo, not a decision: without this arm a 12.5 would
+  // yield a 120 KB ceiling and every other check in this suite would still be green.
+  const multiplierSane = SKILL_MD_GROWTH > 1 && SKILL_MD_GROWTH <= 1.5;
   return {
-    pass: size <= SKILL_MD_MAX_BYTES && lineEndingInvariant,
+    pass: size <= SKILL_MD_MAX_BYTES && lineEndingInvariant && multiplierSane,
+    multiplierSane,
     size,
     max: SKILL_MD_MAX_BYTES,
     rawSize,
