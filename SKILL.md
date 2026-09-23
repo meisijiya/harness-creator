@@ -7,6 +7,7 @@ description: >-
   或每次会话的起始状态不一致——或在创建或评估 AGENTS.md、CLAUDE.md、init.sh 时使用。
   状态与交接由已安装的工程 skill 承接，本技能不落这两类产物。
   即使用户从未说出 "harness" 这个词，也应使用本技能。
+  用户要求更新、维护或优化 harness 组件、或要为本会话收尾时，同样使用本技能。
 license: MIT
 ---
 
