@@ -1,13 +1,14 @@
 #!/bin/bash
 set -e
 
-# Verification gate. It must exit 0 before any feature is claimed done.
+# Verification gate. It must exit 0 before any ticket is claimed done.
 #
 # This file is the MANUAL fallback: create-harness.mjs generates init.sh itself from the detected
 # stack (see scripts/lib/harness-utils.mjs), and this template is what you copy by hand when the
 # runtime has no Node. It probes the stack at run time instead of being generated for one, so it
-# deliberately stays stack-generic — its "Next steps" block names the state artifacts create-harness
-# actually writes (feature_list.json, progress.md), nothing else.
+# deliberately stays stack-generic — its "Next steps" block names the delegated route (the
+# instruction file, then the tracker), nothing else. It must never point at a state file: this skill
+# creates none, and a fresh repo has no tracker files until setup has run.
 
 echo "=== Harness Initialization ==="
 
@@ -16,7 +17,7 @@ explain_failure() {
   echo "=== Verification FAILED ==="
   echo "Either the baseline is broken, or this skeleton has no runnable check yet."
   echo "Fix the baseline first, then re-run ./init.sh."
-  echo "Do NOT mark any feature done until ./init.sh exits 0."
+  echo "Do NOT mark any ticket done until ./init.sh exits 0."
 }
 trap explain_failure ERR
 
@@ -45,7 +46,7 @@ if [ -f package.json ]; then
   # Counts the checks that actually ran. A manifest that defines none of them is the same trap as no
   # manifest at all: without this counter the script would run only the install, print
   # "Verification Complete" and exit 0 having verified nothing — the gate cannot fail, so
-  # "no feature may be marked done without evidence" becomes unreachable on exactly the fresh
+  # "no ticket may be marked done without evidence" becomes unreachable on exactly the fresh
   # skeleton where it matters most. The branch below refuses until a real command replaces it.
   RAN=0
 
@@ -115,8 +116,8 @@ fi
 echo "=== Verification Complete ==="
 echo ""
 echo "Next steps:"
-echo "1. Read feature_list.json for current feature state and blockers"
-echo "2. Read progress.md for status, evidence and the recommended next step"
-echo "3. Pick ONE unfinished feature"
-echo "4. Implement only that feature, staying inside its scope"
-echo "5. Re-run verification before claiming done"
+echo "1. Configure the tracker once: /setup-matt-pocock-skills"
+echo "2. Read AGENTS.md for the startup path, the invariants and where state lives"
+echo "3. Pick ONE unfinished ticket whose blocking edges are clear"
+echo "4. Implement only that ticket, staying inside its scope"
+echo "5. Re-run this script before claiming done"

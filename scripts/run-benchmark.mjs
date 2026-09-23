@@ -95,9 +95,14 @@ const DISCOVERABLE_CONTENT = [
 // reaches the artifact people actually read is half a carrier"), and seven groups had drifted out
 // of it. Declared here, ahead of the runSelfCheck() call site, for the temporal-dead-zone reason
 // recorded above: a const sitting next to the function that reads it is still in its TDZ there.
+// 'entries' left with the state artifacts. Its whole subject was the shape of feature_list.json —
+// that a fresh scaffold ships no project-shaped entries and states the alignment rule first. With
+// no registry to inspect, the assertion had nothing left to read, and a group kept alive to inspect
+// a file the skill no longer writes is the same "check and template on the same side" defect one
+// level up: the gate would be asserting the existence of the thing that was removed.
 const SELF_CHECK_GROUPS = [
   'budget', 'agentsBudget', 'agentsDiscover', 'scopeBrake', 'dryRun', 'selfRefs',
-  'bottleneckTies', 'blankGate', 'blueprint', 'entries', 'agentFile'
+  'bottleneckTies', 'blankGate', 'blueprint', 'agentFile'
 ];
 
 // One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
@@ -108,13 +113,12 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['budget', (group) => ` SKILL.md sits at ${group.size}/${group.max} bytes (${group.pass ? 'within' : 'OVER'} budget).`],
   ['agentsBudget', (group) => ` The generated AGENTS.md stays inside its external byte, line and working-rule budgets (${group.pass ? 'verified' : 'FAILED'}).`],
   ['agentsDiscover', (group) => ` The instruction file does not restate what the agent can read for itself, and the detector is proven to have teeth by a seeded violation (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['scopeBrake', (group) => ` The generated instruction file states that the engineering workflow belongs to the engineering skills and carries none of the removed doctrine (${group.pass ? 'verified' : `leaked ${(group.leaked || []).join(', ') || 'none'}; brake ${group.brake ? 'present' : 'MISSING'}; detector ${group.seeded?.length ? 'has teeth' : 'BLIND'}`}).`],
+  ['scopeBrake', (group) => ` The generated instruction file names the owners it delegates to — to-tickets, handoff and their setup prerequisite — and carries none of the removed doctrine (${group.pass ? 'verified' : `leaked ${(group.leaked || []).join(', ') || 'none'}; brake ${group.brake ? 'present' : 'MISSING'}; detector ${group.seeded?.length ? 'has teeth' : 'BLIND'}`}).`],
   ['dryRun', (group) => ` --dry-run writes nothing, reports the target's real state, and its plan matches the live run entry for entry (${group.pass ? 'verified' : 'FAILED'}).`],
   ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
   ['bottleneckTies', (group) => ` The bottleneck line names ${group.tieCount} tied subsystem(s) as a tie instead of picking one (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blankGate', (group) => ` A project with nothing to verify — no manifest, or a manifest with no runnable script — gets a placeholder step that exits non-zero instead of reporting a pass it did not earn (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-plain-description slot stays a visible pending marker when the user has not stated one, rather than being filled from the detected stack (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['entries', (group) => ` A freshly scaffolded harness ships no project-shaped feature entries, and states the alignment rule before any entry may be added (${group.pass ? 'verified' : 'FAILED'}).`],
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`]
 ]);
 
@@ -131,17 +135,30 @@ const SELF_CHECK_REPORT_LINES = new Map([
 // the top-level flow is still in its temporal dead zone there, and the run died with exactly that
 // error ("Cannot access 'FORBIDDEN_IN_AGENTS_MD' before initialization") the first time this check
 // was added. Same trap the notes above record twice already.
+// Re-scoped the moment state was delegated, and the re-scoping matters more than the list.
+//
+// The old patterns forbade `.scratch/`, `docs/agents/`, `ADR` and `CONTEXT.md`, because those were
+// the landing points this skill used to hand out. They are now legitimate: they are the upstream
+// skills' own artifacts, and naming them IS what the delegation sentence is for. Keeping them
+// forbidden would make the detector fire on the correct render — a gate that rejects the outcome
+// it was written to produce.
+//
+// What must never come back is this skill's own removed machinery: its in-repo state files, its
+// landing-point doctrine, its controlled-release escape hatch, its mode gate, its extracted
+// agent-doc booklets. Those are the parts that assigned work; the neighbours' file names never
+// were. Same two-sided shape otherwise: a required statement AND a forbidden one, plus a seed that
+// trips every pattern, because "found nothing" is worth nothing from a blind scanner.
 const FORBIDDEN_IN_AGENTS_MD = [
-  { name: 'ticket-system mode', pattern: /工单系统|issue tracker|ticket system/ },
-  { name: 'ADR routing', pattern: /\bADR\b|docs\/adr/ },
-  { name: 'domain-language file', pattern: /CONTEXT\.md/ },
-  { name: 'scratch landing point', pattern: /\.scratch\// },
-  { name: 'extracted agent docs', pattern: /docs\/agents\// },
+  { name: 'in-repo state registry', pattern: /feature[-_]list\.json/ },
+  { name: 'in-repo progress log', pattern: /progress\.md/ },
   { name: 'landing-point doctrine', pattern: /落点/ },
-  { name: 'tracking-policy section', pattern: /产物追踪策略/ }
+  { name: 'tracking-policy section', pattern: /产物追踪策略/ },
+  { name: 'controlled release', pattern: /受控放行/ },
+  { name: 'governance modes', pattern: /两种模式|--mode\b/ },
+  { name: 'extracted agent-doc layer', pattern: /tracking-policy\.md|escalation\.md/ }
 ];
-const SEEDED_VIOLATION = '\n状态由工单系统承接；决策进 docs/adr/；术语进 CONTEXT.md；'
-  + '材料入 .scratch/；详规落 docs/agents/；五落点；产物追踪策略。';
+const SEEDED_VIOLATION = '\n状态写入 feature_list.json 与 progress.md；产物追踪策略；'
+  + '五落点；受控放行；两种模式；分册 tracking-policy.md 与 escalation.md。';
 
 // Declared at module scope, ahead of the runSelfCheck() call: a const sitting next to the function
 // that reads it would still be in its temporal dead zone at that call site.
@@ -196,15 +213,13 @@ Runs a lightweight harness benchmark:
      having verified nothing. A gate that cannot fail is not a gate.
  12. Checks the plain-description slot: omitting --blueprint must leave a visible pending marker
      rather than stack-derived text, and a supplied description must reach AGENTS.md verbatim.
- 13. Checks the entry template: a fresh scaffold must not ship project-shaped feature entries, and
-     must state the alignment rule before any entry may be added.
- 14. Checks the instruction-file invariant: an existing CLAUDE.md must not get a second AGENTS.md
+ 13. Checks the instruction-file invariant: an existing CLAUDE.md must not get a second AGENTS.md
      beside it, and an existing instruction file must stay byte-identical while its missing
      harness sections are still reported.
- 15. Checks the self-check's own coverage: every group in SELF_CHECK_GROUPS must have a bound check,
+ 14. Checks the self-check's own coverage: every group in SELF_CHECK_GROUPS must have a bound check,
      a place in the pass conjunction, and a line in the shareable HTML report. A gate that only ever
      prints is half a carrier.
- 16. Produces a JSON report and optional HTML report.
+ 15. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -258,7 +273,7 @@ if (!selfCheck.skipped) {
   }
   if (selfCheck.bottleneckTies) {
     const { pass, tieCount, uniqueCount, noneCount, tieLabel } = selfCheck.bottleneckTies;
-    console.log(`  Bottleneck ties: ${pass ? 'PASS' : 'FAIL'} — 5-way tie names all 5: ${tieCount === 5 ? 'ok' : `NO (${tieCount})`}; unique minimum names one: ${uniqueCount === 1 ? 'ok' : `NO (${uniqueCount})`}; complete harness reports none: ${noneCount === 0 ? 'ok' : `NO (${noneCount})`} — ${tieLabel}`);
+    console.log(`  Bottleneck ties: ${pass ? 'PASS' : 'FAIL'} — tie names all 3 subsystems: ${tieCount === 3 ? 'ok' : `NO (${tieCount})`}; unique minimum names one: ${uniqueCount === 1 ? 'ok' : `NO (${uniqueCount})`}; complete harness reports none: ${noneCount === 0 ? 'ok' : `NO (${noneCount})`} — ${tieLabel}`);
   }
   if (selfCheck.blankGate) {
     const { pass, placeholderFails, realRuns, scriptlessRefuses, withTestRuns } = selfCheck.blankGate;
@@ -267,10 +282,6 @@ if (!selfCheck.skipped) {
   if (selfCheck.blueprint) {
     const { pass, pendingMarked, noInventedFill, verbatim, error } = selfCheck.blueprint;
     console.log(`  Blueprint slot: ${pass ? 'PASS' : 'FAIL'} — omitted --blueprint stays a pending marker: ${pendingMarked ? 'ok' : 'NO'}; no stack-derived fill: ${noInventedFill ? 'ok' : 'NO'}; supplied blueprint reaches AGENTS.md verbatim: ${verbatim ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
-  }
-  if (selfCheck.entries) {
-    const { pass, count, atMostExample, alignmentRuleStated, error } = selfCheck.entries;
-    console.log(`  Entry restraint: ${pass ? 'PASS' : 'FAIL'} — no project-shaped entries at scaffold time (${count} entry/entries): ${atMostExample ? 'ok' : 'NO'}; alignment rule stated in feature_list.json and AGENTS.md: ${alignmentRuleStated ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.agentFile) {
     const { pass, noSecondFile, choseClaude, untouched, missingReported, error } = selfCheck.agentFile;
@@ -334,7 +345,6 @@ async function runSelfCheck() {
       bottleneckTies: () => checkBottleneckTies(),
       blankGate: () => checkBlankProjectGate(),
       blueprint: () => checkBlueprintSlot(),
-      entries: () => checkEntryTemplateRestraint(),
       agentFile: () => checkAgentFileInvariant()
     };
     const groups = {};
@@ -478,7 +488,13 @@ async function checkScopeBoundary() {
     await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
     const text = await readText(path.join(dir, 'AGENTS.md'));
     // The brake: the file must say the engineering workflow belongs to the engineering skills.
-    const brake = /工程\s*skill/.test(text) && /不代做/.test(text);
+    // The required half moved from a generic boundary to the NAMED owners. "Some engineering skill
+    // owns this" is unfalsifiable and leaves the agent with nowhere to look, so the render must
+    // name to-tickets and handoff, and must name the setup prerequisite that makes them work —
+    // otherwise a fresh repo points at a capability it cannot reach yet. The forbidden half is
+    // unchanged in shape and re-scoped in content (see FORBIDDEN_IN_AGENTS_MD).
+    const brake = /工程\s*skill/.test(text) && /不代做/.test(text)
+      && /to-tickets/.test(text) && /handoff/.test(text) && /setup-matt-pocock-skills/.test(text);
     const leaked = FORBIDDEN_IN_AGENTS_MD.filter(({ pattern }) => pattern.test(text)).map(({ name }) => name);
     const seeded = FORBIDDEN_IN_AGENTS_MD
       .filter(({ pattern }) => pattern.test(`${text}${SEEDED_VIOLATION}`))
@@ -598,15 +614,16 @@ function scoreEvals(evalsJson) {
   // below reuse them for both pairing directions. Each entry keeps a distinct message so a
   // counter-example shows exactly which one broke.
   //
-  // The list is one-for-one with the eval file and covers the scope this skill now claims: the five
-  // subsystems, the safety and measurement properties of its own tooling, and — case 16 — the
+  // The list is one-for-one with the eval file and covers the scope this skill now claims: the three
+  // subsystems, the safety and measurement properties of its own tooling, and — case 15 — the
   // boundary that keeps it from handing the agent work belonging to the engineering skills. Cases
-  // for the removed scope (tracker mode, landing points, ADR/CONTEXT routing, housekeeping, the
-  // upstream interlock lists) were deleted with that scope; keeping them would have asserted the
-  // behaviour this skill no longer wants to have.
+  // for the removed scope (in-repo state files, entry-template restraint, tracker mode, landing
+  // points, ADR/CONTEXT routing, housekeeping, the upstream interlock lists) were deleted with that
+  // scope; keeping them would have asserted the behaviour this skill no longer wants to have. The
+  // delegation case replaces them: it asserts the NAMED owners instead of the artifacts they own.
   const familyEntries = [
     ['Covers minimal harness creation', /最小化/],
-    ['Covers session continuity', /连续性/],
+    ['Covers delegated state and handoff', /委派/],
     ['Covers harness assessment', /评估/],
     ['Covers verification workflow', /验证工作流/],
     ['Covers memory taxonomy', /记忆/],
@@ -616,12 +633,11 @@ function scoreEvals(evalsJson) {
     ['Covers lifecycle bootstrap', /生命周期/],
     ['Covers scripted validation tooling', /脚本化/],
     ['Covers the plain-description slot', /项目说明/],
-    ['Covers entry-template restraint', /条目模板/],
     ['Covers the instruction-file invariant', /指令文件不变量/],
     ['Covers instruction-file size and discoverability', /不可发现/],
     ['Covers the gate that refuses when nothing can run', /无可跑脚本/],
     ['Covers the scope brake against doing the engineering workflow', /范围边界/],
-    ['Covers the post-handoff boundary', /交接/],
+    ['Covers the post-handoff boundary', /越界/],
     ['Covers session wrap-up', /收尾/]
   ];
   for (const [message, pattern] of familyEntries) {
@@ -664,9 +680,12 @@ function scoreEvals(evalsJson) {
 // the audit's most-quoted output giving a confident wrong answer, so it is asserted here instead
 // of left to the comment.
 async function checkBottleneckTies() {
-  const full = { instructions: { score: 5 }, state: { score: 5 }, verification: { score: 5 }, scope: { score: 5 }, lifecycle: { score: 5 } };
-  const tied = { instructions: { score: 1 }, state: { score: 1 }, verification: { score: 1 }, scope: { score: 1 }, lifecycle: { score: 1 } };
-  const unique = { instructions: { score: 2 }, state: { score: 1 }, verification: { score: 3 } };
+  // Three subsystems now, so the tie fixture is three-way. The probe is built from the same names
+  // SUBSYSTEMS carries, but as a literal on purpose: a fixture derived from the constant under test
+  // would move with it and could never catch the constant shrinking by accident.
+  const full = { instructions: { score: 5 }, verification: { score: 5 }, scope: { score: 5 } };
+  const tied = { instructions: { score: 1 }, verification: { score: 1 }, scope: { score: 1 } };
+  const unique = { instructions: { score: 2 }, verification: { score: 1 }, scope: { score: 3 } };
   const noneList = pickBottlenecks(full);
   const tieList = pickBottlenecks(tied);
   const uniqueList = pickBottlenecks(unique);
@@ -676,8 +695,8 @@ async function checkBottleneckTies() {
   // Three cases, each with a distinct failure: a tie must name every tied subsystem (naming one is
   // the old defect), a unique minimum must still name exactly that one, and a complete harness must
   // report nothing to fix rather than the first subsystem in the list.
-  const tieNamesAll = tieList.length === 5 && ['instructions', 'lifecycle'].every((name) => tieLabel.includes(name));
-  const uniqueNamesOne = uniqueList.length === 1 && uniqueList[0] === 'state' && uniqueLabel === 'state';
+  const tieNamesAll = tieList.length === 3 && ['instructions', 'scope'].every((name) => tieLabel.includes(name));
+  const uniqueNamesOne = uniqueList.length === 1 && uniqueList[0] === 'verification' && uniqueLabel === 'verification';
   const noneStaysQuiet = noneList.length === 0 && /none/.test(noneLabel);
   return {
     pass: tieNamesAll && uniqueNamesOne && noneStaysQuiet,
@@ -770,44 +789,7 @@ async function checkBlueprintSlot() {
   }
 }
 
-// Stage twelve: the entry template must not pre-load project-shaped work. The scaffold used to
-// ship five entries named like a plausible delivery path (first user-facing feature, verification
-// coverage, docs, cleanup), and a scaffolded repo therefore started life looking like five agreed
-// tasks had already been decided — which is how unaligned requirements became "entries". Nothing
-// caught it: the old template scored 100/100, because every check asked for shape, never for
-// emptiness. Two directions: the scaffold must carry no project-specific entry beyond the
-// structural example, and the alignment rule must be present so the boundary is stated where the
-// agent actually reads it.
-async function checkEntryTemplateRestraint() {
-  let dir;
-  try {
-    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-entries-'));
-    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
-    const raw = await readText(path.join(dir, 'feature_list.json'));
-    const parsed = JSON.parse(raw);
-    const entries = Array.isArray(parsed.features) ? parsed.features : [];
-    // The structural example is allowed; a third entry, or a name that reads like a delivery
-    // milestone rather than a placeholder, is the defect this stage exists for.
-    const atMostExample = entries.length <= 2;
-    const namesArePlaceholders = entries.every((entry) => /项目初始化|示例/.test(entry.name));
-    const alignmentRuleStated = /对齐/.test(raw);
-    const agentsHasRule = /对齐/.test(await readText(path.join(dir, 'AGENTS.md')));
-    return {
-      pass: atMostExample && namesArePlaceholders && alignmentRuleStated && agentsHasRule,
-      count: entries.length,
-      atMostExample,
-      namesArePlaceholders,
-      alignmentRuleStated,
-      agentsHasRule
-    };
-  } catch (error) {
-    return { pass: false, count: 0, atMostExample: false, namesArePlaceholders: false, alignmentRuleStated: false, agentsHasRule: false, error: error.message };
-  } finally {
-    if (dir) await rm(dir, { recursive: true, force: true });
-  }
-}
-
-// Stage thirteen: the instruction-file choice invariant and the report-don't-write contract.
+// Stage twelve: the instruction-file choice invariant and the report-don't-write contract.
 // The rule (shared with matt, so the two never drift) is: edit CLAUDE.md when it exists, otherwise
 // AGENTS.md — and NEVER create AGENTS.md beside an existing CLAUDE.md. Two instruction files in one
 // repo is the failure the partition exists to prevent: an agent reads two contradictory routing

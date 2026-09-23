@@ -13,7 +13,11 @@ export const TEMPLATE_DIR = path.join(SKILL_ROOT, 'templates');
 export function scriptCommand(scriptName) {
   return `node ${SKILL_ROOT.replaceAll('\\', '/')}/scripts/${scriptName}`;
 }
-export const SUBSYSTEMS = ['instructions', 'state', 'verification', 'scope', 'lifecycle'];
+// Three subsystems, not upstream's five. State and lifecycle are real subsystems of a harness, but
+// they are not this skill's to build: they belong to the engineering skills, and the instruction
+// file states the delegation. Scoring them here would rate a correctly-delegated repo as broken —
+// five checks per subsystem, all failing on artifacts that are supposed to be absent.
+export const SUBSYSTEMS = ['instructions', 'verification', 'scope'];
 
 export function parseArgs(argv) {
   const args = { _: [] };
@@ -240,12 +244,17 @@ export function initScriptFromCommands(commands) {
   // nothing else. A startup script that tells the agent to read a file this skill never creates is
   // a dangling instruction, and the artifact list stays clean because the leak sits in the
   // contents of a file that IS expected to exist.
+  //
+  // State no longer appears here because it no longer lives here: it is delegated, and the route
+  // to it is the instruction file, which exists before the tracker is configured. Naming the
+  // tracker's own files instead would be exactly the dangling pointer this block is built to
+  // avoid — a fresh repo has none of them until setup has run.
   const nextSteps = [
-    '1. Read feature_list.json to see current feature state',
-    '2. Read progress.md for current status, blockers and next steps',
-    '3. Pick ONE unfinished feature to work on',
-    '4. Implement only that feature, staying inside its scope',
-    '5. Re-run verification before claiming done'
+    '1. Configure the tracker once: /setup-matt-pocock-skills',
+    '2. Read AGENTS.md for the startup path, the invariants and where state lives',
+    '3. Pick ONE unfinished ticket whose blocking edges are clear',
+    '4. Implement only that ticket, staying inside its scope',
+    '5. Re-run this script before claiming done'
   ];
   return `#!/bin/bash
 set -e
@@ -343,14 +352,14 @@ export function scoreHarness(files) {
   const byPath = new Map(files.map((file) => [file.path, file.content]));
   const allText = files.map((file) => `${file.path}\n${file.content}`).join('\n\n');
   const agents = byPath.get('AGENTS.md') || byPath.get('CLAUDE.md') || '';
-  const featureList = byPath.get('feature_list.json') || byPath.get('feature-list.json') || '';
-  const progress = byPath.get('progress.md') || '';
   const init = byPath.get('init.sh') || '';
 
-  // A harness is scored on the artifacts a harness ships. Nothing below reads CONTEXT.md,
-  // docs/adr/ or docs/agents/*: those belong to whichever skill produces them, and reading them
-  // here made this scorer treat another skill's output as this one's evidence — which in turn
-  // pushed the template toward writing those files itself, so the scorer would find them.
+  // A harness is scored on the artifacts a harness ships — and only on the ones this skill ships.
+  // Nothing below reads CONTEXT.md, docs/adr/, docs/agents/*, feature_list.json or progress.md.
+  // The first three belong to whichever skill produces them; the last two no longer exist here at
+  // all, because state left with them. Reading another skill's output made this scorer treat it as
+  // this one's evidence, which in turn pushed the template toward writing those files itself so the
+  // scorer would find them — the check and the template arguing the same side of the question.
 
   const checks = {
     instructions: [
@@ -358,18 +367,10 @@ export function scoreHarness(files) {
       structuredHas(agents, ['Startup Workflow', 'Before writing code', '启动工作流', '编写代码前'], 'Startup workflow documented'),
       structuredHas(agents, ['Definition of Done', 'done only when', '完成定义'], 'Definition of done documented'),
       structuredHas(agents, ['Verification Commands', '验证命令', './init.sh', 'test', 'verify', '测试'], 'Verification commands discoverable'),
-      structuredHas(agents, ['feature_list.json', 'progress.md'], 'State artifacts routed from instructions')
-    ],
-    state: [
-      hasFile(byPath, ['feature_list.json', 'feature-list.json'], 'State artifact exists (feature registry)'),
-      { pass: jsonFeatureList(featureList, '').pass, message: 'State artifact is structured (valid feature JSON)' },
-      hasFile(byPath, ['progress.md'], 'Continuity artifact exists (progress log)'),
-      structuredHas(`${progress}\n${agents}`, ['Current State', '当前状态', 'Status', '现状', '状态', 'Where things stand', 'Where we are'], 'Current state snapshot recorded'),
-      {
-        pass: structuredHas(`${progress}\n${agents}`, ['Blockers', '阻塞', '依赖', 'Risks', '风险', 'Open questions', 'Remaining'], '').pass
-          && structuredHas(`${progress}\n${agents}`, ['Next', '下一步', '接下来', '继续'], '').pass,
-        message: 'Blockers and next step captured'
-      }
+      // State and handoff are delegated, so what the instruction file must state is WHO owns them
+      // and what the prerequisite is — not where a local file lives. Requiring an in-repo artifact
+      // here is what made this scorer reward shipping one.
+      structuredHas(agents, ['to-tickets', 'handoff', 'setup-matt-pocock-skills', '承接方', 'delegat'], 'Delegated state and handoff owners named')
     ],
     verification: [
       hasFile(byPath, ['init.sh'], 'Verification entrypoint exists'),
@@ -379,21 +380,11 @@ export function scoreHarness(files) {
       textHas(allText, ['Evidence', 'Verification Evidence', 'command and output', '证据', 'CI'], 'Verification evidence is recorded')
     ],
     scope: [
-      structuredHas(agents, ['One feature at a time', 'one-feature-at-a-time', 'one requirement at a time', 'one ticket at a time', '一次一个功能', '一次一个需求', '一次一个工单'], 'One-feature-at-a-time rule exists'),
-      textHas(featureList + agents, ['dependencies', '依赖', 'blocking'], 'Dependencies or blocking edges tracked'),
-      textHas(agents + featureList, ['status', '状态'], 'Feature status is explicit'),
-      structuredHas(agents, ['Stay in scope', 'scope', '保持在范围内', '范围'], 'Scope boundary documented'),
+      structuredHas(agents, ['One feature at a time', 'one-feature-at-a-time', 'one requirement at a time', 'one ticket at a time', '一次一个功能', '一次一个需求', '一次一个工单'], 'One-ticket-at-a-time rule exists'),
+      textHas(agents, ['dependencies', 'blocking', '阻塞边', '依赖'], 'Blocking edges are stated'),
+      textHas(agents, ['status', '状态'], 'Ticket status is explicit'),
+      structuredHas(agents, ['Stay in scope', 'scope', '保持在本工单范围内', '保持在范围内', '范围'], 'Scope boundary documented'),
       structuredHas(agents, ['Definition of Done', '完成定义'], 'Completion gate limits scope closure')
-    ],
-    lifecycle: [
-      hasFile(byPath, ['init.sh'], 'Startup script exists'),
-      structuredHas(agents, ['End of Session', 'Before ending', '会话结束', '结束会话前'], 'End-of-session procedure exists'),
-      // Handoff is a convention owned by the engineering skills, so what the harness must state is
-      // the ownership, not a path. Requiring a file was what pulled handoff documents into this
-      // skill's own scaffolding, and with it a second place where "where does this go" is decided.
-      structuredHas(agents, ['handoff', '交接'], 'Handoff ownership documented (produced on request, not by this skill)'),
-      structuredHas(`${progress}\n${agents}`, ['Last Updated', '最后更新', 'Current Objective', '当前目标', 'Recommended Next Step', '推荐的下一步', '下一步', 'Goal', 'Objective', 'Next steps'], 'Session restart markers exist'),
-      textHas(agents + init, ['restartable', 'clean', 'Next steps', '重新启动', '干净'], 'Clean restart path documented')
     ]
   };
 
@@ -479,21 +470,6 @@ function structuredHas(markdown, needles, message) {
   return textHas(structuredText(markdown), needles, message);
 }
 
-function jsonFeatureList(text, message) {
-  try {
-    const parsed = JSON.parse(text);
-    const valid = Array.isArray(parsed.features) && parsed.features.every((feature) =>
-      typeof feature.id === 'string'
-      && typeof feature.name === 'string'
-      && typeof feature.description === 'string'
-      && typeof feature.status === 'string'
-    );
-    return { pass: valid, message };
-  } catch {
-    return { pass: false, message };
-  }
-}
-
 // The upstream setup skill edits CLAUDE.md when it exists and treats AGENTS.md and
 // CLAUDE.md as mutually exclusive ("never create AGENTS.md when CLAUDE.md already exists").
 // harness-creator follows the same invariant so the two skills never end up maintaining
@@ -504,17 +480,17 @@ export async function detectAgentFile(root, explicit) {
   return 'AGENTS.md';
 }
 
-// The harness artifacts are a closed, known set: the instruction file, the two state files and the
-// verification entrypoint. Nothing here probes for directories owned by other skills — scanning for
-// them was how this loader used to end up reading CONTEXT.md, docs/adr/ and docs/agents/* and
-// scoring them as if this skill had produced them. A harness is scored on what a harness ships.
+// The harness artifacts are a closed, known set of exactly what this skill ships: the instruction
+// file and the verification entrypoint. Nothing here probes for directories owned by other skills —
+// scanning for them was how this loader used to end up reading CONTEXT.md, docs/adr/ and
+// docs/agents/* and scoring them as if this skill had produced them. The two state files that used
+// to sit in this list are gone for the same reason one level further out: state is delegated, so
+// their absence is the correct state, and listing them here would report a properly delegated repo
+// as broken — a scorer that fails the correct outcome is worse than no scorer.
 export async function loadHarnessFiles(root) {
   const candidates = [
     'AGENTS.md',
     'CLAUDE.md',
-    'feature_list.json',
-    'feature-list.json',
-    'progress.md',
     'init.sh'
   ];
   const files = [];

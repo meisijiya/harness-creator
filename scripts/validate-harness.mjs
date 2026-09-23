@@ -15,8 +15,12 @@ const args = parseArgs(process.argv.slice(2));
 if (args.help) {
   console.log(`Usage: ${scriptCommand('validate-harness.mjs')} [--target DIR] [--json] [--html FILE]
 
-Scores a project harness across five subsystems:
-  instructions, state, verification, scope, lifecycle
+Scores a project harness across three subsystems:
+  instructions, verification, scope
+
+State and lifecycle are not scored: they are delegated to the engineering skills
+(to-tickets for state and blocking edges, handoff for session handoff), so grading
+them here would mark a correctly-delegated repo as broken.
 
 Exit code is 0 when the harness scores at least --min-score (default 70).`);
   process.exit(0);

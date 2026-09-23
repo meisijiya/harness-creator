@@ -14,7 +14,9 @@ const args = parseArgs(process.argv.slice(2));
 if (args.help) {
   console.log(`Usage: ${scriptCommand('render-assessment-html.mjs')} [--target DIR] [--output FILE]
 
-Renders the five-subsystem harness assessment as a standalone HTML file.`);
+Renders the three-subsystem harness assessment as a standalone HTML file. State and lifecycle are
+delegated to the engineering skills, so they are scored nowhere: the instruction file states who
+owns them, and that statement is checked under "instructions".`);
   process.exit(0);
 }
 

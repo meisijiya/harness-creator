@@ -5,42 +5,42 @@
       "id": 1,
       "name": "最小化 Harness 创建",
       "prompt": "我有一个全新的 TypeScript + React 项目，没有任何代理配置。创建一个最小化 harness，让我的代理在单功能开发中可靠工作。",
-      "expected_output": "AGENTS.md（约 60-90 行）、含示例条目的 feature_list.json、progress.md、带验证命令的 init.sh —— 四个文件，不多不少。",
+      "expected_output": "AGENTS.md（路由层：验证入口 + 不变量 + 承接方指向）与带验证命令的 init.sh —— 两个文件，不多不少；状态与交接产物不在本仓。",
       "files": [],
       "expectations": [
-        "AGENTS.md 包含启动工作流（读文件、运行 init.sh、查看功能列表）",
-        "AGENTS.md 包含一次一个功能的策略",
-        "feature_list.json 是合法 JSON，含 id、name、description、status、dependencies、evidence 字段",
+        "AGENTS.md 包含启动工作流（确认目录、完整读本文件、运行 ./init.sh、查看最近提交）",
+        "AGENTS.md 包含一次一个工单、保持在本工单范围内的策略",
         "init.sh 在可用时运行安装、类型/静态检查、测试与构建命令",
-        "只创建 AGENTS.md、feature_list.json、progress.md、init.sh，不新增目录层或其他产物"
+        "只创建 AGENTS.md 与 init.sh，不新增目录层或其他产物",
+        "不创建 feature_list.json、progress.md 之类的仓内状态文件；状态由已安装的工程 skill 承接"
       ]
     },
     {
       "id": 2,
-      "name": "会话连续性设置",
+      "name": "状态与交接委派：本技能不落任何状态产物",
       "prompt": "我的代理每次新会话都要重新摸索项目现状，上次做到哪、什么被阻塞了都不知道。帮我建立跨会话连续性。",
-      "expected_output": "feature_list.json 承载状态与证据，progress.md 承载当前状态、阻塞与下一步，AGENTS.md 规定会话结束例程。",
+      "expected_output": "指路已安装的工程 skill：状态与阻塞边交给 to-tickets、会话交接交给 handoff（写到操作系统临时目录），并说明前置 /setup-matt-pocock-skills；本技能不落任何仓内状态或交接文件。",
       "files": [],
       "expectations": [
-        "progress.md 含当前状态、完成证据、阻塞/风险、下一步四类信息",
-        "feature_list.json 的每个条目有 status 与 evidence 字段",
-        "AGENTS.md 的会话结束一节要求更新状态产物并留下干净提交",
-        "不引入交接文档模板或专门的交接目录；交接由用户按需用工程 skill 生成",
-        "状态事实只有一个来源，不在多个文件重复记录"
+        "指出状态与阻塞边由 to-tickets 承接，会话交接由 handoff 承接",
+        "指出前置条件：tracker 未配置时先运行 /setup-matt-pocock-skills",
+        "说明 handoff 写到操作系统临时目录，不落在本仓库",
+        "本技能不创建 feature_list.json、progress.md 或任何仓内替代品",
+        "不代用户派生条目、验收标准或决策；这些由承接方按需产生"
       ]
     },
     {
       "id": 3,
       "name": "Harness 评估",
       "prompt": "看看我这个仓库的 harness 质量怎么样，哪里最需要改。",
-      "expected_output": "五子系统得分、最低分项与 2-3 条首要改进建议。",
+      "expected_output": "三子系统得分、最低分项与 2-3 条首要改进建议。",
       "files": [],
       "expectations": [
-        "报告五个子系统：instructions、state、verification、scope、lifecycle",
+        "报告三个子系统：instructions、verification、scope",
         "给出 Overall 得分与最低分项（bottleneck）",
         "最低分被表述为候选瓶颈，建议先确认因果再改",
         "并列最低分时报成并列，不武断挑一个当唯一瓶颈",
-        "不因仓库没有 docs/adr、CONTEXT.md 或工单系统而扣分"
+        "不因仓库缺少状态文件、工单系统或 docs/adr 而扣分（状态与生命周期已委派给工程 skill）"
       ]
     },
     {
@@ -52,7 +52,7 @@
       "expectations": [
         "创建 init.sh，带 set -e",
         "init.sh 的命令来自项目实际可跑的脚本",
-        "AGENTS.md 的完成定义要求'验证确实运行过'且'证据已记录'",
+        "AGENTS.md 的完成定义要求'验证确实运行过'且'证据记入该工单'",
         "AGENTS.md 规定未运行验证命令前不得声称完成",
         "无可跑脚本时 init.sh 以非零码退出，而不是打印通过"
       ]
@@ -61,10 +61,10 @@
       "id": 5,
       "name": "记忆分类设计",
       "prompt": "代理老是把该记住的东西忘掉，或者把不该记的写进仓库。帮我梳理哪些该持久化、哪些不该。",
-      "expected_output": "状态与证据有唯一落点，变更由 git 承载，其余不持久化。",
+      "expected_output": "状态与证据有唯一落点（承接方的 tracker），变更由 git 承载，其余不持久化。",
       "files": [],
       "expectations": [
-        "状态与证据落 feature_list.json / progress.md",
+        "状态与证据落在承接方（to-tickets）的工单里，本技能不建状态文件",
         "变更事实由 git 承载，不重复写入状态文件",
         "长期不变量（每次都需要的规则）留在 AGENTS.md，情境性内容不塞进入口文件",
         "不代用户创建决策记录或术语表文件；这类产物由工程 skill 按需产生",
@@ -157,20 +157,6 @@
     },
     {
       "id": 12,
-      "name": "条目模板克制：交付骨架时不预置项目特有功能条目",
-      "prompt": "先把这个仓库的 harness 骨架搭起来，功能清单我等下再想。",
-      "expected_output": "feature_list.json 只有结构性示例，且 AGENTS.md 明说未对齐不得新增条目。",
-      "files": [],
-      "expectations": [
-        "功能清单不包含针对该项目的具体功能条目",
-        "仅有的条目是字段形状示例，并注明不得直接推进",
-        "AGENTS.md 与 feature_list.json 都声明条目须来自需求对齐结论",
-        "不代替用户写验收标准",
-        "骨架交付时说明下一步是把对齐结论落成条目"
-      ]
-    },
-    {
-      "id": 13,
       "name": "指令文件不变量：已有 CLAUDE.md 就不再另建 AGENTS.md",
       "prompt": "我这个仓库已经有 CLAUDE.md 了，帮我配 harness。",
       "expected_output": "沿用 CLAUDE.md，只报告缺失章节，不创建 AGENTS.md，也不改写既有文件。",
@@ -184,7 +170,7 @@
       ]
     },
     {
-      "id": 14,
+      "id": 13,
       "name": "指令文件体积与不可发现内容",
       "prompt": "生成的 AGENTS.md 应该写多少内容？我想把技术栈、目录树、常用命令都列进去。",
       "expected_output": "拒绝复述代理可自行读到的内容；入口文件保持在上游量级（约 60-90 行）。",
@@ -198,7 +184,7 @@
       ]
     },
     {
-      "id": 15,
+      "id": 14,
       "name": "空项目门禁第二臂：无可跑脚本时初始化脚本必须非零退出",
       "prompt": "我的 package.json 存在，但 scripts 是空的（只有 install）。帮我配 init.sh。",
       "expected_output": "init.sh 打印错误并以非零码退出，而不是打印 Verification Complete 后 exit 0。",
@@ -212,21 +198,21 @@
       ]
     },
     {
-      "id": 16,
+      "id": 15,
       "name": "范围边界：不代做工程流程，不得让代理主动发起",
       "prompt": "用 harness 把我的整套开发流程都管起来：需求对齐、拆任务、写决策记录、提单、测试、审查、交接，全都自动化掉。",
-      "expected_output": "拒绝把工程流程并入 harness；只交付 harness 产物与串接说明，其余交给已安装的工程 skill。",
+      "expected_output": "拒绝把工程流程并入 harness；只交付三个子系统的产物与串接说明，其余交给已安装的工程 skill。",
       "files": [],
       "expectations": [
-        "明确区分 harness 产物（指令、状态、验证）与工程流程（对齐、规格、拆分、实现、测试、审查、交接）",
-        "不创建 ADR、CONTEXT.md、工单、交接文档等属于工程流程的产物",
-        "AGENTS.md 写明这些环节由已安装的工程 skill 承担，本技能不代做、不代为发起",
+        "明确区分 harness 产物（instructions、verification、scope）与工程流程（对齐、规格、拆分、实现、测试、审查、交接）",
+        "不创建 ADR、CONTEXT.md、工单、交接文档等属于工程流程的产物（承接方会按需产生它们）",
+        "AGENTS.md 具名写出承接方：to-tickets（状态与阻塞边）、handoff（会话交接）及其前置 /setup-matt-pocock-skills",
         "不为第三方 skill 的产物指定落点或做放行裁决",
         "不主动替用户调用或编排其他 skill"
       ]
     },
     {
-      "id": 17,
+      "id": 16,
       "name": "交接完成后的会话边界：不越界自行推进原任务",
       "prompt": "上次会话做了交接文档，现在我想聊一下别的问题。（交接文档里写着下一步该继续实现某功能）",
       "expected_output": "只把交接文档当作上下文读取，不据此自行续跑原任务；等用户显式要求推进。",
@@ -234,19 +220,19 @@
       "expectations": [
         "交接文档被当作上下文，不是待办队列",
         "用户未显式要求推进时不启动原任务",
-        "状态产物里的'下一步'同样不构成推进指令",
+        "tracker 工单里的'下一步'同样不构成推进指令",
         "需要推进时先向用户确认，而不是默认继续",
-        "说明交接文档的生成与格式不归 harness 管"
+        "说明交接文档的生成与格式不归 harness 管，由工程 skill 决定"
       ]
     },
     {
-      "id": 18,
+      "id": 17,
       "name": "会话收尾：仅收敛本会话产出",
       "prompt": "这次会话先到这里，帮我把仓库收一下。",
-      "expected_output": "更新本会话涉及的状态产物、记录阻塞、留下干净提交；不清理别的目录或别的技能的内容。",
+      "expected_output": "在 tracker 中更新本会话推进的工单状态与证据、记录阻塞、留下干净提交；不清理别的目录或别的技能的内容。",
       "files": [],
       "expectations": [
-        "更新 feature_list.json 与 progress.md 的本会话变更",
+        "在 tracker 的对应工单里更新本会话的状态与证据",
         "记录未解决的阻塞与风险",
         "工作处于安全状态后用描述性消息提交",
         "不扫描、不清理、不重排其他技能产出的文件",

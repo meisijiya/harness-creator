@@ -22,10 +22,15 @@ const args = parseArgs(process.argv.slice(2));
 if (args.help) {
   console.log(`Usage: ${scriptCommand('create-harness.mjs')} [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--blueprint "WHAT THIS PROJECT IS"] [--commands "a,b"] [--force] [--dry-run]
 
-Creates a minimal production harness — the five subsystems, no more:
+Creates a minimal production harness — the three subsystems this skill owns, no more:
   AGENTS.md or CLAUDE.md (an existing CLAUDE.md is kept and preferred)
-  feature_list.json + progress.md — current feature, status, evidence, next step
   init.sh — the verification gate that must pass before any feature is called done
+
+State and handoff are NOT produced here. They are delegated, and the AGENTS.md this writes names
+the delegation rather than describing a mechanism of its own: to-tickets owns state and blocking
+edges, handoff owns session handoff and writes outside the repo, and /setup-matt-pocock-skills is
+the one-time prerequisite that configures the tracker. This script detects no mode, scaffolds no
+tracker, and ships no in-repo substitute for either capability.
 
 Scope boundary: this skill builds and audits the harness FILES. The engineering workflow —
 requirement alignment, specs, breakdown, implementation, testing, review, handoff — belongs to
@@ -104,8 +109,9 @@ const missingAgentSections = agentResult.status === 'skipped'
   ? diffSections(await readText(path.join(TEMPLATE_DIR, 'agents.md')), await readText(agentPath))
   : [];
 
-results.push(await copyTemplate('feature-list.json', path.join(target, 'feature_list.json'), {}, { force, dryRun }));
-results.push(await copyTemplate('progress.md', path.join(target, 'progress.md'), {}, { force, dryRun }));
+// No state artifacts are written. State and handoff are delegated to the engineering skills, and
+// shipping a local registry beside a tracker is the double-write this skill exists to prevent:
+// whichever file the agent reads second contradicts the first. The AGENTS.md says where they live.
 
 const initPath = path.join(target, 'init.sh');
 if (force || !await exists(initPath)) {
@@ -146,7 +152,9 @@ if (missingAgentSections.length > 0) {
   console.log('  another language or wording.');
 }
 
-// The next step is the user's, not this skill's: entries must come out of requirement alignment.
+// The next step is the user's, not this skill's: the tracker has to be configured before the
+// delegated state capability exists at all, and that configuration belongs to the upstream skill.
 console.log('');
-console.log('Next: replace the placeholder feature entry with one that has been aligned with the');
-console.log('user. This skill does not derive entries, acceptance criteria or decisions on its own.');
+console.log('Next: run /setup-matt-pocock-skills once to configure the tracker, then use to-tickets for');
+console.log('state and blocking edges. This skill derives no entries, acceptance criteria or decisions');
+console.log('on its own, and ships no in-repo substitute for state or handoff.');
