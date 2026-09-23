@@ -558,7 +558,7 @@ export function htmlReport(result, title = 'Harness Assessment') {
   <main>
     <header>
       <h1>${escapeHtml(title)}</h1>
-      <p>Five-subsystem harness validation report.</p>
+      <p>Three-subsystem harness validation report.</p>
       <div class="summary">
         <div class="metric">Overall<strong>${result.overall}/100</strong></div>
         <div class="metric">Bottleneck<strong>${escapeHtml(bottleneckLabel(result))}</strong></div>

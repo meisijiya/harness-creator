@@ -110,7 +110,7 @@ const DISCOVERABLE_CONTENT = [
 // level up: the gate would be asserting the existence of the thing that was removed.
 const SELF_CHECK_GROUPS = [
   'budget', 'agentsBudget', 'agentsDiscover', 'scopeBrake', 'dryRun', 'selfRefs',
-  'bottleneckTies', 'blankGate', 'blueprint', 'agentFile'
+  'bottleneckTies', 'blankGate', 'blueprint', 'agentFile', 'reportContract'
 ];
 
 // One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
@@ -127,7 +127,8 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['bottleneckTies', (group) => ` The bottleneck line names ${group.tieCount} tied subsystem(s) as a tie instead of picking one (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blankGate', (group) => ` A project with nothing to verify — no manifest, or a manifest with no runnable script — gets a placeholder step that exits non-zero instead of reporting a pass it did not earn (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-plain-description slot stays a visible pending marker when the user has not stated one, rather than being filled from the detected stack (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`]
+  ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`]
 ]);
 
 // The single behavior this skill must not have. A harness that detected governance modes, assigned
@@ -188,6 +189,14 @@ const RELATIVE_SELF_REFERENCE = /(?:node\s+scripts\/[a-z0-9-]+\.mjs|skills\/harn
 // top-level flow would still be in the TDZ.
 const SKILL_RELATIVE_PATH = /(^|[^/\w.~])skills\/[a-z0-9][a-z0-9-]*\//im;
 
+// The report is the artifact a human reads, so a subsystem count inside it is a claim about the
+// model, not a turn of phrase. This skill shrank the harness to three subsystems and the rendered
+// report went on announcing five, which is the one contradiction a reader can grep for directly.
+// Matched as a word before the hyphen so the only pass is "three"; a claim of any other count fails.
+// Declared up here, ahead of the runSelfCheck() call site, for the temporal-dead-zone reason above.
+const SUBSYSTEM_COUNT = 'three';
+const SUBSYSTEM_CLAIM = /\b(one|two|three|four|five|six|seven|eight|nine|ten)-subsystem\b/gi;
+
 
 
 
@@ -233,7 +242,11 @@ Runs a lightweight harness benchmark:
  14. Checks the self-check's own coverage: every group in SELF_CHECK_GROUPS must have a bound check,
      a place in the pass conjunction, and a line in the shareable HTML report. A gate that only ever
      prints is half a carrier.
- 15. Produces a JSON report and optional HTML report.
+ 15. Checks the report contract: the renderer must honour the output path it is handed rather than
+     reporting success at the default one, and the report a human reads must name the subsystem
+     count the model actually has — seeded on both sides, since a detector that finds nothing is
+     indistinguishable from one that looks for nothing.
+ 16. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -301,6 +314,10 @@ if (!selfCheck.skipped) {
     const { pass, noSecondFile, choseClaude, untouched, missingReported, error } = selfCheck.agentFile;
     console.log(`  Agent-file invariant: ${pass ? 'PASS' : 'FAIL'} — existing CLAUDE.md means no AGENTS.md is created: ${noSecondFile && choseClaude ? 'ok' : 'NO'}; existing instruction file left byte-identical: ${untouched ? 'ok' : 'NO'}; missing sections still reported: ${missingReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.reportContract) {
+    const { pass, honouredFlag, reported = [], claimsModel, seededCaught, error } = selfCheck.reportContract;
+    console.log(`  Report contract: ${pass ? 'PASS' : 'FAIL'} — --html honoured by the renderer: ${honouredFlag ? 'ok' : 'DROPPED (wrote to the default path)'}; report names the model's subsystem count: ${claimsModel ? 'ok' : 'NO'}; contradicting claim: ${reported.length === 0 ? 'none' : `FOUND (${reported.join(', ')})`}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+  }
   if (selfCheck.reportCoverage) {
     const { pass, unbound = [], missingLines = [], orphanLines = [] } = selfCheck.reportCoverage;
     console.log(`  Report coverage: ${pass ? 'PASS' : 'FAIL'} — every self-check group is bound, gated and reported: ${pass ? 'ok' : `NO (unbound: ${unbound.join(', ') || 'none'}; missing report line: ${missingLines.join(', ') || 'none'}; orphan line: ${orphanLines.join(', ') || 'none'})`}`);
@@ -359,7 +376,8 @@ async function runSelfCheck() {
       bottleneckTies: () => checkBottleneckTies(),
       blankGate: () => checkBlankProjectGate(),
       blueprint: () => checkBlueprintSlot(),
-      agentFile: () => checkAgentFileInvariant()
+      agentFile: () => checkAgentFileInvariant(),
+      reportContract: () => checkReportContract()
     };
     const groups = {};
     for (const key of SELF_CHECK_GROUPS) groups[key] = await groupChecks[key]();
@@ -560,6 +578,48 @@ async function checkSelfReferencePaths() {
     if (RELATIVE_SELF_REFERENCE.test(text)) offenders.push(file);
   }
   return { pass: offenders.length === 0, offenders, checked };
+}
+
+// Read three ways by the check below, so a detector that looks for nothing cannot pass as one that
+// finds nothing: the live report must state the model's count at all, a seeded contradiction must
+// be rejected, and every count other than the model's has to come back as an offender.
+function subsystemClaims(text) {
+  return [...String(text).matchAll(SUBSYSTEM_CLAIM)].map((match) => match[1].toLowerCase());
+}
+
+// Two halves of the report contract, which fail differently. Content that contradicts the model is
+// wrong on arrival. A flag the renderer never reads is worse: parseArgs stores it, nothing consumes
+// it, and the run still prints "HTML report written to ..." and exits 0 — a success line pointing at
+// a path it never wrote, which is the silent degradation this skill forbids everywhere else. Both
+// halves are asserted through the real renderer in a throwaway directory, not against a fixture, so
+// the check covers the path that actually ships.
+async function checkReportContract() {
+  let dir;
+  try {
+    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-report-'));
+    const named = path.join(dir, 'named-by-flag.html');
+    await execFileAsync('node', [path.join(scriptDir, 'render-assessment-html.mjs'), '--target', dir, '--html', named]);
+    const honouredFlag = await exists(named);
+    const fallback = path.join(dir, 'harness-assessment.html');
+    const written = honouredFlag ? named : (await exists(fallback) ? fallback : null);
+    const html = written ? await readText(written) : '';
+    const claims = subsystemClaims(html);
+    const reported = claims.filter((word) => word !== SUBSYSTEM_COUNT);
+    const claimsModel = claims.length > 0;
+    const seededCaught = subsystemClaims(`${html}\n<p>Five-subsystem harness report.</p>`)
+      .filter((word) => word !== SUBSYSTEM_COUNT).length === 1;
+    return {
+      pass: honouredFlag && reported.length === 0 && claimsModel && seededCaught,
+      honouredFlag,
+      reported,
+      claimsModel,
+      seededCaught
+    };
+  } catch (error) {
+    return { pass: false, honouredFlag: false, reported: [], claimsModel: false, seededCaught: false, error: error.message };
+  } finally {
+    if (dir) await rm(dir, { recursive: true, force: true });
+  }
 }
 
 // A raw listing rather than loadHarnessFiles: the checks below assert "no files were written" and
