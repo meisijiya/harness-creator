@@ -126,7 +126,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['dryRun', (group) => ` --dry-run writes nothing, reports the target's real state, and its plan matches the live run entry for entry (${group.pass ? 'verified' : 'FAILED'}).`],
   ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
   ['bottleneckTies', (group) => ` The bottleneck line names ${group.tieCount} tied subsystem(s) as a tie instead of picking one (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['blankGate', (group) => ` A project with nothing to verify — no manifest, or a manifest with no runnable script — gets a placeholder step that exits non-zero instead of reporting a pass it did not earn (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['blankGate', (group) => ` A project with nothing to verify — no manifest, or a manifest with no runnable script — gets a placeholder step that exits non-zero instead of reporting a pass it did not earn, and the manual fallback template refuses on the same two shapes (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-plain-description slot stays a visible pending marker when the user has not stated one, rather than being filled from the detected stack (${group.pass ? 'verified' : 'FAILED'}).`],
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`],
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`]
@@ -261,7 +261,10 @@ Runs a lightweight harness benchmark:
  11. Checks the blank-project gate: the placeholder verification step must exit non-zero, a real
      command must still run, and — asserted through the real generator, not a hand-written string —
      a manifest that defines no check/typecheck/lint/test/build also refuses instead of exiting 0
-     having verified nothing. A gate that cannot fail is not a gate.
+     having verified nothing. The same invariant has a second producer, the hand-copy fallback
+     templates/init.sh, which the generator probes cannot reach: every refusal it prints must be
+     armed with a non-zero exit, both refusals must still be present, and a success tail must
+     remain. A gate that cannot fail is not a gate.
  12. Checks the plain-description slot: omitting --blueprint must leave a visible pending marker
      rather than stack-derived text, and a supplied description must reach AGENTS.md verbatim.
  13. Checks the instruction-file invariant: an existing CLAUDE.md must not get a second AGENTS.md
@@ -376,8 +379,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Bottleneck ties: ${pass ? 'PASS' : 'FAIL'} — tie names all 3 subsystems: ${tieCount === 3 ? 'ok' : `NO (${tieCount})`}; unique minimum names one: ${uniqueCount === 1 ? 'ok' : `NO (${uniqueCount})`}; complete harness reports none: ${noneCount === 0 ? 'ok' : `NO (${noneCount})`} — ${tieLabel}`);
   }
   if (selfCheck.blankGate) {
-    const { pass, placeholderFails, realRuns, scriptlessRefuses, withTestRuns } = selfCheck.blankGate;
-    lines.push(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}; a manifest with no runnable script refuses too: ${scriptlessRefuses ? 'ok' : 'NO'}; a manifest with a real script still runs: ${withTestRuns ? 'ok' : 'NO'}`);
+    const { pass, placeholderFails, realRuns, scriptlessRefuses, withTestRuns, templateRefusals, templateRefusalsExitNonZero, templateStillRuns } = selfCheck.blankGate;
+    lines.push(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}; a manifest with no runnable script refuses too: ${scriptlessRefuses ? 'ok' : 'NO'}; a manifest with a real script still runs: ${withTestRuns ? 'ok' : 'NO'}; the manual fallback carries ${templateRefusals} refusal(s) each armed with a non-zero exit: ${templateRefusalsExitNonZero ? 'ok' : 'NO'}; and still reaches a success tail: ${templateStillRuns ? 'ok' : 'NO'}`);
   }
   if (selfCheck.blueprint) {
     const { pass, pendingMarked, noInventedFill, verbatim, error } = selfCheck.blueprint;
@@ -930,12 +933,41 @@ async function checkBlankProjectGate() {
     const rendered = renderVerificationStep(command);
     return !/\bexit 1\b/.test(rendered) && rendered.includes('npm test');
   });
+  // The same invariant has a SECOND producer, and it went uncovered. templates/init.sh is the
+  // manual fallback — what the agent copies by hand when the runtime has no Node — so none of the
+  // generator probes above reach it. Measured, not assumed: replacing both of its `exit 1`
+  // refusals with `exit 0` left this suite green (Self-check: PASS, Overall 20/100), which means
+  // the skill could ship a blank repo a gate that structurally cannot fail while the suite
+  // reported a pass it had not earned. That is the exact defect the arms above were written to
+  // close, still open on the other producer. Read from the shipped file, never a fixture, so this
+  // cannot pass by agreeing with a copy of the string it is meant to verify.
+  //
+  // Structural rather than behavioural, deliberately: this suite is pure Node and executes no
+  // shell, and making the self-check require bash would fail wholesale on hosts that lack it — a
+  // gate that refuses everything verifies nothing. Normalising CRLF first is load-bearing: the
+  // checkout is CRLF, so the `$` anchors below would otherwise never match.
+  const template = (await readText(path.join(skillRoot, 'templates', 'init.sh'))).replace(/\r\n/g, '\n');
+  // Each refusal prints this sentinel immediately before it refuses, so splitting on the sentinel
+  // yields one block per refusal. A deleted branch then shows up as a missing block, and a branch
+  // that stopped refusing as a block whose first statement is no longer a non-zero exit. The
+  // window is bounded to the start of the block so a neighbouring branch's exit cannot satisfy it.
+  const refusalBlocks = template.split('a gate that cannot fail is not a gate').slice(1);
+  const refusalArmed = (block) => /^[ \t]*exit[ \t]+[1-9]\d*[ \t]*$/m.test(block.slice(0, 200));
+  const templateRefusals = refusalBlocks.length;
+  const templateRefusalsExitNonZero = templateRefusals >= 2 && refusalBlocks.every(refusalArmed);
+  // The other direction, for the same reason the generator arms carry one: a fallback that
+  // refused unconditionally would satisfy the arm above while verifying nothing.
+  const templateStillRuns = /=== Verification Complete ===/.test(template);
   return {
-    pass: placeholderFails && realRuns && scriptlessRefuses && withTestRuns,
+    pass: placeholderFails && realRuns && scriptlessRefuses && withTestRuns
+      && templateRefusalsExitNonZero && templateStillRuns,
     placeholderFails,
     realRuns,
     scriptlessRefuses,
-    withTestRuns
+    withTestRuns,
+    templateRefusals,
+    templateRefusalsExitNonZero,
+    templateStillRuns
   };
 }
 
