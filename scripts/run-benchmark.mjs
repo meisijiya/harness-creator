@@ -181,7 +181,7 @@ const SEEDED_VIOLATION = '\n状态写入 feature_list.json 与 progress.md；产
 const SELFTEXT_EXEMPT = new Set(['README.md']);
 const RELATIVE_SELF_REFERENCE = /(?:node\s+scripts\/[a-z0-9-]+\.mjs|skills\/harness-creator\/scripts\/)/;
 
-// A path relative to the SKILL repository (e.g. `skills/harness-creator/references/x.md`) is
+// A path relative to the SKILL repository (e.g. a bare `skills/<skill-name>/...` prefix) is
 // dead on arrival in a target repo: the generated AGENTS.md is read by an agent whose cwd is
 // that repo, and the skill lives in the runtime's skills directory instead. A concrete path
 // would be worse still — the runtime path varies, so the emitted form is a by-name reference
@@ -253,7 +253,9 @@ Runs a lightweight harness benchmark:
   8. Checks --dry-run: it must change nothing, plan real artifacts rather than recite a template
      list, and agree with the write that follows it.
   9. Checks the skill's own shipped files: no command it prints may use a script path that only
-     resolves from the skill directory (the agent's cwd is the target repo).
+     resolves from the skill directory, and no shipped text may point at a bare skills/<name>/
+     prefix. The first names an invocation the agent cannot run, the second a file it cannot open,
+     both because its cwd is the target repo rather than the skills directory.
  10. Checks the bottleneck headline: a tie must name every tied subsystem, a unique minimum must
      name one, and a complete harness must report none.
  11. Checks the blank-project gate: the placeholder verification step must exit non-zero, a real
@@ -367,7 +369,7 @@ function consoleSelfCheckLines(selfCheck) {
   }
   if (selfCheck.selfRefs) {
     const { pass, offenders = [], checked, error } = selfCheck.selfRefs;
-    lines.push(`  Self-reference paths: ${pass ? 'PASS' : 'FAIL'} — ${checked} shipped file(s) checked${offenders.length ? `; relative script path in ${offenders.join(', ')}` : ''}${error ? ` — ${error}` : ''}`);
+    lines.push(`  Self-reference paths: ${pass ? 'PASS' : 'FAIL'} — ${checked} shipped file(s) checked${offenders.length ? `; unreachable relative path in ${offenders.join(', ')}` : ''}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.bottleneckTies) {
     const { pass, tieCount, uniqueCount, noneCount, tieLabel } = selfCheck.bottleneckTies;
@@ -648,7 +650,9 @@ async function checkMaintenanceTrigger() {
 // from where the agent actually stands: the scripts live under the runtime's skills directory, but
 // the agent's cwd is the target repo — so a printed `node scripts/<name>.mjs` dies with MODULE_NOT_FOUND,
 // and the gate the agent was told to run silently never runs. That is how the mode gate got
-// bypassed in practice, so the rule gets a machine check instead of another sentence. README.md is
+// bypassed in practice, so the rule gets a machine check instead of another sentence. A bare
+// `skills/<name>/` prefix is the same failure in another shape — a pointer the agent cannot resolve
+// from a target repo — and is caught by the same arm. README.md is
 // exempt on purpose: one of its two blocks is the contributor's "from the repo root" invocation,
 // where the relative form is correct.
 async function checkSelfReferencePaths() {
@@ -668,7 +672,15 @@ async function checkSelfReferencePaths() {
     if (SELFTEXT_EXEMPT.has(file)) continue;
     checked += 1;
     const text = await readText(path.join(skillRoot, file));
-    if (RELATIVE_SELF_REFERENCE.test(text)) offenders.push(file);
+    // Two complementary patterns, not one superseding the other. The first catches a script
+    // invocation written relative to the skill repository; the second catches any bare
+    // `skills/<name>/` prefix, which is what an emitted pointer looks like when it names some
+    // skill's directory. Neither implies the other — `node scripts/<name>.mjs` is invisible to the
+    // second, a bare `skills/<name>/` prefix is invisible to the first — and both must
+    // exclude `~/.agents/skills/...`, where `skills/` is not path-initial. The second was declared
+    // up top and never wired to anything, which is exactly the shape this suite calls a rule with
+    // no carrier: it read as dead code while the case it guards went unchecked.
+    if (RELATIVE_SELF_REFERENCE.test(text) || SKILL_RELATIVE_PATH.test(text)) offenders.push(file);
   }
   return { pass: offenders.length === 0, offenders, checked };
 }
