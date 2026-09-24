@@ -206,9 +206,9 @@
       "expectations": [
         "明确区分 harness 产物（instructions、verification、scope）与工程流程（对齐、规格、拆分、实现、测试、审查、交接）",
         "不创建 ADR、CONTEXT.md、工单、交接文档等属于工程流程的产物（承接方会按需产生它们）",
-        "AGENTS.md 具名写出承接方：to-tickets（状态与阻塞边）、handoff（会话交接）及其前置 /setup-matt-pocock-skills",
+        "AGENTS.md 具名写出承接方并按场合路由：工程阶段在 superpowers 在场时归它、否则归 mattpocock；而 to-tickets（状态与阻塞边）、handoff（会话交接）及前置 /setup-matt-pocock-skills 两种场合都在",
         "不为第三方 skill 的产物指定落点或做放行裁决",
-        "承接方默认已安装：不检查其他 skill 是否存在、不提示安装、不为缺失提供替代品",
+        "承接方默认已安装：不做安装检查（不判断是否已安装、不提示安装）、不为缺失提供替代品；而按运行期在场判据路由是允许且必须的",
         "不主动替用户调用或编排其他 skill"
       ]
     },
@@ -267,6 +267,22 @@
         "--blueprint 在指令文件已存在时只改写蓝图槽（H1 与首个标题之间），不重渲染整个文件",
         "改写只影响蓝图槽：已合并的章节与第三方块逐字节保留，且打印出「旧→新」",
         "定位不到蓝图槽时报告并拒绝写、非零退出，不以「猜一个段落」的方式降级"
+      ]
+    },
+    {
+      "id": 20,
+      "name": "承接方场合分流：引导词在场时工程阶段归 superpowers，否则全归 mattpocock",
+      "prompt": "这个仓库里我同时装了 mattpocock 的工程 skill 和 superpowers。到底哪个负责需求对齐、拆单和交接？写进 AGENTS.md 里，让代理别再两头问。",
+      "expected_output": "在 AGENTS.md 写出一条可自判的场合路由：以系统提示中是否存在 superpowers 的引导词为键——在场时需求对齐、规格与计划、实现与测试、代码审查、分支收尾归 superpowers；不在场时上述全部归 mattpocock 的模型可调用 skill；而拆单与状态（to-tickets）与会话交接（handoff）两种场合都留在 mattpocock，理由是 superpowers 不提供 tracker、也没有交接 skill。",
+      "files": [],
+      "expectations": [
+        "以「系统提示中是否存在 superpowers 引导词」为路由键，而不是问用户装没装、也不去检查文件系统",
+        "引导词在场时，工程阶段（对齐、规格与计划、实现与测试、代码审查、分支收尾）归 superpowers",
+        "引导词不在场时，上述全部工程阶段归 mattpocock，并点名其模型可调用 skill（grilling、to-spec、implement、tdd、code-review）",
+        "拆单与状态（to-tickets）、会话交接（handoff）在两种场合都归 mattpocock，不因 superpowers 在场而移交",
+        "说明移交理由是能力缺口（superpowers 无 tracker、无交接 skill），而非个人偏好",
+        "不改写其他 skill 的产物落点，也不替用户调用它们",
+        "判不出是否在场时按不在场回落（工程阶段全归 mattpocock），并显式说明判断依据，而不是沉默跳过或反问用户"
       ]
     }
   ]

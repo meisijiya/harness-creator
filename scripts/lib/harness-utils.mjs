@@ -414,7 +414,17 @@ export function scoreHarness(files) {
       // State and handoff are delegated, so what the instruction file must state is WHO owns them
       // and what the prerequisite is — not where a local file lives. Requiring an in-repo artifact
       // here is what made this scorer reward shipping one.
-      structuredHas(agents, ['to-tickets', 'handoff', 'setup-matt-pocock-skills', '承接方', 'delegat'], 'Delegated state and handoff owners named')
+      structuredHas(agents, ['to-tickets', 'handoff', 'setup-matt-pocock-skills', '承接方', 'delegat'], 'Delegated state and handoff owners named'),
+      // Raised 09-24 by user decision. Previously a single `承接方` mention satisfied the row above,
+      // which let a file claim delegation without ever saying WHO owns the engineering workflow or
+      // on what condition. The render now routes between two owners on a runtime signal, so the
+      // audit requires both names to appear (all-of, not any-of) plus the absent/undecidable case.
+      structuredHasAll(agents, ['superpowers', 'mattpocock'], 'Delegated owners routed between two owners, not named as a single owner'),
+      // The absent-case check must be falsifiable by removing the absence language. An earlier draft
+      // of this needle set included `引导词`, which appears in the PRESENT-case bullet too, so the
+      // check passed on the survivor when both absence markers were deleted — an unfalsifiable check
+      // dressed up as coverage. Kept to markers that only ever appear in the absent/undecidable case.
+      structuredHas(agents, ['不在场', '判不出'], 'Routing states the absent or undecidable case')
     ],
     verification: [
       hasFile(byPath, ['init.sh'], 'Verification entrypoint exists'),
@@ -512,6 +522,23 @@ function structuredText(markdown) {
 
 function structuredHas(markdown, needles, message) {
   return textHas(structuredText(markdown), needles, message);
+}
+
+// The routing half needs conjunction, which structuredHas cannot express — it is `.some()`, so a
+// file that names only ONE of the two delegated owners still passes it. Raised 09-24 by user
+// decision: naming an owner is no longer sufficient, the file must place them in a condition.
+// Requiring BOTH names is what makes that unfalsifiable-by-survivor — a render that kept
+// `superpowers` while losing `mattpocock` fails, which is exactly the degradation the routing rule
+// exists to prevent.
+//
+// Scope note: this audit check is deliberately coarse. The exact condition wording (present /
+// absent / undecidable, and the fallback when undecidable) is enforced with word-by-word precision
+// by the GATE on files this skill renders — `checkScopeBoundary`'s `ROUTING_TERMS`. The audit scores
+// arbitrary repos, including hand-written ones, and the doctrine at the top of this file applies:
+// a scorer that fails a correct outcome is worse than no scorer.
+function structuredHasAll(markdown, needles, message) {
+  const structured = structuredText(markdown).toLowerCase();
+  return { pass: needles.every((needle) => structured.includes(needle.toLowerCase())), message };
 }
 
 // The upstream setup skill edits CLAUDE.md when it exists and treats AGENTS.md and
