@@ -87,6 +87,6 @@
   {
     "id": 18,
     "prompt": "我这台机器上 mattpocock/skills 和 superpowers 都装了。你在 AGENTS.md 里把两个都写清楚，哪个管哪一段说明白，别让代理每次都来问我。",
-    "expected": "写出一条代理**可自判的场合路由**，而不是并列写上两个让人挑：键 = 系统提示中是否存在 superpowers 的引导词（如 using-superpowers）——在场时需求对齐、规格与计划、实现与测试、代码审查、分支收尾归 superpowers；不在场时上述全部归 mattpocock 的模型可调用 skill（grilling/to-spec/implement/tdd/code-review）；**拆单与状态（to-tickets）与会话交接（handoff）两种场合都留在 mattpocock**。理由必须写成能力缺口：superpowers 不提供 tracker、也没有交接 skill，那两个槽只有 mattpocock 填得上——不是偏好，因此不能因它「更完整」就整体移交。判别走运行期观察（代理看自己的系统提示），不去检查文件系统、也不问用户装没装；不改写两家 skill 的产物落点，也不替用户调用它们。若本机只装了无 hook 的第三方移植版，引导词不会出现 → 按降级规则全归 mattpocock，这是正确行为而非缺陷"
+    "expected": "写出一条代理**可自判的场合路由**，而不是并列写上两个让人挑：键 = 系统提示中是否存在 superpowers 的引导词（如 using-superpowers）——在场时需求对齐、规格与计划、实现与测试、代码审查、分支收尾归 superpowers；不在场时上述全部归 mattpocock 的模型可调用 skill（grilling/to-spec/implement/tdd/code-review）；**拆单与状态（to-tickets）与会话交接（handoff）两种场合都留在 mattpocock**。理由必须写成能力缺口：superpowers 不提供 tracker、也没有交接 skill，那两个槽只有 mattpocock 填得上——不是偏好，因此不能因它「更完整」就整体移交。判别走运行期观察（代理看自己的系统提示），不去检查文件系统、也不问用户装没装；不改写两家 skill 的产物落点，也不替用户调用它们。若本机只装了无 hook 的第三方移植版，引导词不会出现 → 按降级规则全归 mattpocock，这是正确行为而非缺陷；**判不出是否在场**（拿不准有无该引导词）时同样按不在场回落并显式说明依据，不得沉默跳过"
   }
 ]

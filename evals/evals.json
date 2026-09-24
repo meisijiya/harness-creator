@@ -281,7 +281,8 @@
         "引导词不在场时，上述全部工程阶段归 mattpocock，并点名其模型可调用 skill（grilling、to-spec、implement、tdd、code-review）",
         "拆单与状态（to-tickets）、会话交接（handoff）在两种场合都归 mattpocock，不因 superpowers 在场而移交",
         "说明移交理由是能力缺口（superpowers 无 tracker、无交接 skill），而非个人偏好",
-        "不改写其他 skill 的产物落点，也不替用户调用它们"
+        "不改写其他 skill 的产物落点，也不替用户调用它们",
+        "判不出是否在场时按不在场回落（工程阶段全归 mattpocock），并显式说明判断依据，而不是沉默跳过或反问用户"
       ]
     }
   ]

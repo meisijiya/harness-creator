@@ -211,7 +211,14 @@ const SEEDED_VIOLATION = '\n状态写入 feature_list.json 与 progress.md；产
 //
 // Declared here, ahead of the runSelfCheck() call site (line 314), for the temporal-dead-zone reason
 // this file has already paid for twice.
-const ROUTING_TERMS = ['superpowers', '引导词', '不在场', 'mattpocock'];
+//
+// '判不出' joined 09-24. The first four terms made the two-way routing legible but left its own
+// failure mode silent: an agent that cannot tell whether the bootstrap is present had no stated
+// recourse, and a three-way condition (present / absent / undecidable) was being carried by two
+// terms. Undecidable falls to the absence branch deliberately — the absence branch is the one that
+// still has an owner, so the undecidable case degrades to a working default rather than to no owner
+// at all. The term is here so that branch cannot be dropped quietly.
+const ROUTING_TERMS = ['superpowers', '引导词', '不在场', '判不出', 'mattpocock'];
 const missingRoutingTerms = (text) => ROUTING_TERMS.filter((term) => !text.includes(term));
 
 // Declared at module scope, ahead of the runSelfCheck() call: a const sitting next to the function
