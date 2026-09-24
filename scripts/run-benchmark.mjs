@@ -127,7 +127,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
   ['bottleneckTies', (group) => ` The bottleneck line names ${group.tieCount} tied subsystem(s) as a tie instead of picking one (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blankGate', (group) => ` A project with nothing to verify — no manifest, or a manifest with no runnable script — gets a placeholder step that exits non-zero instead of reporting a pass it did not earn, and the manual fallback template refuses on the same two shapes (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['blueprint', (group) => ` The project-plain-description slot stays a visible pending marker when the user has not stated one, rather than being filled from the detected stack (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['blueprint', (group) => ` The project-description slot stays a visible pending marker when the user has not stated one, while a blueprint change rewrites that slot only — the rest of the file survives byte for byte, and a shape this skill did not render is refused rather than guessed at (${group.pass ? 'verified' : `pending ${group.pendingMarked ? 'ok' : 'NO'}; no stack fill ${group.noInventedFill ? 'ok' : 'NO'}; verbatim ${group.verbatim ? 'ok' : 'NO'}; slot-only ${group.slotRewritten && group.restIntact ? 'ok' : 'NO'}; detector ${group.detectorHasTeeth ? 'has teeth' : 'BLIND'}; refusal ${group.refusalHonoured && group.refusedUntouched ? 'ok' : 'NO'}`}).`],
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`],
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`]
 ]);
@@ -383,8 +383,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}; a manifest with no runnable script refuses too: ${scriptlessRefuses ? 'ok' : 'NO'}; a manifest with a real script still runs: ${withTestRuns ? 'ok' : 'NO'}; the manual fallback carries ${templateRefusals} refusal(s) each armed with a non-zero exit: ${templateRefusalsExitNonZero ? 'ok' : 'NO'}; and still reaches a success tail: ${templateStillRuns ? 'ok' : 'NO'}`);
   }
   if (selfCheck.blueprint) {
-    const { pass, pendingMarked, noInventedFill, verbatim, error } = selfCheck.blueprint;
-    lines.push(`  Blueprint slot: ${pass ? 'PASS' : 'FAIL'} — omitted --blueprint stays a pending marker: ${pendingMarked ? 'ok' : 'NO'}; no stack-derived fill: ${noInventedFill ? 'ok' : 'NO'}; supplied blueprint reaches AGENTS.md verbatim: ${verbatim ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+    const { pass, pendingMarked, noInventedFill, verbatim, slotRewritten, restIntact, detectorHasTeeth, refusalHonoured, refusedUntouched, error } = selfCheck.blueprint;
+    lines.push(`  Blueprint slot: ${pass ? 'PASS' : 'FAIL'} — omitted --blueprint stays a pending marker: ${pendingMarked ? 'ok' : 'NO'}; no stack-derived fill: ${noInventedFill ? 'ok' : 'NO'}; supplied blueprint reaches AGENTS.md verbatim: ${verbatim ? 'ok' : 'NO'}; a rewrite touches the slot only: ${slotRewritten && restIntact ? 'ok' : 'NO'}; detector has teeth: ${detectorHasTeeth ? 'ok' : 'BLIND'}; an unrecognised shape is refused: ${refusalHonoured && refusedUntouched ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.agentFile) {
     const { pass, noSecondFile, choseClaude, untouched, missingReported, error } = selfCheck.agentFile;
@@ -831,7 +831,11 @@ function scoreEvals(evalsJson) {
     // Added with the update task on the user's ruling: maintenance is a user-invoked entry with a
     // trigger from the generated instruction file, so the family needs a behavioural case as well
     // as the gate — a gate proves a script is right, only a case shows what an agent does.
-    ['Covers harness maintenance and update', /更新/]
+    ['Covers harness maintenance and update', /更新/],
+    // Added with the blueprint rewrite path: the gate proves the script rewrites only the slot, but
+    // only a case shows whether an agent aligns with the user beforehand, and refuses rather than
+    // guessing when the file's shape is one this skill did not render.
+    ['Covers the blueprint rewrite path', /蓝图变更/]
   ];
   for (const [message, pattern] of familyEntries) {
     checks.push({ pass: cases.some((item) => pattern.test(item.name)), message });
@@ -980,9 +984,17 @@ async function checkBlankProjectGate() {
 // text, and a supplied one must reach the file verbatim rather than being replaced or dropped.
 // The probe asks for the marker by its own keyword, so this cannot pass by agreeing with a copy
 // of a string it is meant to verify.
+//
+// The blueprint is also the one slot the user rewrites later, so a third direction joins them: on a
+// file that already exists, --blueprint must change the slot and nothing else. The fixture carries
+// the two things a careless implementation destroys — a merged section and a block another skill
+// owns — because re-rendering the template is the easy wrong answer and it deletes both silently.
+// A fourth direction covers the shape this skill did not render: refusing beats guessing, and an
+// exit-0 no-op would be indistinguishable from success.
 async function checkBlueprintSlot() {
   let dir;
   let supplied;
+  let refused;
   try {
     dir = await mkdtemp(path.join(os.tmpdir(), 'harness-blueprint-'));
     const script = path.join(scriptDir, 'create-harness.mjs');
@@ -994,20 +1006,81 @@ async function checkBlueprintSlot() {
     const pendingMarked = omitted.includes('待补');
     const noInventedFill = !/agent-assisted development/i.test(omitted);
 
+    // Second: a supplied blueprint reaches the file verbatim rather than being replaced or dropped.
     supplied = await mkdtemp(path.join(os.tmpdir(), 'harness-blueprint-set-'));
     await execFileAsync('node', [script, '--target', supplied, '--blueprint', blueprint]);
-    const verbatim = (await readText(path.join(supplied, 'AGENTS.md'))).includes(blueprint);
+    const agentPath = path.join(supplied, 'AGENTS.md');
+    const rendered = await readText(agentPath);
+    const verbatim = rendered.includes(blueprint);
+
+    // Third: the blueprint is not fixed. Rewriting it must move the slot and leave the rest alone.
+    const MERGED = '## 已合并的章节';
+    const THIRD_PARTY = '## Agent skills';
+    const merged = `${rendered}\n${MERGED}\n\n由别的技能拥有，必须存活。\n\n${THIRD_PARTY}\n\n第三方块，必须存活。\n`;
+    await writeText(agentPath, merged);
+
+    const revised = 'Probe project: revised description the probe names itself.';
+    await execFileAsync('node', [script, '--target', supplied, '--blueprint', revised]);
+    const after = await readText(agentPath);
+    const slotRewritten = after.includes(revised) && !after.includes(blueprint);
+
+    // Keyed on a literal heading rather than on the function under test: a fixture derived from the
+    // implementation would move with it and could never catch it. Everything from the first H2 on
+    // is carried over untouched, so an equal tail means the rewrite stayed inside its slot.
+    const tailOf = (text) => text.slice(text.indexOf('\n## 验证命令'));
+    const tailBefore = tailOf(merged);
+    const restIntact = tailBefore.length > 0 && tailOf(after) === tailBefore;
+
+    // Teeth: that comparison has to be able to fail. Feeding it a copy whose tail lost the merged
+    // block — the exact damage a re-render does — must come back unequal, or `restIntact` is a
+    // tautology that passes on any file at all.
+    const detectorHasTeeth = tailOf(merged.replace(MERGED, '')) !== tailBefore;
+
+    // Fourth: an instruction file this skill did not render gets a refusal, not a guess. This is the
+    // same shape checkAgentFileInvariant uses for a hand-written file: an H1 with nothing between it
+    // and the next heading. Refusing loudly beats writing prose nobody asked for.
+    refused = await mkdtemp(path.join(os.tmpdir(), 'harness-blueprint-refuse-'));
+    const handWritten = '# AGENTS.md\n\n## Agent skills\n\nHand-written, no slot.\n';
+    const handWrittenPath = path.join(refused, 'AGENTS.md');
+    await writeText(handWrittenPath, handWritten);
+    let refusalCode = 0;
+    let refusalOut = '';
+    try {
+      refusalOut = (await execFileAsync('node', [script, '--target', refused, '--blueprint', revised])).stdout;
+    } catch (error) {
+      refusalCode = error.code ?? 1;
+      refusalOut = error.stdout || '';
+    }
+    const refusalHonoured = /BLUEPRINT REFUSED/.test(refusalOut) && refusalCode !== 0;
+    const refusedUntouched = (await readText(handWrittenPath)) === handWritten;
 
     return {
-      pass: pendingMarked && noInventedFill && verbatim,
+      pass: pendingMarked && noInventedFill && verbatim && slotRewritten && restIntact
+        && detectorHasTeeth && refusalHonoured && refusedUntouched,
       pendingMarked,
       noInventedFill,
-      verbatim
+      verbatim,
+      slotRewritten,
+      restIntact,
+      detectorHasTeeth,
+      refusalHonoured,
+      refusedUntouched
     };
   } catch (error) {
-    return { pass: false, pendingMarked: false, noInventedFill: false, verbatim: false, error: error.message };
+    return {
+      pass: false,
+      pendingMarked: false,
+      noInventedFill: false,
+      verbatim: false,
+      slotRewritten: false,
+      restIntact: false,
+      detectorHasTeeth: false,
+      refusalHonoured: false,
+      refusedUntouched: false,
+      error: error.message
+    };
   } finally {
-    for (const target of [dir, supplied]) if (target) await rm(target, { recursive: true, force: true });
+    for (const target of [dir, supplied, refused]) if (target) await rm(target, { recursive: true, force: true });
   }
 }
 

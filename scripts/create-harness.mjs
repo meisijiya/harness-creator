@@ -11,6 +11,7 @@ import {
   initScriptFromCommands,
   parseArgs,
   readText,
+  replaceBlueprintSlot,
   scriptCommand,
   TEMPLATE_DIR,
   verificationCommands,
@@ -42,6 +43,13 @@ it does not decide what the project should build.
 --blueprint carries the user's own one-line description of what the project is and what it
 delivers, written verbatim into the AGENTS.md purpose line. It is the only channel for that
 input: omit it and the placeholder stays visible, never assembled from the detected stack.
+
+On a target whose instruction file already exists, --blueprint rewrites ONLY the blueprint slot —
+the content between the H1 and the first following heading — and prints the previous text as
+before -> after. Everything else is left byte-identical, so a merged section or a block another
+skill owns cannot be clobbered by a blueprint change. If the slot cannot be located, nothing is
+written and the run exits non-zero: guessing which paragraph was meant could rewrite prose this
+skill never wrote. Without --blueprint an existing file is still skipped and reported.
 
 --dry-run prints the same plan the real run would execute (each artifact marked written or
 skipped) and exits 0 without creating the target directory or writing any file. Run it before the
@@ -102,6 +110,17 @@ const agentPath = path.join(target, agentFile);
 const agentResult = await copyTemplate('agents.md', agentPath, replacements, { force, dryRun });
 results.push(agentResult);
 
+// A blueprint change is not a re-run of create. The blueprint is the one slot the user owns and
+// rewrites as the project's description sharpens, so --blueprint also has to work on a file that
+// already exists — but ONLY on that slot: every other line has been edited since (merged sections,
+// a block another skill owns) and re-rendering the template over it would destroy that work. The
+// trigger is the flag, never the mere presence of a file — which is why a run without --blueprint
+// still reports SKIPPED and leaves the file byte-identical.
+const blueprintUpdate = agentResult.status === 'skipped' && args.blueprint !== undefined
+  ? replaceBlueprintSlot(await readText(agentPath), String(args.blueprint))
+  : null;
+if (blueprintUpdate?.ok && !dryRun) await writeText(agentPath, blueprintUpdate.markdown);
+
 // Report, never write: a text-match append cannot tell whether the existing file already covers a
 // section in English or in another wording, and would add a second startup path — two competing
 // instruction files is the drift this skill exists to prevent. Merging is the agent's call.
@@ -139,6 +158,23 @@ for (const command of commands) {
 console.log('');
 for (const result of results) {
   console.log(`${result.status.toUpperCase()} ${path.relative(target, result.path)}${result.reason ? ` (${result.reason})` : ''}`);
+}
+
+// Printed whether or not the write happened, because a change to someone's instruction file should
+// be visible as before → after rather than only happening. A refusal exits non-zero: an exit-0
+// no-op would leave the user believing the blueprint changed.
+if (blueprintUpdate) {
+  console.log('');
+  if (blueprintUpdate.ok) {
+    console.log(`BLUEPRINT ${dryRun ? 'PLANNED' : 'UPDATED'} ${path.relative(target, agentPath)}`);
+    console.log(`  before: ${blueprintUpdate.before}`);
+    console.log(`  after:  ${args.blueprint}`);
+  } else {
+    console.log(`BLUEPRINT REFUSED ${path.relative(target, agentPath)} — ${blueprintUpdate.reason}`);
+    console.log('  Nothing was written. The slot is the content between the H1 and the first following');
+    console.log('  heading; a file that does not have that shape gets a hand edit instead of a guess.');
+    process.exitCode = 1;
+  }
 }
 
 if (missingAgentSections.length > 0) {

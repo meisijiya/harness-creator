@@ -106,6 +106,50 @@ export function diffSections(templateMarkdown, existingMarkdown) {
     .filter((section) => !existing.includes(section.replace(/^#+\s*/, '').toLowerCase()));
 }
 
+// The blueprint is the one slot the user owns and rewrites as the project's plain description
+// sharpens, so --blueprint has to work on a file that already exists. This locates that slot and
+// rewrites it, and it is the ONLY edit a re-run may make to such a file: everything else has been
+// edited since (merged sections, blocks another skill owns), and re-rendering would clobber it.
+//
+// The locator is syntactic, not heuristic — "the content between the H1 and the first following
+// heading" is the shape this template renders. Guessing at "the first paragraph" in a file this
+// skill did not author would silently replace prose it never wrote, so an unrecognised shape is
+// returned as a refusal for the caller to report. `before` comes back too, because a change to
+// someone's instruction file should be printable as before → after rather than only happening.
+export function replaceBlueprintSlot(markdown, blueprint) {
+  const lines = markdown.split('\n');
+  const bare = (line) => line.replace(/\r$/, '');
+  const h1 = lines.findIndex((line) => /^#\s+\S/.test(bare(line)));
+  if (h1 === -1) return { ok: false, reason: 'no H1 heading to anchor the blueprint slot' };
+
+  let end = lines.length;
+  for (let i = h1 + 1; i < lines.length; i += 1) {
+    if (/^#{1,6}\s+\S/.test(bare(lines[i]))) { end = i; break; }
+  }
+
+  // Blank lines framing the slot are spacing, not content. Trimming them keeps the rewritten file
+  // looking like the render instead of collapsing the paragraph against the neighbouring headings.
+  let from = h1 + 1;
+  let to = end - 1;
+  while (from <= to && bare(lines[from]).trim() === '') from += 1;
+  while (to >= from && bare(lines[to]).trim() === '') to -= 1;
+  if (from > to) return { ok: false, reason: 'no content between the H1 and the next heading' };
+
+  // Every untouched line is carried over verbatim (a CRLF checkout keeps its \r), and the inserted
+  // lines adopt the same ending, so "only the slot changed" is true byte for byte.
+  const carriageReturn = lines.some((line) => /\r$/.test(line)) ? '\r' : '';
+  const written = [
+    ...lines.slice(0, from),
+    ...String(blueprint).split('\n').map((line) => `${line.replace(/\r$/, '')}${carriageReturn}`),
+    ...lines.slice(to + 1)
+  ];
+  return {
+    ok: true,
+    markdown: written.join('\n'),
+    before: lines.slice(from, to + 1).map(bare).join('\n')
+  };
+}
+
 export function detectPackageManager(root, explicit) {
   if (explicit) return explicit;
   if (existsSync(path.join(root, 'bun.lockb')) || existsSync(path.join(root, 'bun.lock'))) return 'bun';
