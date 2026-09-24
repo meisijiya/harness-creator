@@ -33,7 +33,7 @@ license: MIT
 
 本技能只负责 harness 产物就位，以及把它们与别的技能串起来；**不承接工程流程本身**。
 
-- **承接方是具名的工程 skill**：需求对齐、规格、拆分、实现、测试、审查、交接由已安装的工程 skill 承担。其中**状态与阻塞边 → `to-tickets`**；**会话交接 → `handoff`**；两者共同的前置是一次性运行 `/setup-matt-pocock-skills` 配置 tracker。本技能**不代为发起、不代为执行**，也不为它们的产物指定位置。
+- **承接方是具名的工程 skill，按场合二选一**：系统提示中带 `superpowers` 引导词时，需求对齐、规格与计划、实现与测试、代码审查、分支收尾由它承担；无该引导词时全部由 `mattpocock` 承担。**两种场合下，状态与阻塞边 → `to-tickets`、会话交接 → `handoff` 都归 `mattpocock`**，共同前置是一次性运行 `/setup-matt-pocock-skills` 配置 tracker。本技能**不代为发起、不代为执行**，也不为它们的产物指定位置。
 - **不让代理主动扩范围**：不得因本技能而主动开启与 harness 无关的工作——那会与其他 skill 争抢触发时机，导致系统混乱。
 - **同一事实只问一次**：属别的 skill 管辖的问题交由它问，本技能不重复询问。
 - **只做用户已对齐的事**：用户未陈述的项目事实一律留空待补，不由技术栈推断代填。
@@ -68,7 +68,7 @@ node <技能目录>/scripts/create-harness.mjs --target /path/to/project
 
 **`AGENTS.md` 的章节以 `templates/agents.md` 为唯一来源**；已存在时脚本只报告缺失章节，不写盘，合并由代理执行。
 
-创建后说明创建了什么，并指路承接方：先跑一次 `/setup-matt-pocock-skills`，之后用 `to-tickets` 管状态与阻塞边。本技能**不派生条目、验收标准或决策**。
+创建后说明创建了什么，并指路承接方：先跑一次 `/setup-matt-pocock-skills`，之后用 `to-tickets` 管状态与阻塞边；工程阶段按生成物里的**场合判别**分流（有 `superpowers` 引导词给它，没有给 `mattpocock`）。本技能**不派生条目、验收标准或决策**。
 
 ### 审计现有 harness
 
@@ -115,7 +115,7 @@ node <技能目录>/scripts/run-benchmark.mjs --target /path/to/project --html /
 | `validate` 总分 < 70 | 最低分子系统作为候选瓶颈，给前 2-3 项改动 | 改完仍 < 70 → 用失败、日志或任务结果确认因果，不刷关键词 |
 | 运行环境无 Node，或无法写入文件（权限/只读） | 按 `templates/` 手工创建产物；或输出确切文件内容与命令并标注目标路径 | 两者都不可行 → 贴进回复供用户粘贴，标明脚本**未跑过**，绝不声称「已创建」 |
 | `run-benchmark` 自检 FAIL | 视为 skill 自身损坏——先修脚本，再谈交付 | 修不动 → 告知本次交付**未经自检**，不按通过交付 |
-| 用户问某个承接方装了没 / 装在哪 | **不管**：承接方默认已安装。本技能不检查、不列举、不安装其他 skill，也不为缺失提供替代品——它只管 harness 产物 | 继续追问 → 仍是「不管」，理由重述即可 |
+| 用户问某个承接方装了没 / 装在哪 | **不管安装**：承接方默认已安装；本技能不列举、不安装、不为缺失提供替代品。**但「是否在场」必须能判**——生成物按 `superpowers` 引导词是否出现分流承接方，这是运行期观察，不是安装检查 | 追问安装 → 仍是「不管」；追问在场 → 按生成物的场合判别回答 |
 
 ## 设计规则
 
@@ -144,7 +144,7 @@ harness 设计中不要做的事；交付前对照一次。
 
 最小化 harness 应为目标项目留下：
 
-- [ ] `AGENTS.md` 或 `CLAUDE.md`（含承接方指向：`to-tickets`、`handoff`、`/setup-matt-pocock-skills`）
+- [ ] `AGENTS.md` 或 `CLAUDE.md`（含承接方指向：`superpowers` / `mattpocock` 的场合判别，`to-tickets`、`handoff`、`/setup-matt-pocock-skills`）
 - [ ] `init.sh`（空项目下**必然失败**：占位验证带 `exit 1`，须替换为真实命令）
 - [ ] 已文档化的验证证据或下一步
 

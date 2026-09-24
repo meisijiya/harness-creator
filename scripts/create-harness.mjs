@@ -28,17 +28,20 @@ Creates a minimal production harness — the three subsystems this skill owns, n
   init.sh — the verification gate that must pass before any feature is called done
 
 State and handoff are NOT produced here. They are delegated, and the AGENTS.md this writes names
-the delegation rather than describing a mechanism of its own: to-tickets owns state and blocking
-edges, handoff owns session handoff and writes outside the repo, and /setup-matt-pocock-skills is
-the one-time prerequisite that configures the tracker. This script detects no mode, scaffolds no
-tracker, and ships no in-repo substitute for either capability.
+the delegation rather than describing a mechanism of its own. The engineering workflow is routed
+between two owners on a runtime condition the agent can read for itself: when the session carries
+a superpowers bootstrap, alignment, specs, implementation, testing, review and branch wrap-up go
+to superpowers, while to-tickets keeps state and blocking edges and handoff keeps session handoff
+either way; without that bootstrap every engineering stage falls to mattpocock. /setup-matt-pocock-skills
+is the one-time prerequisite that configures the tracker, and it is required in both cases. This
+script detects no mode, scaffolds no tracker, and ships no in-repo substitute for either capability.
 
 Scope boundary: this skill builds and audits the harness FILES. The engineering workflow —
 requirement alignment, specs, breakdown, implementation, testing, review, handoff — belongs to
-whatever engineering skills are installed, and this script neither performs nor scaffolds any of
-it: no feature entries are invented, no decisions are recorded, no tickets are filed, and the
-AGENTS.md it writes says so explicitly. The harness ships artifacts that make an agent reliable;
-it does not decide what the project should build.
+the delegated owners named above, and this script neither performs nor scaffolds any of it: no
+feature entries are invented, no decisions are recorded, no tickets are filed, and the AGENTS.md
+it writes says so explicitly. The harness ships artifacts that make an agent reliable; it does not
+decide what the project should build.
 
 --blueprint carries the user's own one-line description of what the project is and what it
 delivers, written verbatim into the AGENTS.md purpose line. It is the only channel for that
@@ -192,5 +195,7 @@ if (missingAgentSections.length > 0) {
 // delegated state capability exists at all, and that configuration belongs to the upstream skill.
 console.log('');
 console.log('Next: run /setup-matt-pocock-skills once to configure the tracker, then use to-tickets for');
-console.log('state and blocking edges. This skill derives no entries, acceptance criteria or decisions');
-console.log('on its own, and ships no in-repo substitute for state or handoff.');
+console.log('state and blocking edges. Engineering stages go to superpowers when the session carries');
+console.log('its bootstrap, and to mattpocock when it does not. This skill derives no entries,');
+console.log('acceptance criteria or decisions on its own, and ships no in-repo substitute for state or');
+console.log('handoff.');

@@ -26,7 +26,12 @@
 
 ## 状态与交接：承接方是工程 skill
 
-本文件**不定义**状态产物与交接产物，它们由已安装的工程 skill 承接：
+本文件**不定义**状态与交接产物，也不承接工程流程——两者由已安装的工程 skill 承接，本技能**不代做**。承接方按场合二选一：
+
+- **系统提示中带 superpowers 的引导词**（如 `using-superpowers`）→ 需求对齐、规格与计划、实现与测试、代码审查、分支收尾交由 **superpowers**；**拆单与状态、会话交接仍归 mattpocock**。
+- **不在场**（无该引导词）→ 上述全部工程阶段交由 **mattpocock** 的模型可调用 skill（`grilling`、`to-spec`、`implement`、`tdd`、`code-review`）。
+
+以下两项始终归 mattpocock：
 
 - **状态与依赖** → `to-tickets`：把工作拆成 tracer-bullet 工单，每条自带**阻塞边**；发布到已配置的 tracker（GitHub / GitLab issues，或仓内本地 markdown）。
 - **会话交接** → `handoff`：它自己决定产物位置与格式，**本技能不指定、也不代建**。

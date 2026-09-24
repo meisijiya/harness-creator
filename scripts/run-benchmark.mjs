@@ -53,7 +53,14 @@ const execFileAsync = promisify(execFile);
 // encoding 12, checkpoint design 6) needs net-new prose instead of rewording — so 4 bytes of runway
 // blocks the whole remaining queue. It gets its own constant because it is the number a user
 // decision moves; the baseline is not.
-const SKILL_MD_BASELINE_BYTES = 9623;
+//
+// The BASELINE moved 9623 -> 9950 on 2026-09-24, also by user decision, and for a different reason
+// than the multiplier: the scope grew rather than the prose thickening. The boundary section now has
+// to route between two delegated owners (superpowers and mattpocock) on a runtime condition instead
+// of naming one, and that routing cannot be compressed into a pointer without leaving the agent
+// unable to tell who owns the stage it is standing in. Recorded here because a raised cap with no
+// stated reason reads, six months on, exactly like an unexamined ratchet.
+const SKILL_MD_BASELINE_BYTES = 9950;
 const SKILL_MD_GROWTH = 1.25; // widened from 1.15 by user decision, 2026-09-23
 const SKILL_MD_MAX_BYTES = Math.floor(SKILL_MD_BASELINE_BYTES * SKILL_MD_GROWTH);
 
@@ -71,7 +78,16 @@ const SKILL_MD_MAX_BYTES = Math.floor(SKILL_MD_BASELINE_BYTES * SKILL_MD_GROWTH)
 // equal token count — and lines are capped on the lecture's own 50–200 guidance, which is
 // language-neutral where bytes are not. Raising either number is a scope decision for the user,
 // not a side effect of the template growing.
-const AGENTS_MD_BASELINE_BYTES = 3200;
+//
+// Raised 3200 -> 3680 on 2026-09-24 by user decision, and this one is worth flagging rather than
+// burying: it is precisely the move the paragraph above warns against. The anchor WAS external (the
+// upstream template plus a CJK allowance) and it no longer holds, because the scope itself changed —
+// the file now routes between two delegated owners on a runtime condition. The measured need was
+// +518 bytes for that routing rule; the alternative on the table was to cut steps out of the startup
+// or wrap-up routine to buy the room, which trades a real loss in the artifact for a fake constraint
+// on the template. What keeps it from being a ratchet is that the delta is anchored to the rule that
+// required it rather than to whatever the template happens to render at.
+const AGENTS_MD_BASELINE_BYTES = 3680;
 const AGENTS_MD_MAX_BYTES = Math.floor(AGENTS_MD_BASELINE_BYTES * 1.15);
 const AGENTS_MD_MAX_LINES = 90;
 // The template states this limit in its own self-restraint rule; the check keeps the statement
@@ -121,7 +137,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['budget', (group) => ` SKILL.md sits at ${group.size}/${group.max} bytes (${group.pass ? 'within' : 'OVER'} budget).`],
   ['agentsBudget', (group) => ` The generated AGENTS.md stays inside its external byte, line and working-rule budgets (${group.pass ? 'verified' : 'FAILED'}).`],
   ['agentsDiscover', (group) => ` The instruction file does not restate what the agent can read for itself, and the detector is proven to have teeth by a seeded violation (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['scopeBrake', (group) => ` The generated instruction file names the owners it delegates to — to-tickets, handoff and their setup prerequisite — and carries none of the removed doctrine (${group.pass ? 'verified' : `leaked ${(group.leaked || []).join(', ') || 'none'}; brake ${group.brake ? 'present' : 'MISSING'}; detector ${group.seeded?.length ? 'has teeth' : 'BLIND'}`}).`],
+  ['scopeBrake', (group) => ` The generated instruction file routes between its two delegated owners on a runtime condition, names to-tickets, handoff and their setup prerequisite, and carries none of the removed doctrine (${group.pass ? 'verified' : `missing routing ${(group.missingRouting || []).join(', ') || 'none'}; routing detector ${group.routingTeeth ? 'has teeth' : 'BLIND'}; brake ${group.brake ? 'present' : 'MISSING'}; leaked ${(group.leaked || []).join(', ') || 'none'}; doctrine detector ${group.seeded?.length ? 'has teeth' : 'BLIND'}`}).`],
   ['maintenance', (group) => ` Harness maintenance has a moment to happen: the generated instruction file tells the agent to re-assess the harness at wrap-up when it touched the harness files, and the detector is proven to have teeth by removing that line (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; detector ${group.teeth ? 'has teeth' : 'BLIND'}`}).`],
   ['dryRun', (group) => ` --dry-run writes nothing, reports the target's real state, and its plan matches the live run entry for entry (${group.pass ? 'verified' : 'FAILED'}).`],
   ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
@@ -166,15 +182,37 @@ const FORBIDDEN_IN_AGENTS_MD = [
   { name: 'controlled release', pattern: /受控放行/ },
   { name: 'governance modes', pattern: /两种模式|--mode\b/ },
   { name: 'extracted agent-doc layer', pattern: /tracking-policy\.md|escalation\.md/ },
-  // Added 09-23 on the user's ruling that the owners are assumed installed: a render that checks
-  // whether another skill is present is doing the neighbour's job. The pattern is deliberately
-  // narrow — it must not fire on the correct render, which says "承接方默认已安装，本技能不检查、
+  // Narrowed 09-24 by the same user ruling that added ROUTING_TERMS above. What is forbidden is an
+  // INSTALLATION check: telling the agent to test whether another skill is installed, or to point the
+  // user at installing one. That was the shape this pattern was added for on 09-23 and it has not
+  // changed. What is now required, and therefore allowed, is a RUNTIME presence read — the render
+  // routes between superpowers and mattpocock on whether the superpowers bootstrap is in the agent's
+  // own system prompt, which the agent observes without inspecting anything on disk. Different
+  // sentence, different subject. The routing rule cannot be stated without the second, so the pattern
+  // stays on installation shape and the positive half lives in ROUTING_TERMS.
+  // The pattern is deliberately narrow — it must not fire on the correct render, which says "承接方默认已安装，本技能不检查、
   // 不安装" (a negation). Matching a bare 已安装 would make the gate reject its own correct output.
   { name: 'owner-installation check', pattern: /承接方.{0,10}(未安装|是否已安装)|提示安装|检查.{0,4}是否已安装/ }
 ];
 const SEEDED_VIOLATION = '\n状态写入 feature_list.json 与 progress.md；产物追踪策略；'
   + '五落点；受控放行；两种模式；分册 tracking-policy.md 与 escalation.md；'
   + '承接方未安装时提示安装。';
+
+// The other half of the boundary. The render no longer names ONE delegated owner; it routes between
+// two on a runtime condition, and these are the terms that make that routing legible to an agent
+// standing in a target repo. Each is load-bearing: drop the absence branch and an agent whose session
+// carries no superpowers bootstrap is left with no owner at all, which is the common case in a plain
+// checkout rather than an edge case.
+//
+// The negative proof is per-term instead of one seeded blob. A blob proves the predicate reads the
+// string; deleting exactly one term at a time and requiring the predicate to name exactly that term
+// proves it is sensitive to each of them independently, so a render that kept "superpowers" while
+// losing the fallback cannot pass on the strength of its survivors.
+//
+// Declared here, ahead of the runSelfCheck() call site (line 314), for the temporal-dead-zone reason
+// this file has already paid for twice.
+const ROUTING_TERMS = ['superpowers', '引导词', '不在场', 'mattpocock'];
+const missingRoutingTerms = (text) => ROUTING_TERMS.filter((term) => !text.includes(term));
 
 // Declared at module scope, ahead of the runSelfCheck() call: a const sitting next to the function
 // that reads it would still be in its temporal dead zone at that call site.
@@ -359,8 +397,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  AGENTS.md discoverability: ${pass ? 'PASS' : 'FAIL'} — default render free of restated content: ${offenders.length === 0 ? 'ok' : `NO (${offenders.join(', ')})`}; self-restraint rule stated: ${selfRestraintStated ? 'ok' : 'NO'}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.scopeBrake) {
-    const { pass, brake, leaked = [], seeded = [], error } = selfCheck.scopeBrake;
-    lines.push(`  Scope brake: ${pass ? 'PASS' : 'FAIL'} — engineering workflow delegated in the generated AGENTS.md: ${brake ? 'ok' : 'NO'}; doctrine carried over from the removed scope: ${leaked.length === 0 ? 'none' : `LEAKED (${leaked.join(', ')})`}; detector catches a seeded violation: ${seeded.length >= 7 ? 'ok' : `BLIND (${seeded.length}/7 patterns)`}${error ? ` — ${error}` : ''}`);
+    const { pass, brake, routing, missingRouting = [], routingTeeth, leaked = [], seeded = [], error } = selfCheck.scopeBrake;
+    lines.push(`  Scope brake: ${pass ? 'PASS' : 'FAIL'} — engineering workflow delegated in the generated AGENTS.md: ${brake ? 'ok' : 'NO'}; routes between both owners on a runtime condition: ${routing ? 'ok' : `MISSING (${missingRouting.join(', ')})`}; routing detector has teeth: ${routingTeeth ? 'ok' : 'BLIND'}; doctrine carried over from the removed scope: ${leaked.length === 0 ? 'none' : `LEAKED (${leaked.join(', ')})`}; detector catches a seeded violation: ${seeded.length >= 7 ? 'ok' : `BLIND (${seeded.length}/7 patterns)`}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.maintenance) {
     const { pass, stated, teeth, error } = selfCheck.maintenance;
@@ -598,18 +636,33 @@ async function checkScopeBoundary() {
     // unchanged in shape and re-scoped in content (see FORBIDDEN_IN_AGENTS_MD).
     const brake = /工程\s*skill/.test(text) && /不代做/.test(text)
       && /to-tickets/.test(text) && /handoff/.test(text) && /setup-matt-pocock-skills/.test(text);
+    // The routing half, kept as its own label: a render that names both owners but loses the absence
+    // branch fails on that point specifically instead of on the brake as a whole, so the failure says
+    // which rule went missing rather than only that something did.
+    const missingRouting = missingRoutingTerms(text);
+    const routing = missingRouting.length === 0;
+    // Teeth, one term at a time. Deleting a term and requiring the predicate to report exactly that
+    // term proves the check is sensitive to each term on its own; a single seeded blob would only
+    // prove it reads the string.
+    const routingTeeth = ROUTING_TERMS.every((term) => {
+      const reported = missingRoutingTerms(text.split(term).join('\u0000'));
+      return reported.length === 1 && reported[0] === term;
+    });
     const leaked = FORBIDDEN_IN_AGENTS_MD.filter(({ pattern }) => pattern.test(text)).map(({ name }) => name);
     const seeded = FORBIDDEN_IN_AGENTS_MD
       .filter(({ pattern }) => pattern.test(`${text}${SEEDED_VIOLATION}`))
       .map(({ name }) => name);
     return {
-      pass: brake && leaked.length === 0 && seeded.length === FORBIDDEN_IN_AGENTS_MD.length,
+      pass: brake && routing && routingTeeth && leaked.length === 0 && seeded.length === FORBIDDEN_IN_AGENTS_MD.length,
       brake,
+      routing,
+      missingRouting,
+      routingTeeth,
       leaked,
       seeded
     };
   } catch (error) {
-    return { pass: false, brake: false, leaked: [], seeded: [], error: error.message };
+    return { pass: false, brake: false, routing: false, missingRouting: [], routingTeeth: false, leaked: [], seeded: [], error: error.message };
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
   }
@@ -835,7 +888,12 @@ function scoreEvals(evalsJson) {
     // Added with the blueprint rewrite path: the gate proves the script rewrites only the slot, but
     // only a case shows whether an agent aligns with the user beforehand, and refuses rather than
     // guessing when the file's shape is one this skill did not render.
-    ['Covers the blueprint rewrite path', /蓝图变更/]
+    ['Covers the blueprint rewrite path', /蓝图变更/],
+    // Added with the two-owner routing rule. The gate proves the generated file CARRIES the routing
+    // sentence; only a case shows whether an agent, handed both skill sets, routes rather than asking
+    // the user which one is installed — and whether it keeps state and handoff with the owner that
+    // can actually serve them. Same split the maintenance and blueprint entries record above.
+    ['Covers the two-owner routing condition', /分流/]
   ];
   for (const [message, pattern] of familyEntries) {
     checks.push({ pass: cases.some((item) => pattern.test(item.name)), message });
