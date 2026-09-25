@@ -125,8 +125,9 @@ const DISCOVERABLE_CONTENT = [
 // a file the skill no longer writes is the same "check and template on the same side" defect one
 // level up: the gate would be asserting the existence of the thing that was removed.
 const SELF_CHECK_GROUPS = [
-  'budget', 'agentsBudget', 'agentsDiscover', 'scopeBrake', 'maintenance', 'skillDesign', 'dryRun',
-  'selfRefs', 'bottleneckTies', 'blankGate', 'blueprint', 'agentFile', 'reportContract'
+  'budget', 'agentsBudget', 'agentsDiscover', 'scopeBrake', 'maintenance', 'skillDesign',
+  'wrapupOutput', 'dryRun', 'selfRefs', 'bottleneckTies', 'blankGate', 'blueprint', 'agentFile',
+  'reportContract'
 ];
 
 // One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
@@ -140,6 +141,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['scopeBrake', (group) => ` The generated instruction file routes between its two delegated owners on a runtime condition, names to-tickets, handoff and their setup prerequisite, and carries none of the removed doctrine (${group.pass ? 'verified' : `missing routing ${(group.missingRouting || []).join(', ') || 'none'}; routing detector ${group.routingTeeth ? 'has teeth' : 'BLIND'}; brake ${group.brake ? 'present' : 'MISSING'}; leaked ${(group.leaked || []).join(', ') || 'none'}; doctrine detector ${group.seeded?.length ? 'has teeth' : 'BLIND'}`}).`],
   ['maintenance', (group) => ` Harness maintenance has a moment to happen: the generated instruction file tells the agent to optimise the harness at wrap-up when the session's own output leaves it stale or thin, rather than when the harness files happen to have been touched, and the detector is proven to have teeth per term and against the old diff-keyed phrasing (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old-form rejection ${group.oldFormRejected ? 'honoured' : 'LEAKED'}`}).`],
   ['skillDesign', (group) => ` The skill's own design rules are machine-checked rather than trusted to prose: SKILL.md's design section states the wrap-up criterion on the session's own output, and the detector is proven to have teeth per term, against the pre-09-25 rule line, against the old condition wearing the new vocabulary, and against a shortened requirement list (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; diff key ${(group.leaked || []).length ? `LEAKED (${group.leaked.join(', ')})` : 'absent'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old rule line ${group.oldFormRejected ? 'rejected' : 'ACCEPTED'}; hybrid form ${group.hybridRejected ? 'rejected' : 'ACCEPTED'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}`}).`],
+  ['wrapupOutput', (group) => ` The wrap-up procedure a maintainer actually reads carries both of its outputs: the candidate changes, and the judgment items that are handed to the user instead of being decided — the part that stops a fresh session from treating already-dead rules as live — plus a net-change report, which is what keeps blind increment from hiding in wording (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; own section ${group.heading ? 'present' : 'ABSENT'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; heading requirement ${group.headingArm ? 'has teeth' : 'BLIND'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}`}).`],
   ['dryRun', (group) => ` --dry-run writes nothing, reports the target's real state, and its plan matches the live run entry for entry (${group.pass ? 'verified' : 'FAILED'}).`],
   ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
   ['bottleneckTies', (group) => ` The bottleneck line names ${group.tieCount} tied subsystem(s) as a tie instead of picking one (${group.pass ? 'verified' : 'FAILED'}).`],
@@ -310,6 +312,39 @@ const SKILL_DESIGN_INCOMPLETE_FORMS = [
 const skillDesignSection = (text) =>
   text.split(/^##\s+/m).slice(1).find((part) => part.startsWith('设计规则')) || '';
 
+// The wrap-up procedure lives in references/harness-maintenance-pattern.md, and until 09-25 nothing
+// asserted a word of it — the reference is read only while the skill is doing maintenance, so a step
+// going missing there degrades behaviour with no symptom anywhere. Two things were added to it by
+// user ruling, and both are the difference between maintaining a harness and merely growing one:
+//
+//   * the wrap-up produces TWO lists — candidate changes, and the items that only the user can judge
+//     (a rule that is no longer necessary, a passage superseded upstream, duplicated wording). The
+//     judgment list is what stops a new session from treating already-dead rules as live; it is also
+//     the part no tool can settle, so it is handed over rather than decided.
+//   * the re-check reports the NET change, not only what was edited — otherwise blind increment is
+//     hidden in wording, and nobody can tell whether the harness is being refined or just accrued.
+//
+// Scoped to the whole file rather than to the 步骤 section: the procedure is stated in more than one
+// place on purpose (the requirement in 步骤, the boundary in its own section, the empty case in the
+// exception table), and a reader arriving at any of them should find it. The heading is asserted
+// separately, because "one more sentence somewhere" and "a place for it" are different guarantees.
+const WRAPUP_REFERENCE = path.join('references', 'harness-maintenance-pattern.md');
+const WRAPUP_JUDGMENT_TERM = '需你判断';
+const WRAPUP_TERMS = ['需你判断', '净增', '净减'];
+// Independent witnesses for WRAPUP_TERMS, hand-written rather than derived, for the reason measured
+// on the skillDesign gate: a loop over the term list cannot notice a term being DROPPED from the
+// list, because it simply stops testing it. Each entry is a plausible shortened version of the
+// reference that is missing exactly one term, so it is refused by that term and no other.
+const WRAPUP_INCOMPLETE_FORMS = [
+  ['需你判断', '## 候选改动\n\n本次收尾只产出候选改动，复验时报出净增与净减的行数。\n'],
+  ['净增', `## ${WRAPUP_JUDGMENT_TERM}\n\n工具判不了的交回用户。复验时报出净减的行数。\n`],
+  ['净减', `## ${WRAPUP_JUDGMENT_TERM}\n\n工具判不了的交回用户。复验时报出净增的行数。\n`]
+];
+// Holds every term and still fails, because the place to put judgment items is gone: the vocabulary
+// survived a revert that removed the section it belonged to. Written as an independent literal so the
+// heading requirement is proven to bite rather than assumed from a regex that may match nothing.
+const WRAPUP_HEADING_LESS_FORM = `## 候选改动\n\n需你判断的项交回用户，复验时报出净增与净减的行数。\n`;
+
 // Declared at module scope, ahead of the runSelfCheck() call: a const sitting next to the function
 // that reads it would still be in its temporal dead zone at that call site.
 const SELFTEXT_EXEMPT = new Set(['README.md']);
@@ -349,6 +384,7 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['scopeBrake', 'Scope brake'],
   ['maintenance', 'Maintenance trigger'],
   ['skillDesign', 'SKILL.md design rule'],
+  ['wrapupOutput', 'Wrap-up outputs'],
   ['dryRun', 'Dry run'],
   ['selfRefs', 'Self-reference paths'],
   ['bottleneckTies', 'Bottleneck ties'],
@@ -427,7 +463,14 @@ Runs a lightweight harness benchmark:
      line rejected, the hybrid form rejected, and an incomplete rule refused by the very term it is
      missing — because deleting that rule outright used to leave every other gate green and make the
      byte budget line greener still.
- 18. Produces a JSON report and optional HTML report.
+ 18. Checks the wrap-up procedure a maintainer actually reads: it must produce both of its outputs —
+     the candidate changes, and the judgment items handed to the user rather than decided by the
+     agent (a rule that is no longer necessary is not wrong, so no command fails and no audit catches
+     it) — and it must report the NET change rather than only what was edited. Seeded on four sides:
+     each term dropped in turn, a version refused by its own missing term, and a fixture that keeps
+     every term while losing the place to put them. The judgment half is the part no tool can settle,
+     so the gate proves the handover is stated instead of pretending the tool can make the call.
+ 19. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -515,6 +558,10 @@ function consoleSelfCheckLines(selfCheck) {
     const { pass, stated, missing = [], leaked = [], teeth, oldFormRejected, hybridRejected, witness, error } = selfCheck.skillDesign;
     lines.push(`  SKILL.md design rule: ${pass ? 'PASS' : 'FAIL'} — the skill's own design section states the wrap-up criterion on the session's output: ${stated ? 'ok' : `MISSING (${missing.join(', ') || 'section not found'})`}; the diff key it replaced: ${leaked.length === 0 ? 'absent' : `LEAKED (${leaked.join(', ')})`}; per-term detector: ${teeth ? 'ok' : 'BLIND'}; pre-09-25 rule line rejected: ${oldFormRejected ? 'ok' : 'ACCEPTED'}; hybrid form rejected: ${hybridRejected ? 'ok' : 'ACCEPTED'}; requirement-list shrink caught: ${witness ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.wrapupOutput) {
+    const { pass, stated, heading, missing = [], teeth, headingArm, witness, error } = selfCheck.wrapupOutput;
+    lines.push(`  Wrap-up outputs: ${pass ? 'PASS' : 'FAIL'} — the maintenance reference produces both lists (candidate changes and the items the user must judge) and reports the net change: ${stated ? 'ok' : `MISSING (${missing.join(', ') || 'terms'})`}; its own section: ${heading ? 'ok' : 'ABSENT'}; per-term detector: ${teeth ? 'ok' : 'BLIND'}; heading requirement: ${headingArm ? 'ok' : 'BLIND'}; list-shrink witness: ${witness ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
+  }
   if (selfCheck.dryRun) {
     const { pass, changesNothing, previewedFiles, reflectsState, planMatchesRun, wrote = [], error } = selfCheck.dryRun;
     lines.push(`  Dry run: ${pass ? 'PASS' : 'FAIL'} — writes nothing: ${changesNothing ? 'ok' : `NO (still wrote ${wrote.join(', ') || 'files'})`}; plans artifacts: ${previewedFiles ? 'ok' : 'NO'}; reflects existing state: ${reflectsState ? 'ok' : 'NO'}; plan matches the real run: ${planMatchesRun ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
@@ -575,6 +622,7 @@ async function runSelfCheck() {
       scopeBrake: () => checkScopeBoundary(),
       maintenance: () => checkMaintenanceTrigger(),
       skillDesign: () => checkSkillDesignRule(),
+      wrapupOutput: () => checkWrapupOutputs(),
       dryRun: () => checkDryRun(),
       selfRefs: () => checkSelfReferencePaths(),
       bottleneckTies: () => checkBottleneckTies(),
@@ -897,6 +945,57 @@ async function checkSkillDesignRule() {
       hybridRejected: false,
       witness: false,
       error: error.message
+    };
+  }
+}
+
+// See the WRAPUP_* block above for what this asserts and why. Unlike every other group it renders
+// nothing and scaffolds nothing: the artifact under test is a reference file this skill ships, so the
+// check is one read plus four arms.
+function wrapupJudgmentStated(text) {
+  const missing = WRAPUP_TERMS.filter((term) => !text.includes(term));
+  const heading = new RegExp(`^##\\s+${WRAPUP_JUDGMENT_TERM}`, 'm').test(text);
+  return { stated: missing.length === 0 && heading, missing, heading };
+}
+
+// Removes EVERY occurrence rather than the first: the term appears in the procedure, in its own
+// section and in the exception table, so dropping only the first would leave the arm reporting BLIND
+// on a file that is in fact correctly worded.
+function wrapupWithout(text, term) {
+  return text.split(term).join('');
+}
+
+async function checkWrapupOutputs() {
+  try {
+    const reference = await readText(path.join(skillRoot, WRAPUP_REFERENCE));
+    const { stated, missing, heading } = wrapupJudgmentStated(reference);
+    // Per-term arm: drop exactly one term and require the predicate to name exactly that term AND to
+    // stop passing, so a term that survives only in an unrelated sentence cannot carry the gate.
+    const teeth = WRAPUP_TERMS.every((term) => {
+      const stripped = wrapupJudgmentStated(wrapupWithout(reference, term));
+      return stripped.missing.includes(term) && !stripped.stated;
+    });
+    // Heading arm, proven by a fixture that keeps every term and loses only the place to put them.
+    // Without this the heading requirement would rest on a regex nobody had ever seen fail.
+    const headingArm = WRAPUP_HEADING_LESS_FORM.includes(WRAPUP_TERMS[0])
+      && !wrapupJudgmentStated(WRAPUP_HEADING_LESS_FORM).heading;
+    // List-shrink arm: each incomplete form is refused by the term it is missing, which is what makes
+    // the required vocabulary provable rather than assumed (see the WRAPUP_INCOMPLETE_FORMS comment).
+    const witness = WRAPUP_INCOMPLETE_FORMS.every(([term, text]) =>
+      wrapupJudgmentStated(text).missing.includes(term));
+    return {
+      pass: stated && teeth && headingArm && witness,
+      stated,
+      heading,
+      missing,
+      teeth,
+      headingArm,
+      witness
+    };
+  } catch (error) {
+    return {
+      pass: false, stated: false, heading: false, missing: [], teeth: false,
+      headingArm: false, witness: false, error: error.message
     };
   }
 }
