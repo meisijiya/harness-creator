@@ -81,11 +81,13 @@ node <技能目录>/scripts/validate-harness.mjs --target /path/to/project
 ### 生成报告
 
 ```bash
-node <技能目录>/scripts/render-assessment-html.mjs --target /path/to/project
+# 前者只出三子系统体检；后者是结构性基准（自检 + 目标与 eval 覆盖打分）
+# 两条都接受 --html <输出路径>
+node <技能目录>/scripts/render-assessment-html.mjs --target /path/to/project --html /path/to/report.html
 node <技能目录>/scripts/run-benchmark.mjs --target /path/to/project --html /path/to/report.html
 ```
 
-前者只出三子系统体检；后者是**结构性**基准：先自检（临时目录搭一套 harness 并端到端验证随附脚本），再给目标与 eval 覆盖打分。真实有效性仍需在代表任务上做前后对照会话。
+真实有效性仍需在代表任务上做前后对照会话。
 
 ## 何时阅读参考文档
 
