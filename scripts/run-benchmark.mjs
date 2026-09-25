@@ -138,7 +138,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['agentsBudget', (group) => ` The generated AGENTS.md stays inside its external byte, line and working-rule budgets (${group.pass ? 'verified' : 'FAILED'}).`],
   ['agentsDiscover', (group) => ` The instruction file does not restate what the agent can read for itself, and the detector is proven to have teeth by a seeded violation (${group.pass ? 'verified' : 'FAILED'}).`],
   ['scopeBrake', (group) => ` The generated instruction file routes between its two delegated owners on a runtime condition, names to-tickets, handoff and their setup prerequisite, and carries none of the removed doctrine (${group.pass ? 'verified' : `missing routing ${(group.missingRouting || []).join(', ') || 'none'}; routing detector ${group.routingTeeth ? 'has teeth' : 'BLIND'}; brake ${group.brake ? 'present' : 'MISSING'}; leaked ${(group.leaked || []).join(', ') || 'none'}; doctrine detector ${group.seeded?.length ? 'has teeth' : 'BLIND'}`}).`],
-  ['maintenance', (group) => ` Harness maintenance has a moment to happen: the generated instruction file tells the agent to re-assess the harness at wrap-up when it touched the harness files, and the detector is proven to have teeth by removing that line (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; detector ${group.teeth ? 'has teeth' : 'BLIND'}`}).`],
+  ['maintenance', (group) => ` Harness maintenance has a moment to happen: the generated instruction file tells the agent to optimise the harness at wrap-up when the session's own output leaves it stale or thin, rather than when the harness files happen to have been touched, and the detector is proven to have teeth per term and against the old diff-keyed phrasing (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old-form rejection ${group.oldFormRejected ? 'honoured' : 'LEAKED'}`}).`],
   ['dryRun', (group) => ` --dry-run writes nothing, reports the target's real state, and its plan matches the live run entry for entry (${group.pass ? 'verified' : 'FAILED'}).`],
   ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
   ['bottleneckTies', (group) => ` The bottleneck line names ${group.tieCount} tied subsystem(s) as a tie instead of picking one (${group.pass ? 'verified' : 'FAILED'}).`],
@@ -220,6 +220,43 @@ const SEEDED_VIOLATION = '\n状态写入 feature_list.json 与 progress.md；产
 // at all. The term is here so that branch cannot be dropped quietly.
 const ROUTING_TERMS = ['superpowers', '引导词', '不在场', '判不出', 'mattpocock'];
 const missingRoutingTerms = (text) => ROUTING_TERMS.filter((term) => !text.includes(term));
+
+// The maintenance trigger's semantics — and why the first version of this gate was not enough.
+//
+// The wrap-up step used to fire on a DIFF: "this session touched the instruction file, init.sh or the
+// working rules". That makes the trigger self-referential. Re-assessment can only happen where a
+// change already happened, so a session that exposes staleness without opening the file — a command
+// that no longer works, a convention agreed in passing, a gotcha worth a working rule — never reaches
+// the pass that would fix it. Harness rot is silent by construction ("harness 不会腐化出声"), which
+// is exactly why a trigger keyed on "was it touched" cannot see it. The trigger now keys on the
+// session's OUTPUT: did this session produce something that leaves the instruction file, init.sh or
+// the working rules stale or thin? "Nothing to change" is a legitimate outcome, so this does not
+// license churn; it removes the circularity.
+//
+// The old gate asserted only that the skill NAME appeared in the wrap-up section. The diff-keyed
+// sentence named harness-creator too, so that gate had ZERO coverage of the semantics it appeared to
+// guard — it stayed green across the very rewrite it should have demanded. Terms are all-of, never
+// any-of: `structuredHas` is `.some()` and cannot express a conjunction, so the predicate is written
+// out. Each term is load-bearing and proven individually (per-term arm in checkMaintenanceTrigger),
+// and the negative arm requires the OLD diff-keyed sentence to be REJECTED, so a render cannot satisfy
+// the gate on vocabulary alone.
+//
+// Declared here, ahead of the runSelfCheck() call site (line 343), for the temporal-dead-zone reason
+// this file has already paid for three times.
+const MAINTENANCE_TERMS = ['会话产出', '按需优化', 'harness-creator'];
+// Verbatim from `templates/agents.md` as it stood before 09-25. It is the negative arm's fixture now;
+// nothing renders it any more, so it must not be kept in sync with the template.
+const MAINTENANCE_OLD_FORM = '3. **长任务收口后复盘 harness**：本次会话改过本文件、`init.sh` 或工作规则时，'
+  + '用 **harness-creator** 重新评估';
+// Section-scoped rather than whole-file on purpose — the skill name appears in the delegation
+// section too, so a file-wide match would stay green after the wrap-up step was deleted, and a
+// file-wide strip would remove the copy that does not matter. Declared HERE, not next to the
+// functions that use it: those run from inside runSelfCheck(), which is invoked at line 343, so a
+// const sitting beside them is still in its temporal dead zone when first read. This file has paid
+// for that mistake four times now, always with the same symptom — a FAIL that looks like a missing
+// feature rather than an uninitialised binding.
+const maintenanceSection = (text) =>
+  text.split(/^##\s+/m).slice(1).find((part) => part.startsWith('会话结束')) || '';
 
 // Declared at module scope, ahead of the runSelfCheck() call: a const sitting next to the function
 // that reads it would still be in its temporal dead zone at that call site.
@@ -323,10 +360,12 @@ Runs a lightweight harness benchmark:
      reporting success at the default one, and the report a human reads must name the subsystem
      count the model actually has — seeded on both sides, since a detector that finds nothing is
      indistinguishable from one that looks for nothing.
- 16. Checks the maintenance trigger: the generated instruction file must tell the agent to re-assess
-     the harness at wrap-up when the session touched the harness files, so maintenance has a signal
-     instead of relying on someone remembering. Seeded by removing that line, because a presence
-     check that would also pass on a blind scanner is worth nothing.
+ 16. Checks the maintenance trigger: the generated instruction file must tell the agent to optimise
+     the harness at wrap-up when the session's own output leaves it stale or thin — NOT when the
+     harness files happen to have been touched, which is self-referential and can only see rot it
+     already fixed. Seeded on both sides: each term is dropped in turn to prove it is load-bearing,
+     and the old diff-keyed sentence must be rejected, so the gate cannot be satisfied by the new
+     vocabulary bolted onto the old condition.
  17. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
@@ -408,8 +447,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Scope brake: ${pass ? 'PASS' : 'FAIL'} — engineering workflow delegated in the generated AGENTS.md: ${brake ? 'ok' : 'NO'}; routes between both owners on a runtime condition: ${routing ? 'ok' : `MISSING (${missingRouting.join(', ')})`}; routing detector has teeth: ${routingTeeth ? 'ok' : 'BLIND'}; doctrine carried over from the removed scope: ${leaked.length === 0 ? 'none' : `LEAKED (${leaked.join(', ')})`}; detector catches a seeded violation: ${seeded.length >= 7 ? 'ok' : `BLIND (${seeded.length}/7 patterns)`}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.maintenance) {
-    const { pass, stated, teeth, error } = selfCheck.maintenance;
-    lines.push(`  Maintenance trigger: ${pass ? 'PASS' : 'FAIL'} — wrap-up step tells the agent to re-assess the harness: ${stated ? 'ok' : 'MISSING'}; detector has teeth against the line being removed: ${teeth ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
+    const { pass, stated, missing = [], teeth, oldFormRejected, error } = selfCheck.maintenance;
+    lines.push(`  Maintenance trigger: ${pass ? 'PASS' : 'FAIL'} — wrap-up step keys on the session's own output leaving the harness stale, not on the harness files having been touched: ${stated ? 'ok' : `MISSING (${missing.join(', ') || 'section not found'})`}; per-term detector: ${teeth ? 'ok' : 'BLIND'}; diff-keyed phrasing rejected: ${oldFormRejected ? 'ok' : 'LEAKED'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.dryRun) {
     const { pass, changesNothing, previewedFiles, reflectsState, planMatchesRun, wrote = [], error } = selfCheck.dryRun;
@@ -683,13 +722,20 @@ async function checkScopeBoundary() {
 //
 // Keyed on the skill NAME inside the wrap-up section, because that is the only form that resolves
 // from the target repo: a path relative to the skill repository is dead on arrival there, and a
-// concrete runtime path varies by host. Section-scoped rather than whole-file on purpose — the
-// name appears in the delegation section too, so a file-wide match would stay green after the
-// wrap-up step was deleted. The detector is then shown the render with those lines removed; a
-// presence check that would also pass on a scanner looking for nothing is worth nothing.
+// concrete runtime path varies by host. (maintenanceSection() itself is declared up with the terms.)
 function maintenanceTriggerStated(text) {
-  const section = text.split(/^##\s+/m).slice(1).find((part) => part.startsWith('会话结束')) || '';
-  return /harness-creator/.test(section);
+  const section = maintenanceSection(text);
+  const missing = MAINTENANCE_TERMS.filter((term) => !section.includes(term));
+  return { stated: missing.length === 0, missing };
+}
+
+// Scoped to the wrap-up section for the same reason the predicate is, and removing EVERY occurrence
+// of the term rather than the first: a term that appears in both the step's heading and its body
+// (会话产出 does) would otherwise survive the strip, and the arm would report BLIND on a render that
+// is in fact correctly keyed. The arm asks "is this term gone?", so it has to make it gone.
+function maintenanceWithout(text, term) {
+  const section = maintenanceSection(text);
+  return section ? text.replace(section, section.split(term).join('')) : text;
 }
 
 async function checkMaintenanceTrigger() {
@@ -698,12 +744,19 @@ async function checkMaintenanceTrigger() {
     dir = await mkdtemp(path.join(os.tmpdir(), 'harness-maintenance-'));
     await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
     const rendered = await readText(path.join(dir, 'AGENTS.md'));
-    const stated = maintenanceTriggerStated(rendered);
-    const stripped = rendered.split('\n').filter((line) => !line.includes('harness-creator')).join('\n');
-    const teeth = stripped !== rendered && !maintenanceTriggerStated(stripped);
-    return { pass: stated && teeth, stated, teeth };
+    const { stated, missing } = maintenanceTriggerStated(rendered);
+    // Per-term arm: drop exactly one term from the wrap-up section and require the predicate to name
+    // exactly that term, so a render that kept the owner name while losing the output criterion
+    // cannot pass on the strength of its survivors.
+    const teeth = MAINTENANCE_TERMS.every((term) =>
+      maintenanceTriggerStated(maintenanceWithout(rendered, term)).missing.includes(term));
+    // Negative arm: the diff-keyed sentence this gate replaced must be REJECTED outright. Without it
+    // the gate would still accept that sentence with the new vocabulary bolted on.
+    const oldForm = `## 会话结束\n\n${MAINTENANCE_OLD_FORM}，候选改动列出后再落地；不做全仓审计\n`;
+    const oldFormRejected = !maintenanceTriggerStated(oldForm).stated;
+    return { pass: stated && teeth && oldFormRejected, stated, missing, teeth, oldFormRejected };
   } catch (error) {
-    return { pass: false, stated: false, teeth: false, error: error.message };
+    return { pass: false, stated: false, missing: [], teeth: false, oldFormRejected: false, error: error.message };
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
   }
