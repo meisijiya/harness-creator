@@ -53,7 +53,7 @@ license: MIT
 |---|---|---|
 | 1 | 创建 | 产物清单 + 确认的参数 → `AGENTS.md` + `init.sh` |
 | 2 | 审计 | 目标仓路径 → 三子系统得分 + 候选瓶颈 + 前 2-3 项改动 |
-| 3 | 报告 | 目标仓路径 + 输出路径 → `--html` 报告（需分享时才做，按需） |
+| 3 | 报告 | 目标仓路径 + 输出路径 → 三子系统体检 HTML（需分享时才做） |
 | 4 | 更新 | 目标仓路径 → 候选改动清单，🔴 获批后落地 |
 
 ### 创建 harness
@@ -85,7 +85,7 @@ node <技能目录>/scripts/render-assessment-html.mjs --target /path/to/project
 node <技能目录>/scripts/run-benchmark.mjs --target /path/to/project --html /path/to/report.html
 ```
 
-这是**结构性**基准测试。它先自检——在临时目录搭一套 harness 并验证，证明随附脚本能端到端跑通——再给目标与 eval 覆盖打分。真实有效性仍需在代表任务上做前后对照会话。
+前者只出三子系统体检；后者是**结构性**基准：先自检（临时目录搭一套 harness 并端到端验证随附脚本），再给目标与 eval 覆盖打分。真实有效性仍需在代表任务上做前后对照会话。
 
 ## 何时阅读参考文档
 
