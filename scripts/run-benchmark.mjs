@@ -125,8 +125,8 @@ const DISCOVERABLE_CONTENT = [
 // a file the skill no longer writes is the same "check and template on the same side" defect one
 // level up: the gate would be asserting the existence of the thing that was removed.
 const SELF_CHECK_GROUPS = [
-  'budget', 'agentsBudget', 'agentsDiscover', 'scopeBrake', 'maintenance', 'dryRun', 'selfRefs',
-  'bottleneckTies', 'blankGate', 'blueprint', 'agentFile', 'reportContract'
+  'budget', 'agentsBudget', 'agentsDiscover', 'scopeBrake', 'maintenance', 'skillDesign', 'dryRun',
+  'selfRefs', 'bottleneckTies', 'blankGate', 'blueprint', 'agentFile', 'reportContract'
 ];
 
 // One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
@@ -139,6 +139,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['agentsDiscover', (group) => ` The instruction file does not restate what the agent can read for itself, and the detector is proven to have teeth by a seeded violation (${group.pass ? 'verified' : 'FAILED'}).`],
   ['scopeBrake', (group) => ` The generated instruction file routes between its two delegated owners on a runtime condition, names to-tickets, handoff and their setup prerequisite, and carries none of the removed doctrine (${group.pass ? 'verified' : `missing routing ${(group.missingRouting || []).join(', ') || 'none'}; routing detector ${group.routingTeeth ? 'has teeth' : 'BLIND'}; brake ${group.brake ? 'present' : 'MISSING'}; leaked ${(group.leaked || []).join(', ') || 'none'}; doctrine detector ${group.seeded?.length ? 'has teeth' : 'BLIND'}`}).`],
   ['maintenance', (group) => ` Harness maintenance has a moment to happen: the generated instruction file tells the agent to optimise the harness at wrap-up when the session's own output leaves it stale or thin, rather than when the harness files happen to have been touched, and the detector is proven to have teeth per term and against the old diff-keyed phrasing (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old-form rejection ${group.oldFormRejected ? 'honoured' : 'LEAKED'}`}).`],
+  ['skillDesign', (group) => ` The skill's own design rules are machine-checked rather than trusted to prose: SKILL.md's design section states the wrap-up criterion on the session's own output, and the detector is proven to have teeth per term, against the pre-09-25 rule line, against the old condition wearing the new vocabulary, and against a shortened requirement list (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; diff key ${(group.leaked || []).length ? `LEAKED (${group.leaked.join(', ')})` : 'absent'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old rule line ${group.oldFormRejected ? 'rejected' : 'ACCEPTED'}; hybrid form ${group.hybridRejected ? 'rejected' : 'ACCEPTED'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}`}).`],
   ['dryRun', (group) => ` --dry-run writes nothing, reports the target's real state, and its plan matches the live run entry for entry (${group.pass ? 'verified' : 'FAILED'}).`],
   ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
   ['bottleneckTies', (group) => ` The bottleneck line names ${group.tieCount} tied subsystem(s) as a tie instead of picking one (${group.pass ? 'verified' : 'FAILED'}).`],
@@ -258,6 +259,57 @@ const MAINTENANCE_OLD_FORM = '3. **长任务收口后复盘 harness**：本次�
 const maintenanceSection = (text) =>
   text.split(/^##\s+/m).slice(1).find((part) => part.startsWith('会话结束')) || '';
 
+// Every design rule in SKILL.md was unguarded prose until this gate. The suite reads the artifact a
+// target repo receives, and SKILL.md is mentioned in this file exactly twice: a byte count
+// (checkSkillBudget) and a path-shape scan (checkSelfReferencePaths). Neither reads a word of it.
+// Measured 09-25: deleting the wrap-up rule outright still yielded Self-check PASS and eval 100/100,
+// and the bytes freed by the deletion made the budget line GREENER — the cap has only a ceiling, no
+// floor, so dropping a rule is rewarded. A rule that decides whether the skill is ever invoked
+// again cannot rest on that: the same failure mode as "a rule with no mechanical carrier loses to
+// one successful wrong action", one level up — here it is the skill's own body that had no carrier.
+//
+// Scoped to the 设计规则 section, and to the one rule in it that nothing else covers. The neighbours
+// already have carriers — "keep the instruction file short" is enforced against the render by
+// checkAgentFileBudget and checkAgentFileDiscoverability, "verification commands must be runnable"
+// by checkBlankProjectGate and checkSelfReferencePaths — so asserting them here would put a second
+// gate on the same invariant. The wrap-up rule is the one with nothing underneath it.
+//
+// Two-sided on purpose, because either side alone is satisfied by a degenerate file: the criterion
+// must be PRESENT and the diff key it replaced must be ABSENT. The old rule (94af583) shared its
+// scope wording with the new one verbatim — both say 本技能所管的文件 — and differed only in what
+// triggered it, so the discriminating term is the criterion, not the scope. The absent-arm closes
+// the hole that an all-of check otherwise leaves open: new vocabulary bolted onto the old condition
+// satisfies a terms-only predicate, which is exactly what the maintenance gate's comment promises to
+// prevent and its arms do not. Declared here, ahead of the runSelfCheck() call site, for the
+// temporal-dead-zone reason this file has now paid for four times.
+const SKILL_DESIGN_TERMS = ['收尾', '按会话产出', '本技能所管的文件'];
+// Verbatim from SKILL.md at 94af583, the last release before the 09-25 ruling. Fixture for the
+// negative arm only; nothing renders it any more, so it must not be kept in sync with SKILL.md.
+const SKILL_DESIGN_OLD_FORM = '- 收尾只作用于**本技能所管的文件**中本会话改动的部分，不做全仓审计；'
+  + '跨会话交接由用户调用 `handoff` 产生——本技能不创建、也不管其文档。';
+// One phrase, not a list: a prohibition no fixture witnesses is a prohibition that can be narrowed
+// silently. This is the diff key as it actually stood in the design section before 09-25.
+const SKILL_DESIGN_FORBIDDEN = ['本会话改动的部分'];
+// Independent witness for SKILL_DESIGN_TERMS, and the reason it is written out by hand rather than
+// derived from the list above: a loop over SKILL_DESIGN_TERMS cannot notice a term being DROPPED from
+// that list — it simply stops testing that term, and every arm stays green. Measured, not imagined:
+// probe arm 8 removed 按会话产出 from the list with SKILL.md untouched and the gate came back PASS.
+// (The old-form fixture cannot cover this either: it is refused by the forbidden phrase as well, so
+// its verdict is indifferent to which terms are required. That claim was in this comment until the
+// arm disproved it.) Each entry below is the shipped rule with exactly one term deleted, so it is
+// refused if and only if that term is genuinely required — the names appear twice, on purpose.
+const SKILL_DESIGN_INCOMPLETE_FORMS = [
+  ['收尾', '- ＝按会话产出按需优化**本技能所管的文件**（指令文件、`init.sh`、工作规则）。'],
+  ['按会话产出', '- 收尾＝按需优化**本技能所管的文件**（指令文件、`init.sh`、工作规则）。'],
+  ['本技能所管的文件', '- 收尾＝按会话产出按需优化（指令文件、`init.sh`、工作规则）。']
+];
+// Section-scoped rather than whole-file: the old wording is still quoted on purpose in the
+// maintenance reference and the README as a counter-example, and a file-wide arm would flag that
+// deliberate prose. Declared HERE, not beside the functions that use it — those run from inside
+// runSelfCheck(), so a const sitting next to them is still in its temporal dead zone when read.
+const skillDesignSection = (text) =>
+  text.split(/^##\s+/m).slice(1).find((part) => part.startsWith('设计规则')) || '';
+
 // Declared at module scope, ahead of the runSelfCheck() call: a const sitting next to the function
 // that reads it would still be in its temporal dead zone at that call site.
 const SELFTEXT_EXEMPT = new Set(['README.md']);
@@ -296,6 +348,7 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['agentsDiscover', 'AGENTS.md discoverability'],
   ['scopeBrake', 'Scope brake'],
   ['maintenance', 'Maintenance trigger'],
+  ['skillDesign', 'SKILL.md design rule'],
   ['dryRun', 'Dry run'],
   ['selfRefs', 'Self-reference paths'],
   ['bottleneckTies', 'Bottleneck ties'],
@@ -366,7 +419,15 @@ Runs a lightweight harness benchmark:
      already fixed. Seeded on both sides: each term is dropped in turn to prove it is load-bearing,
      and the old diff-keyed sentence must be rejected, so the gate cannot be satisfied by the new
      vocabulary bolted onto the old condition.
- 17. Produces a JSON report and optional HTML report.
+ 17. Checks the skill's OWN design rules, which no other gate can see: every other group reads the
+     artifact a target repo receives, and the only two mentions of SKILL.md in this file are a byte
+     count and a path-shape scan. SKILL.md must still state the wrap-up criterion on the session's
+     own output, must not key it on files having been touched, and may not carry the old condition
+     wearing the new vocabulary. Seeded on four sides — each term dropped in turn, the pre-09-25 rule
+     line rejected, the hybrid form rejected, and an incomplete rule refused by the very term it is
+     missing — because deleting that rule outright used to leave every other gate green and make the
+     byte budget line greener still.
+ 18. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -450,6 +511,10 @@ function consoleSelfCheckLines(selfCheck) {
     const { pass, stated, missing = [], teeth, oldFormRejected, error } = selfCheck.maintenance;
     lines.push(`  Maintenance trigger: ${pass ? 'PASS' : 'FAIL'} — wrap-up step keys on the session's own output leaving the harness stale, not on the harness files having been touched: ${stated ? 'ok' : `MISSING (${missing.join(', ') || 'section not found'})`}; per-term detector: ${teeth ? 'ok' : 'BLIND'}; diff-keyed phrasing rejected: ${oldFormRejected ? 'ok' : 'LEAKED'}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.skillDesign) {
+    const { pass, stated, missing = [], leaked = [], teeth, oldFormRejected, hybridRejected, witness, error } = selfCheck.skillDesign;
+    lines.push(`  SKILL.md design rule: ${pass ? 'PASS' : 'FAIL'} — the skill's own design section states the wrap-up criterion on the session's output: ${stated ? 'ok' : `MISSING (${missing.join(', ') || 'section not found'})`}; the diff key it replaced: ${leaked.length === 0 ? 'absent' : `LEAKED (${leaked.join(', ')})`}; per-term detector: ${teeth ? 'ok' : 'BLIND'}; pre-09-25 rule line rejected: ${oldFormRejected ? 'ok' : 'ACCEPTED'}; hybrid form rejected: ${hybridRejected ? 'ok' : 'ACCEPTED'}; requirement-list shrink caught: ${witness ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
+  }
   if (selfCheck.dryRun) {
     const { pass, changesNothing, previewedFiles, reflectsState, planMatchesRun, wrote = [], error } = selfCheck.dryRun;
     lines.push(`  Dry run: ${pass ? 'PASS' : 'FAIL'} — writes nothing: ${changesNothing ? 'ok' : `NO (still wrote ${wrote.join(', ') || 'files'})`}; plans artifacts: ${previewedFiles ? 'ok' : 'NO'}; reflects existing state: ${reflectsState ? 'ok' : 'NO'}; plan matches the real run: ${planMatchesRun ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
@@ -509,6 +574,7 @@ async function runSelfCheck() {
       agentsDiscover: () => checkAgentFileDiscoverability(),
       scopeBrake: () => checkScopeBoundary(),
       maintenance: () => checkMaintenanceTrigger(),
+      skillDesign: () => checkSkillDesignRule(),
       dryRun: () => checkDryRun(),
       selfRefs: () => checkSelfReferencePaths(),
       bottleneckTies: () => checkBottleneckTies(),
@@ -759,6 +825,79 @@ async function checkMaintenanceTrigger() {
     return { pass: false, stated: false, missing: [], teeth: false, oldFormRejected: false, error: error.message };
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
+  }
+}
+
+// The skill's design rules are the only part of this repository no check could see, because every
+// other group reads the artifact a target repo receives. This one reads SKILL.md itself, which is
+// also why it needs no rendered fixture: the thing under test is the file that ships. Its shape
+// mirrors checkMaintenanceTrigger deliberately — same section scoping, same all-of predicate, same
+// per-term and old-form arms — plus two arms that gate does not have (the hybrid form, and the
+// incomplete form that makes the required vocabulary itself provable).
+function skillDesignRuleStated(text) {
+  const section = skillDesignSection(text);
+  const missing = SKILL_DESIGN_TERMS.filter((term) => !section.includes(term));
+  const leaked = SKILL_DESIGN_FORBIDDEN.filter((phrase) => section.includes(phrase));
+  return { stated: missing.length === 0 && leaked.length === 0, missing, leaked };
+}
+
+// Removes EVERY occurrence of the term rather than the first: a term appearing in both the rule and
+// its own explanation would otherwise survive the strip, and the arm would report BLIND on a correct
+// file. The arm asks "is this term gone?", so it has to make it gone.
+function skillDesignWithout(text, term) {
+  const section = skillDesignSection(text);
+  return section ? text.replace(section, section.split(term).join('')) : text;
+}
+
+async function checkSkillDesignRule() {
+  // No temp directory and no scaffolded harness, unlike every other group: the artifact under test
+  // is a file this skill ships, not one it renders into a target repo.
+  try {
+    const body = await readText(path.join(skillRoot, 'SKILL.md'));
+    const { stated, missing, leaked } = skillDesignRuleStated(body);
+    // Per-term arm: drop exactly one term from the section and require the predicate to name exactly
+    // that term, so a section that kept the scope wording while losing the criterion cannot pass on
+    // the strength of its survivors. (Meaningful only alongside `stated`: a term already absent from
+    // the section strips to nothing, which is why the two are conjoined rather than reported apart.)
+    const teeth = SKILL_DESIGN_TERMS.every((term) =>
+      skillDesignRuleStated(skillDesignWithout(body, term)).missing.includes(term));
+    // Negative arm: the pre-09-25 rule line, set as the section body, must be REJECTED outright.
+    const oldForm = `## 设计规则\n\n- 根指令文件保持简短：只做路由与不变量。\n${SKILL_DESIGN_OLD_FORM}\n`;
+    const oldFormRejected = !skillDesignRuleStated(oldForm).stated;
+    // Contradiction arm, which the maintenance gate does NOT have: the new criterion and the old diff
+    // key in one sentence. Every term is present, so a terms-only predicate accepts it — and this is
+    // the shape a revert-in-place actually takes. The arm is what makes "cannot pass on vocabulary
+    // alone" true here rather than merely asserted in a comment.
+    const hybridForm = '## 设计规则\n\n- 收尾＝按会话产出按需优化**本技能所管的文件**，'
+      + '当本会话改动的部分涉及时。\n';
+    const hybridRejected = !skillDesignRuleStated(hybridForm).stated;
+    // List-shrink arm: each incomplete form must be refused, and it is refused by the term it is
+    // missing — which is what makes the required vocabulary itself provable rather than assumed. This
+    // arm exists because the eighth probe arm proved the other three do not cover it.
+    const witness = SKILL_DESIGN_INCOMPLETE_FORMS.every(([term, text]) =>
+      skillDesignRuleStated(`## 设计规则\n\n${text}\n`).missing.includes(term));
+    return {
+      pass: stated && teeth && oldFormRejected && hybridRejected && witness,
+      stated,
+      missing,
+      leaked,
+      teeth,
+      oldFormRejected,
+      hybridRejected,
+      witness
+    };
+  } catch (error) {
+    return {
+      pass: false,
+      stated: false,
+      missing: [],
+      leaked: [],
+      teeth: false,
+      oldFormRejected: false,
+      hybridRejected: false,
+      witness: false,
+      error: error.message
+    };
   }
 }
 
