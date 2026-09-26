@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import path from 'node:path';
 import {
+  collectCommandReferences,
   htmlReport,
   loadHarnessFiles,
   parseArgs,
@@ -26,7 +27,8 @@ const target = path.resolve(args.target || args._[0] || process.cwd());
 // read: the run prints a success line, exits 0, and writes to the default path instead — the silent
 // degradation this skill forbids in a target repo. The grader asserts the alias against this file.
 const output = path.resolve(args.output || args.html || path.join(target, 'harness-assessment.html'));
-const result = scoreHarness(await loadHarnessFiles(target));
+const files = await loadHarnessFiles(target);
+const result = scoreHarness(files, { references: await collectCommandReferences(target, files) });
 
 await writeText(output, htmlReport(result, `Harness Assessment: ${path.basename(target)}`));
 console.log(`HTML report written to ${output}`);
