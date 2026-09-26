@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import path from 'node:path';
 import {
+  collectCommandReferences,
   formatScoreReport,
   htmlReport,
   loadHarnessFiles,
@@ -29,7 +30,7 @@ Exit code is 0 when the harness scores at least --min-score (default 70).`);
 const target = path.resolve(args.target || args._[0] || process.cwd());
 const minScore = Number(args.minScore || 70);
 const files = await loadHarnessFiles(target);
-const result = scoreHarness(files);
+const result = scoreHarness(files, { references: await collectCommandReferences(target, files) });
 
 if (args.html) {
   const htmlPath = path.resolve(args.html);

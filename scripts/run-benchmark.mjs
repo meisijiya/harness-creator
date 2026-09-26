@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import {
   bottleneckLabel,
+  collectCommandReferences,
   exists,
   formatScoreReport,
   htmlReport,
@@ -126,8 +127,8 @@ const DISCOVERABLE_CONTENT = [
 // level up: the gate would be asserting the existence of the thing that was removed.
 const SELF_CHECK_GROUPS = [
   'budget', 'agentsBudget', 'agentsDiscover', 'scopeBrake', 'maintenance', 'skillDesign',
-  'wrapupOutput', 'dryRun', 'selfRefs', 'bottleneckTies', 'blankGate', 'blueprint', 'agentFile',
-  'reportContract'
+  'wrapupOutput', 'dryRun', 'selfRefs', 'references', 'bottleneckTies', 'blankGate', 'blueprint',
+  'agentFile', 'reportContract'
 ];
 
 // One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
@@ -139,11 +140,12 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['agentsBudget', (group) => ` The generated AGENTS.md stays inside its external byte, line and working-rule budgets (${group.pass ? 'verified' : 'FAILED'}).`],
   ['agentsDiscover', (group) => ` The instruction file does not restate what the agent can read for itself, and the detector is proven to have teeth by a seeded violation (${group.pass ? 'verified' : 'FAILED'}).`],
   ['scopeBrake', (group) => ` The generated instruction file routes between its two delegated owners on a runtime condition, names to-tickets, handoff and their setup prerequisite, and carries none of the removed doctrine (${group.pass ? 'verified' : `missing routing ${(group.missingRouting || []).join(', ') || 'none'}; routing detector ${group.routingTeeth ? 'has teeth' : 'BLIND'}; brake ${group.brake ? 'present' : 'MISSING'}; leaked ${(group.leaked || []).join(', ') || 'none'}; doctrine detector ${group.seeded?.length ? 'has teeth' : 'BLIND'}`}).`],
-  ['maintenance', (group) => ` Harness maintenance has a moment to happen: the generated instruction file tells the agent to optimise the harness at wrap-up when the session's own output leaves it stale or thin, rather than when the harness files happen to have been touched, and the detector is proven to have teeth per term and against the old diff-keyed phrasing (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old-form rejection ${group.oldFormRejected ? 'honoured' : 'LEAKED'}`}).`],
+  ['maintenance', (group) => ` Harness maintenance has a moment to happen: the generated instruction file tells the agent to optimise the harness at wrap-up when the session's own output leaves it stale or thin, rather than when the harness files happen to have been touched, and the detector is proven to have teeth per term, against the retired diff-keyed sentence, against that sentence wearing the new vocabulary, and against a shortened forbidden list (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; retired phrasing ${(group.leaked || []).length ? `LEAKED (${group.leaked.join(', ')})` : 'absent'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old-form rejection ${group.oldFormRejected ? 'honoured' : 'ACCEPTED'}; hybrid form ${group.hybridRejected ? 'rejected' : 'ACCEPTED'}; forbidden-list shrink witness ${group.forbiddenWitness ? 'has teeth' : 'BLIND'}`}).`],
   ['skillDesign', (group) => ` The skill's own design rules are machine-checked rather than trusted to prose: SKILL.md's design section states the wrap-up criterion on the session's own output, and the detector is proven to have teeth per term, against the pre-09-25 rule line, against the old condition wearing the new vocabulary, and against a shortened requirement list (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; diff key ${(group.leaked || []).length ? `LEAKED (${group.leaked.join(', ')})` : 'absent'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old rule line ${group.oldFormRejected ? 'rejected' : 'ACCEPTED'}; hybrid form ${group.hybridRejected ? 'rejected' : 'ACCEPTED'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}`}).`],
   ['wrapupOutput', (group) => ` The wrap-up procedure a maintainer actually reads carries both of its outputs: the candidate changes, and the judgment items that are handed to the user instead of being decided — the part that stops a fresh session from treating already-dead rules as live — plus a net-change report, which is what keeps blind increment from hiding in wording (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; own section ${group.heading ? 'present' : 'ABSENT'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; heading requirement ${group.headingArm ? 'has teeth' : 'BLIND'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}`}).`],
   ['dryRun', (group) => ` --dry-run writes nothing, reports the target's real state, and its plan matches the live run entry for entry (${group.pass ? 'verified' : 'FAILED'}).`],
   ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
+  ['references', (group) => ` A documented command that no longer resolves is caught rather than silently trusted: the audit resolves manifest scripts and runnable files, reports by name what it cannot resolve, and is proven in both directions (${group.pass ? 'verified' : `dangling fixture ${group.danglingCaught ? 'caught' : 'MISSED'}; guarded fixture ${group.guardedExcused ? 'excused' : 'FALSELY FLAGGED'}; unchecked bucket ${group.uncheckedListed ? 'populated' : 'SILENT'}; uncollected scan ${group.uncollectedRefused ? 'refused' : 'PASSED'}`}).`],
   ['bottleneckTies', (group) => ` The bottleneck line names ${group.tieCount} tied subsystem(s) as a tie instead of picking one (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blankGate', (group) => ` A project with nothing to verify — no manifest, or a manifest with no runnable script — gets a placeholder step that exits non-zero instead of reporting a pass it did not earn, and the manual fallback template refuses on the same two shapes (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-description slot stays a visible pending marker when the user has not stated one, while a blueprint change rewrites that slot only — the rest of the file survives byte for byte, and a shape this skill did not render is refused rather than guessed at (${group.pass ? 'verified' : `pending ${group.pendingMarked ? 'ok' : 'NO'}; no stack fill ${group.noInventedFill ? 'ok' : 'NO'}; verbatim ${group.verbatim ? 'ok' : 'NO'}; slot-only ${group.slotRewritten && group.restIntact ? 'ok' : 'NO'}; detector ${group.detectorHasTeeth ? 'has teeth' : 'BLIND'}; refusal ${group.refusalHonoured && group.refusedUntouched ? 'ok' : 'NO'}`}).`],
@@ -251,6 +253,24 @@ const MAINTENANCE_TERMS = ['会话产出', '按需优化', 'harness-creator'];
 // nothing renders it any more, so it must not be kept in sync with the template.
 const MAINTENANCE_OLD_FORM = '3. **长任务收口后复盘 harness**：本次会话改过本文件、`init.sh` 或工作规则时，'
   + '用 **harness-creator** 重新评估';
+// The negative half, mirroring SKILL_DESIGN_FORBIDDEN. Without it the predicate is a pure all-of, so
+// the diff-keyed sentence this gate replaced can be re-landed with the new vocabulary bolted on and
+// the gate stays green — measured on such a hybrid render, which reported PASS. MAINTENANCE_OLD_FORM
+// is a separate literal fixture, so `oldFormRejected` proves the old SENTENCE ALONE is refused; it
+// says nothing about a render carrying both. Neither phrase occurs in the current render, so this
+// axis costs no false positives.
+const MAINTENANCE_FORBIDDEN = ['本次会话改过本文件', '长任务收口后复盘'];
+// Hand-written witnesses for MAINTENANCE_FORBIDDEN, and the reason they are written out rather than
+// derived from it: a loop over that list cannot notice a phrase being DROPPED from it — it simply
+// stops testing that phrase, and every arm stays green. Each form carries all three required terms
+// (so it satisfies the positive side on its own) plus exactly one forbidden phrase, and is refused
+// only if that phrase is genuinely still listed.
+const MAINTENANCE_FORBIDDEN_FORMS = [
+  ['本次会话改过本文件',
+    '## 会话结束\n\n3. **按会话产出按需优化**：本次会话改过本文件时用 **harness-creator** 重新评估\n'],
+  ['长任务收口后复盘',
+    '## 会话结束\n\n3. **长任务收口后复盘**：按会话产出用 **harness-creator** 按需优化\n']
+];
 // Section-scoped rather than whole-file on purpose — the skill name appears in the delegation
 // section too, so a file-wide match would stay green after the wrap-up step was deleted, and a
 // file-wide strip would remove the copy that does not matter. Declared HERE, not next to the
@@ -387,6 +407,7 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['wrapupOutput', 'Wrap-up outputs'],
   ['dryRun', 'Dry run'],
   ['selfRefs', 'Self-reference paths'],
+  ['references', 'Command references'],
   ['bottleneckTies', 'Bottleneck ties'],
   ['blankGate', 'Blank-project gate'],
   ['blueprint', 'Blueprint slot'],
@@ -427,35 +448,42 @@ Runs a lightweight harness benchmark:
      resolves from the skill directory, and no shipped text may point at a bare skills/<name>/
      prefix. The first names an invocation the agent cannot run, the second a file it cannot open,
      both because its cwd is the target repo rather than the skills directory.
- 10. Checks the bottleneck headline: a tie must name every tied subsystem, a unique minimum must
+ 10. Checks command references: a documented command that no longer resolves — a script renamed in
+     package.json, a helper deleted — is caught rather than trusted forever. Seeded in both
+     directions: a dangling reference must fail the audit, while the generator's own has_script
+     guard must NOT, because flagging it would fail the output this skill itself renders. What has no
+     static resolver (pytest, cargo test) is listed by name, since a check that silently skips what
+     it cannot verify reads as full coverage while delivering less.
+ 11. Checks the bottleneck headline: a tie must name every tied subsystem, a unique minimum must
      name one, and a complete harness must report none.
- 11. Checks the blank-project gate: the placeholder verification step must exit non-zero, a real
+ 12. Checks the blank-project gate: the placeholder verification step must exit non-zero, a real
      command must still run, and — asserted through the real generator, not a hand-written string —
      a manifest that defines no check/typecheck/lint/test/build also refuses instead of exiting 0
      having verified nothing. The same invariant has a second producer, the hand-copy fallback
      templates/init.sh, which the generator probes cannot reach: every refusal it prints must be
      armed with a non-zero exit, both refusals must still be present, and a success tail must
      remain. A gate that cannot fail is not a gate.
- 12. Checks the plain-description slot: omitting --blueprint must leave a visible pending marker
+ 13. Checks the plain-description slot: omitting --blueprint must leave a visible pending marker
      rather than stack-derived text, and a supplied description must reach AGENTS.md verbatim.
- 13. Checks the instruction-file invariant: an existing CLAUDE.md must not get a second AGENTS.md
+ 14. Checks the instruction-file invariant: an existing CLAUDE.md must not get a second AGENTS.md
      beside it, and an existing instruction file must stay byte-identical while its missing
      harness sections are still reported.
- 14. Checks the self-check's own coverage: every group in SELF_CHECK_GROUPS must have a bound check,
+ 15. Checks the self-check's own coverage: every group in SELF_CHECK_GROUPS must have a bound check,
      a place in the pass conjunction, a line in the shareable HTML report, and a line on the console
      a human actually reads — four registration points, asserted as one set equality. A gate that
      only ever prints is half a carrier; a gate that is only ever printed is the other half.
- 15. Checks the report contract: the renderer must honour the output path it is handed rather than
+ 16. Checks the report contract: the renderer must honour the output path it is handed rather than
      reporting success at the default one, and the report a human reads must name the subsystem
      count the model actually has — seeded on both sides, since a detector that finds nothing is
      indistinguishable from one that looks for nothing.
- 16. Checks the maintenance trigger: the generated instruction file must tell the agent to optimise
+ 17. Checks the maintenance trigger: the generated instruction file must tell the agent to optimise
      the harness at wrap-up when the session's own output leaves it stale or thin — NOT when the
      harness files happen to have been touched, which is self-referential and can only see rot it
-     already fixed. Seeded on both sides: each term is dropped in turn to prove it is load-bearing,
-     and the old diff-keyed sentence must be rejected, so the gate cannot be satisfied by the new
-     vocabulary bolted onto the old condition.
- 17. Checks the skill's OWN design rules, which no other gate can see: every other group reads the
+     already fixed. Seeded on four sides: each term is dropped in turn to prove it is load-bearing,
+     the old diff-keyed sentence must be rejected, that sentence wearing the new vocabulary must be
+     rejected too, and a shortened forbidden list must be caught — without the last two, a render
+     that reintroduced the old condition while keeping the new words passed this gate.
+ 18. Checks the skill's OWN design rules, which no other gate can see: every other group reads the
      artifact a target repo receives, and the only two mentions of SKILL.md in this file are a byte
      count and a path-shape scan. SKILL.md must still state the wrap-up criterion on the session's
      own output, must not key it on files having been touched, and may not carry the old condition
@@ -463,14 +491,14 @@ Runs a lightweight harness benchmark:
      line rejected, the hybrid form rejected, and an incomplete rule refused by the very term it is
      missing — because deleting that rule outright used to leave every other gate green and make the
      byte budget line greener still.
- 18. Checks the wrap-up procedure a maintainer actually reads: it must produce both of its outputs —
+ 19. Checks the wrap-up procedure a maintainer actually reads: it must produce both of its outputs —
      the candidate changes, and the judgment items handed to the user rather than decided by the
      agent (a rule that is no longer necessary is not wrong, so no command fails and no audit catches
      it) — and it must report the NET change rather than only what was edited. Seeded on four sides:
      each term dropped in turn, a version refused by its own missing term, and a fixture that keeps
      every term while losing the place to put them. The judgment half is the part no tool can settle,
      so the gate proves the handover is stated instead of pretending the tool can make the call.
- 19. Produces a JSON report and optional HTML report.
+ 20. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -480,7 +508,8 @@ const target = path.resolve(args.target || args._[0] || process.cwd());
 const output = path.resolve(args.output || path.join(target, 'harness-benchmark.json'));
 const evalPath = path.resolve(args.evals || path.join(skillRoot, 'evals', 'evals.json'));
 
-const harnessResult = scoreHarness(await loadHarnessFiles(target));
+const targetFiles = await loadHarnessFiles(target);
+const harnessResult = scoreHarness(targetFiles, { references: await collectCommandReferences(target, targetFiles) });
 const evals = await readJson(evalPath);
 const evalResult = scoreEvals(evals);
 const selfCheck = args.noSelfCheck ? { skipped: true } : await runSelfCheck();
@@ -551,8 +580,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Scope brake: ${pass ? 'PASS' : 'FAIL'} — engineering workflow delegated in the generated AGENTS.md: ${brake ? 'ok' : 'NO'}; routes between both owners on a runtime condition: ${routing ? 'ok' : `MISSING (${missingRouting.join(', ')})`}; routing detector has teeth: ${routingTeeth ? 'ok' : 'BLIND'}; doctrine carried over from the removed scope: ${leaked.length === 0 ? 'none' : `LEAKED (${leaked.join(', ')})`}; detector catches a seeded violation: ${seeded.length >= 7 ? 'ok' : `BLIND (${seeded.length}/7 patterns)`}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.maintenance) {
-    const { pass, stated, missing = [], teeth, oldFormRejected, error } = selfCheck.maintenance;
-    lines.push(`  Maintenance trigger: ${pass ? 'PASS' : 'FAIL'} — wrap-up step keys on the session's own output leaving the harness stale, not on the harness files having been touched: ${stated ? 'ok' : `MISSING (${missing.join(', ') || 'section not found'})`}; per-term detector: ${teeth ? 'ok' : 'BLIND'}; diff-keyed phrasing rejected: ${oldFormRejected ? 'ok' : 'LEAKED'}${error ? ` — ${error}` : ''}`);
+    const { pass, stated, missing = [], leaked = [], teeth, oldFormRejected, hybridRejected, forbiddenWitness, error } = selfCheck.maintenance;
+    lines.push(`  Maintenance trigger: ${pass ? 'PASS' : 'FAIL'} — wrap-up step keys on the session's own output leaving the harness stale, not on the harness files having been touched: ${stated ? 'ok' : `MISSING (${missing.join(', ') || 'section not found'})`}; retired diff-keyed phrasing: ${leaked.length === 0 ? 'absent' : `LEAKED (${leaked.join(', ')})`}; per-term detector: ${teeth ? 'ok' : 'BLIND'}; diff-keyed sentence rejected: ${oldFormRejected ? 'ok' : 'ACCEPTED'}; hybrid form rejected: ${hybridRejected ? 'ok' : 'ACCEPTED'}; forbidden-list shrink caught: ${forbiddenWitness ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.skillDesign) {
     const { pass, stated, missing = [], leaked = [], teeth, oldFormRejected, hybridRejected, witness, error } = selfCheck.skillDesign;
@@ -569,6 +598,10 @@ function consoleSelfCheckLines(selfCheck) {
   if (selfCheck.selfRefs) {
     const { pass, offenders = [], checked, error } = selfCheck.selfRefs;
     lines.push(`  Self-reference paths: ${pass ? 'PASS' : 'FAIL'} — ${checked} shipped file(s) checked${offenders.length ? `; unreachable relative path in ${offenders.join(', ')}` : ''}${error ? ` — ${error}` : ''}`);
+  }
+  if (selfCheck.references) {
+    const { pass, danglingCaught, guardedExcused, uncheckedListed, uncollectedRefused, dangling = [], error } = selfCheck.references;
+    lines.push(`  Command references: ${pass ? 'PASS' : 'FAIL'} — a documented command that stops resolving is caught, while a guarded one and an unresolvable one are not mistaken for it: dangling fixture ${danglingCaught ? `caught (${dangling.join(', ')})` : 'MISSED'}; guarded fixture ${guardedExcused ? 'excused' : 'FALSELY FLAGGED'}; what cannot be resolved is listed: ${uncheckedListed ? 'ok' : 'SILENT'}; an uncollected scan fails rather than passing: ${uncollectedRefused ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.bottleneckTies) {
     const { pass, tieCount, uniqueCount, noneCount, tieLabel } = selfCheck.bottleneckTies;
@@ -610,7 +643,8 @@ async function runSelfCheck() {
     // A bare directory with a manifest is the plain case: no mode flag, no fixture project, no
     // signal to detect. If this call ever needs a flag again, a concept has crept back in.
     await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
-    const scored = scoreHarness(await loadHarnessFiles(dir));
+    const scaffolded = await loadHarnessFiles(dir);
+    const scored = scoreHarness(scaffolded, { references: await collectCommandReferences(dir, scaffolded) });
     const minScore = Number(args.minSelfCheckScore || 90);
     // Driven by SELF_CHECK_GROUPS rather than a hand-written conjunction: the previous version listed
     // each group three times (call, conjunction, return object), so a new group could be computed and
@@ -625,6 +659,7 @@ async function runSelfCheck() {
       wrapupOutput: () => checkWrapupOutputs(),
       dryRun: () => checkDryRun(),
       selfRefs: () => checkSelfReferencePaths(),
+      references: () => checkCommandReferences(),
       bottleneckTies: () => checkBottleneckTies(),
       blankGate: () => checkBlankProjectGate(),
       blueprint: () => checkBlueprintSlot(),
@@ -837,10 +872,16 @@ async function checkScopeBoundary() {
 // Keyed on the skill NAME inside the wrap-up section, because that is the only form that resolves
 // from the target repo: a path relative to the skill repository is dead on arrival there, and a
 // concrete runtime path varies by host. (maintenanceSection() itself is declared up with the terms.)
+//
+// All-of on the required terms AND none-of on the forbidden ones. The positive half alone is not a
+// gate: it is satisfied by any render that mentions the three words — including the sentence this
+// gate was built to retire, with those words added to it. That hybrid measured PASS before this axis
+// existed, so `stated` has to carry both halves or the gate is vocabulary-shaped decoration.
 function maintenanceTriggerStated(text) {
   const section = maintenanceSection(text);
   const missing = MAINTENANCE_TERMS.filter((term) => !section.includes(term));
-  return { stated: missing.length === 0, missing };
+  const leaked = MAINTENANCE_FORBIDDEN.filter((phrase) => section.includes(phrase));
+  return { stated: missing.length === 0 && leaked.length === 0, missing, leaked };
 }
 
 // Scoped to the wrap-up section for the same reason the predicate is, and removing EVERY occurrence
@@ -858,19 +899,55 @@ async function checkMaintenanceTrigger() {
     dir = await mkdtemp(path.join(os.tmpdir(), 'harness-maintenance-'));
     await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
     const rendered = await readText(path.join(dir, 'AGENTS.md'));
-    const { stated, missing } = maintenanceTriggerStated(rendered);
+    const { stated, missing, leaked } = maintenanceTriggerStated(rendered);
     // Per-term arm: drop exactly one term from the wrap-up section and require the predicate to name
     // exactly that term, so a render that kept the owner name while losing the output criterion
     // cannot pass on the strength of its survivors.
     const teeth = MAINTENANCE_TERMS.every((term) =>
       maintenanceTriggerStated(maintenanceWithout(rendered, term)).missing.includes(term));
-    // Negative arm: the diff-keyed sentence this gate replaced must be REJECTED outright. Without it
-    // the gate would still accept that sentence with the new vocabulary bolted on.
+    // Negative arm: the diff-keyed sentence this gate replaced must be REJECTED outright.
+    //
+    // Correction, 09-26. This comment used to continue "Without it the gate would still accept that
+    // sentence with the new vocabulary bolted on." That was false when written and stayed false:
+    // `oldForm` is a literal fixture, so this arm exercises a string the suite never renders, and it
+    // said nothing about the render it was cited to protect. Measured: a hybrid render carrying the
+    // old sentence AND all three new terms reported PASS. The hybrid arm below is the assertion that
+    // sentence claimed to be.
     const oldForm = `## 会话结束\n\n${MAINTENANCE_OLD_FORM}，候选改动列出后再落地；不做全仓审计\n`;
     const oldFormRejected = !maintenanceTriggerStated(oldForm).stated;
-    return { pass: stated && teeth && oldFormRejected, stated, missing, teeth, oldFormRejected };
+    // The retired sentence with the required vocabulary bolted on. It satisfies the positive half by
+    // construction, so it is refused only by the negative half — the assertion the old comment
+    // described and the code did not make.
+    const hybridForm = `## 会话结束\n\n${MAINTENANCE_OLD_FORM}，按会话产出按需优化\n`;
+    const hybridRejected = !maintenanceTriggerStated(hybridForm).stated;
+    // Per-phrase witnesses, written out independently of MAINTENANCE_FORBIDDEN. Each form carries
+    // every required term plus exactly one forbidden phrase, so it is refused exactly when that
+    // phrase is still listed — which is what makes a shortened forbidden list fail instead of
+    // quietly testing fewer phrases.
+    const forbiddenWitness = MAINTENANCE_FORBIDDEN_FORMS.every(([phrase, form]) =>
+      maintenanceTriggerStated(form).leaked.includes(phrase));
+    return {
+      pass: stated && teeth && oldFormRejected && hybridRejected && forbiddenWitness,
+      stated,
+      missing,
+      leaked,
+      teeth,
+      oldFormRejected,
+      hybridRejected,
+      forbiddenWitness
+    };
   } catch (error) {
-    return { pass: false, stated: false, missing: [], teeth: false, oldFormRejected: false, error: error.message };
+    return {
+      pass: false,
+      stated: false,
+      missing: [],
+      leaked: [],
+      teeth: false,
+      oldFormRejected: false,
+      hybridRejected: false,
+      forbiddenWitness: false,
+      error: error.message
+    };
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
   }
@@ -1039,6 +1116,67 @@ async function checkSelfReferencePaths() {
   return { pass: offenders.length === 0, offenders, checked };
 }
 
+// The audit scores a dangling command reference now, and a scoring check is only worth what the
+// evidence that it still detects anything is worth. This group holds that check to account with four
+// fixtures, one per way it can be wrong: a reference that no longer resolves must be CAUGHT; a
+// guarded one must NOT be flagged, because the generator wraps every script step and flagging it
+// would fail our own output; what has no resolver must be LISTED rather than silently skipped; and a
+// scan that was never collected must FAIL rather than pass on absence of evidence.
+async function checkCommandReferences() {
+  const fixtures = [];
+  const build = async (name, manifestScripts, initText, agentText) => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), `harness-refs-${name}-`));
+    fixtures.push(dir);
+    if (manifestScripts) {
+      await writeFile(path.join(dir, 'package.json'), JSON.stringify({ name, scripts: manifestScripts }));
+    }
+    await writeFile(path.join(dir, 'init.sh'), initText);
+    await writeFile(path.join(dir, 'AGENTS.md'), agentText);
+    const files = await loadHarnessFiles(dir);
+    return { files, references: await collectCommandReferences(dir, files) };
+  };
+  try {
+    const danglingArm = await build('dangling', { test: 'vitest run' },
+      '#!/bin/bash\nset -e\nnpm run lint\n./scripts/ci.sh\nnpm run test\n',
+      '# X\n\n## Verification Commands\n\n`./init.sh`\n');
+    const guardedArm = await build('guarded', { test: 'vitest run' },
+      '#!/bin/bash\nset -e\nif has_script "lint"; then\n  npm run lint\nfi\nnpm run test\n',
+      '# X\n\n## Verification Commands\n\n- `npm run lint`\n');
+    const uncheckedArm = await build('unchecked', null, '#!/bin/bash\nset -e\npytest -q\n', '# X\n');
+    const uncollectedArm = await build('uncollected', null, '#!/bin/bash\nset -e\n', '# X\n');
+
+    const danglingCaught = danglingArm.references.dangling.includes('npm run lint')
+      && danglingArm.references.dangling.includes('./scripts/ci.sh');
+    const guardedExcused = guardedArm.references.dangling.length === 0
+      && guardedArm.references.guarded.includes('npm run lint');
+    const uncheckedListed = uncheckedArm.references.unchecked.includes('pytest');
+    // Absence of evidence must not read as evidence of absence: a scan that was never collected has
+    // to fail the check, not skip it.
+    const uncollectedRefused = scoreHarness(uncollectedArm.files, {}).subsystems.verification.checks
+      .some((check) => !check.pass && /reference scan not collected/.test(check.message));
+    return {
+      pass: danglingCaught && guardedExcused && uncheckedListed && uncollectedRefused,
+      danglingCaught,
+      guardedExcused,
+      uncheckedListed,
+      uncollectedRefused,
+      dangling: danglingArm.references.dangling
+    };
+  } catch (error) {
+    return {
+      pass: false,
+      danglingCaught: false,
+      guardedExcused: false,
+      uncheckedListed: false,
+      uncollectedRefused: false,
+      dangling: [],
+      error: error.message
+    };
+  } finally {
+    for (const dir of fixtures) await rm(dir, { recursive: true, force: true });
+  }
+}
+
 // Read three ways by the check below, so a detector that looks for nothing cannot pass as one that
 // finds nothing: the live report must state the model's count at all, a seeded contradiction must
 // be rejected, and every count other than the model's has to come back as an offender.
@@ -1191,7 +1329,13 @@ function scoreEvals(evalsJson) {
     // sentence; only a case shows whether an agent, handed both skill sets, routes rather than asking
     // the user which one is installed — and whether it keeps state and handoff with the owner that
     // can actually serve them. Same split the maintenance and blueprint entries record above.
-    ['Covers the two-owner routing condition', /分流/]
+    ['Covers the two-owner routing condition', /分流/],
+    // Added with the command-reference check in the verification subsystem. The gate proves the
+    // SCRIPT flags a dead command; only a case shows whether an agent handed a harness whose own
+    // docs name a script that no longer exists reports that, rather than trusting the prose — and
+    // whether it keeps the check honest in both directions: no false alarm on a guarded command,
+    // and no quiet pass over what it could not resolve.
+    ['Covers command reference integrity', /命令引用/]
   ];
   for (const [message, pattern] of familyEntries) {
     checks.push({ pass: cases.some((item) => pattern.test(item.name)), message });

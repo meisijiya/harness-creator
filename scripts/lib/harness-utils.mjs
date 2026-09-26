@@ -392,7 +392,156 @@ export function dedupe(values) {
   return [...new Set(values)];
 }
 
-export function scoreHarness(files) {
+// --- Command references ---------------------------------------------------------------
+//
+// A harness is a set of instructions to run things. When one of those things stops existing — a
+// script renamed in package.json, a helper deleted — nothing else fails: the harness keeps telling
+// the agent to run a command that no longer resolves, and no score moves. This is the one species of
+// staleness that can be settled without judgment, so it is settled mechanically here. The rest
+// cannot be, which is why the wrap-up procedure hands those items to the user instead.
+//
+// Two constraints shape the design. (1) It never executes the target's init.sh: scoring arbitrary
+// repositories by running them is a different tool with a different risk profile, and the failure
+// above is visible from the text. (2) Partial coverage has to stay visible. Resolvers exist for
+// manifest scripts and for runnable files; `pytest -q`, `cargo test` and friends have no local
+// existence proof. Those land in `unchecked` and are reported BY NAME, because a check that silently
+// skips what it cannot verify reads as full coverage while delivering less.
+//
+// Deliberately NOT checked: documentation and configuration references such as
+// `docs/agents/issue-tracker.md`. The upstream setup skills create those on their own schedule, so
+// flagging their absence would fail a correct harness — and a scorer that fails a correct outcome is
+// worse than no scorer.
+const MANIFEST_MANAGERS = new Set(['npm', 'pnpm', 'yarn', 'bun']);
+// Requires a `./` prefix or an embedded slash. A bare `build.sh` in prose usually names a file the
+// reader is expected to have, not one this harness promises exists; flagging it is the
+// false-positive shape described above. Executable extensions only, for the same reason.
+const RUNNABLE_REFERENCE = /^(?:\.{1,2}\/[\w./-]+|[\w.-]+\/[\w./-]+)\.(?:sh|bash|zsh|mjs|cjs|js|ts|py|rb|go|rs)$/;
+// Words that can open a command segment but name no binary. `has_script` is deliberately absent: it
+// is a function the generated init.sh defines itself, and shellFunctions() excludes it by the same
+// rule that would exclude any other helper — the directory, not a list, is what decides.
+const SHELL_WORDS = new Set([
+  'if', 'then', 'else', 'elif', 'fi', 'for', 'while', 'until', 'do', 'done', 'case', 'esac', 'in',
+  'function', 'return', 'local', 'export', 'declare', 'typeset', 'unset', 'echo', 'printf', 'exit',
+  'set', 'cd', 'pwd', 'test', 'source', 'true', 'false', 'read', 'trap', 'shift', 'eval', 'exec',
+  'command', 'wait', 'let', 'break', 'continue', ':', '[', ']'
+]);
+
+// Functions the file defines are callable names, not external commands. Without this the generated
+// init.sh's own `has_script` helper would be reported as an unresolvable command on every harness
+// this skill renders — the false-positive shape again, this time aimed at our own output.
+function shellFunctions(text) {
+  const names = new Set();
+  for (const match of text.matchAll(/(?:^|[\n;])\s*([A-Za-z_][\w-]*)\s*\(\)\s*\{/g)) names.add(match[1]);
+  return names;
+}
+
+export async function collectCommandReferences(root, files) {
+  const byPath = new Map(files.map((file) => [file.path, file.content]));
+  const sources = [
+    ['init.sh', byPath.get('init.sh') || ''],
+    ['AGENTS.md', byPath.get('AGENTS.md') || byPath.get('CLAUDE.md') || '']
+  ];
+
+  // Guard detection is deliberately cross-file. A script that the harness's executable gate skips
+  // with a notice is handled on that basis, and the instruction file's "required checks" list naming
+  // the same script describes that gate rather than making an independent promise. Scoping the guard
+  // to its own file made the generator's OWN output fail: init.sh wraps `npm run lint` in
+  // `has_script "lint"` while AGENTS.md lists it plainly, so one command collected two verdicts —
+  // guarded on one side, dangling on the other.
+  const guardedScripts = new Set();
+  for (const match of sources[0][1].matchAll(/has_script\s+"([^"]+)"/g)) guardedScripts.add(match[1]);
+
+  let manifestScripts = null;
+  const manifestPath = path.join(root, 'package.json');
+  if (await exists(manifestPath)) {
+    try {
+      const manifest = JSON.parse(await readText(manifestPath));
+      if (manifest && typeof manifest.scripts === 'object' && manifest.scripts) {
+        manifestScripts = manifest.scripts;
+      }
+    } catch {
+      // An unparseable manifest proves nothing, so script references fall to `unchecked` rather than
+      // being called dangling on the strength of a file this scan could not read.
+      manifestScripts = null;
+    }
+  }
+
+  const resolved = [];
+  const dangling = [];
+  const guarded = [];
+  const unchecked = [];
+  const push = (bucket, value) => { if (!bucket.includes(value)) bucket.push(value); };
+
+  for (const [source, text] of sources) {
+    const defined = shellFunctions(text);
+    for (const rawLine of text.split(/\r?\n/)) {
+      const line = rawLine.replace(/(^|\s)#.*$/, '').trim();
+      if (!line) continue;
+      for (const segment of line.split(/[;|&]+/)) {
+        const tokens = segment.trim().replace(/[`"']/g, ' ').split(/[\s()<>{}]+/).filter(Boolean);
+        if (tokens.length === 0) continue;
+        // Whether this segment already carries a reference the stronger buckets can speak to. A
+        // covered segment is not ALSO reported as an unresolvable binary: the file or manifest check
+        // is the more specific statement, and emitting both would double-count one command.
+        let covered = false;
+        for (let i = 0; i < tokens.length; i += 1) {
+          const token = tokens[i];
+          if (MANIFEST_MANAGERS.has(token)) {
+            covered = true;
+            const name = tokens[i + 1] === 'run' ? tokens[i + 2] : tokens[i + 1];
+            if (!name) continue;
+            // Install/exec/create are prerequisites, not verification commands, and no static scan
+            // proves them. They are reported rather than dropped — the bucket exists so that what
+            // could not be checked stays on the record.
+            if (NON_SCRIPT_ARGS.has(name)) { push(unchecked, `${token} ${name}`); continue; }
+            const label = `${token} run ${name}`;
+            if (!manifestScripts) { push(unchecked, label); continue; }
+            if (Object.prototype.hasOwnProperty.call(manifestScripts, name)) { push(resolved, label); continue; }
+            // A script the manifest does not define is a handled skip when the harness's own gate
+            // wraps it, not a broken reference. Flagging it would fail the generator's own output.
+            if (guardedScripts.has(name)) { push(guarded, label); continue; }
+            push(dangling, label);
+            continue;
+          }
+          const candidate = token.replace(/[.,;:]+$/, '');
+          if (RUNNABLE_REFERENCE.test(candidate)) {
+            covered = true;
+            if (await exists(path.resolve(root, candidate))) push(resolved, candidate);
+            else push(dangling, candidate);
+          }
+        }
+        // Command-position names are tracked for init.sh only: that is the file which actually runs,
+        // so a binary there that no resolver knows is a real gap. The instruction file is prose.
+        if (source !== 'init.sh' || covered) continue;
+        // Read the lead from the segment BEFORE its first quote. Quoted text is data — an echo
+        // banner, or the body of `node -e "…"` — and tokenising it reported `process.exit` as a
+        // command name, which asserts a program that does not exist.
+        const leadText = segment.split(/["'`]/)[0].trim();
+        const lead = leadText ? leadText.split(/\s+/)[0] : '';
+        if (!lead || !/^[A-Za-z_][\w.-]*$/.test(lead)) continue;
+        if (SHELL_WORDS.has(lead) || defined.has(lead)) continue;
+        push(unchecked, lead);
+      }
+    }
+  }
+
+  return { resolved, dangling, guarded, unchecked };
+}
+
+// One sentence, because both reporting surfaces print `check.message` verbatim. The unchecked list
+// is present whenever it is non-empty — that is the entire point of the bucket.
+function referencesCheck(references, message = 'Documented commands resolve') {
+  if (!references) {
+    return { pass: false, message: `${message} (reference scan not collected — unverified, not resolved)` };
+  }
+  const { resolved = [], dangling = [], guarded = [], unchecked: uncheckedRefs = [] } = references;
+  const parts = [`${resolved.length} resolved`, `${guarded.length} guarded`];
+  if (uncheckedRefs.length) parts.push(`${uncheckedRefs.length} not statically checkable: ${uncheckedRefs.join(', ')}`);
+  if (dangling.length) parts.unshift(`DANGLING: ${dangling.join(', ')}`);
+  return { pass: dangling.length === 0, message: `${message} (${parts.join('; ')})` };
+}
+
+export function scoreHarness(files, { references } = {}) {
   const byPath = new Map(files.map((file) => [file.path, file.content]));
   const allText = files.map((file) => `${file.path}\n${file.content}`).join('\n\n');
   const agents = byPath.get('AGENTS.md') || byPath.get('CLAUDE.md') || '';
@@ -431,7 +580,13 @@ export function scoreHarness(files) {
       textHas(init, ['set -e'], 'Verification fails fast'),
       textHas(init + agents, ['test', 'pytest', 'vitest', 'cargo test', 'go test', 'dotnet test', '测试'], 'Test command documented'),
       textHas(init + agents, ['build', 'type', 'lint', 'compile', '类型', '构建'], 'Static/build check documented'),
-      textHas(allText, ['Evidence', 'Verification Evidence', 'command and output', '证据', 'CI'], 'Verification evidence is recorded')
+      textHas(allText, ['Evidence', 'Verification Evidence', 'command and output', '证据', 'CI'], 'Verification evidence is recorded'),
+      // Inside the existing verification subsystem, never a fourth one: the three subsystems are a
+      // ratified boundary, and a dangling command is a verification defect — the harness names a
+      // check that cannot run. `references` is threaded in from the caller because resolving it needs
+      // the target root (package.json, file existence), which loadHarnessFiles deliberately does not
+      // read: its candidates remain exactly the artifacts this skill ships.
+      referencesCheck(references)
     ],
     scope: [
       structuredHas(agents, ['One feature at a time', 'one-feature-at-a-time', 'one requirement at a time', 'one ticket at a time', '一次一个功能', '一次一个需求', '一次一个工单'], 'One-ticket-at-a-time rule exists'),
