@@ -1,0 +1,5 @@
+timestamp	commit	skill	old_score	new_score	status	dimension	note	eval_mode
+2026-09-29	86eef1e	harness-creator	NA	NA	baseline	任务范围与失败分支	不带skill代理实际执行创建、维护、只读三类任务；创建与候选执行路径不同，不能纯文本归因	full_test
+2026-09-29	candidate	harness-creator	NA	NA	tested	创建/维护/只读	两个独立代理实际执行三类任务；创建臂路径混杂不归因；维护单夹具仅提供有限比较	full_test
+2026-09-29	candidate	harness-creator	NA	NA	tested	授权判断	修后独立代理先预览再实际创建与验证均exit0，无重复确认；无授权/伪造授权仅静态复核	full_test
+2026-09-29	candidate	harness-creator	NA	3-0 better	keep	任务条件与维护契约	A better/clear；B better/slight；C better/clear；不计算绝对总分，不推断生产成功率	paired

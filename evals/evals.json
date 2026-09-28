@@ -276,7 +276,7 @@
       "id": 20,
       "name": "承接方收敛为单一 owner：工程阶段归 mattpocock，superpowers 剔除",
       "prompt": "我机器上 superpowers 还装着，但我不想再让它接工程阶段了。把 AGENTS.md 改成只认 mattpocock 一个体系，别让代理两边看。",
-      "expected_output": "在 AGENTS.md 写出一条无条件的单一 owner 声明：工程阶段整体归 mattpocock 的模型可调用 skill，由它自行分派，既不逐阶段列举也不用任何运行期条件分流；to-tickets（状态与阻塞边）与 handoff（会话交接）具名固定，前置是一次性运行 /setup-matt-pocock-skills。不得把 superpowers 留成任何分支、兜底或可选项——已剔除的承接方不再出现在生成物里。",
+      "expected_output": "在 AGENTS.md 写出一条无条件的单一 owner 声明：工程阶段整体归 mattpocock 的模型可调用 skill，由它自行分派，既不逐阶段列举也不用任何运行期条件分流；to-tickets（状态与阻塞边）与 handoff（会话交接）具名固定，需要 tracker 且未配置时才运行一次 /setup-matt-pocock-skills。不得把 superpowers 留成任何分支、兜底或可选项——已剔除的承接方不再出现在生成物里。",
       "files": [],
       "expectations": [
         "工程阶段整体归 mattpocock，写成无条件声明，不按「系统提示里是否带某个引导词」分流",
@@ -306,11 +306,11 @@
       "id": 22,
       "name": "非工程档：文档目录也要有 harness，但不要工程承接方",
       "prompt": "我有个只放文档的目录（一堆 markdown 加一份目录约定），不写代码。想用 harness-creator 给它建 AGENTS.md 和验证入口，但不要引入 mattpocock 那套工程流程——这里根本没有工程阶段可以交出去。能建吗？建出来长什么样？",
-      "expected_output": "用 --no-engineering-owner 显式选择非工程档（不由目录内容推断），交付仍是同一套两个产物。AGENTS.md 的「状态与交接」一节不具名任何承接方，而是写明状态与进度由项目自有的记录维护、位置由用户指定、本技能不代建；工作规则与完成定义改用交付物口径。验证入口照样要求真实检查（markdownlint、链接检查、frontmatter 校验都算），缺省时 init.sh 仍失败关闭；只有用户显式声明 --no-verification 才允许「本项目无需验证」，且该声明必须同时出现在 AGENTS.md 与 init.sh，脚本只作披露、绝不打印完成横幅。",
+      "expected_output": "用 --no-engineering-owner 显式选择非工程档（不由目录内容推断），交付仍是同一套两个产物。AGENTS.md 的「状态与交接」一节不具名任何承接方，沿用已确认存在的项目自有记录；未配置时在回复中报告证据，仅需持久化才确认位置，不代建记录体系；工作规则与完成定义改用交付物口径，生成物不复制作者身份。验证入口照样要求真实检查（markdownlint、链接检查、frontmatter 校验都算），缺省时 init.sh 仍失败关闭；只有用户显式声明 --no-verification 才允许「本项目无需验证」，且该声明必须同时出现在 AGENTS.md 与 init.sh，脚本只作披露、绝不打印完成横幅。",
       "files": [],
       "expectations": [
         "用显式标志选择档位，不根据「目录里没有 package.json」之类线索推断——同一个线索也描述一个空的工程仓",
-        "生成物与生成的 init.sh 中都不出现承接方名字（mattpocock、to-tickets、handoff、setup-matt-pocock-skills），且状态归属有明确交代（项目自有记录、位置由用户指定）",
+        "生成物与生成的 init.sh 中都不出现承接方名字（mattpocock、to-tickets、handoff、setup-matt-pocock-skills），且状态归属有明确交代（已确认的项目自有记录；缺入口则回复，不假设目录）",
         "验证入口照样要求真实检查；缺省时 init.sh 必须失败关闭，不因为是非工程档就默认放行",
         "「无需验证」只能由用户显式声明，声明必须同时出现在 AGENTS.md 与 init.sh，脚本只披露、不宣称通过",
         "不向目标仓写入承接方的文件，也不指定状态与交接产物的位置",

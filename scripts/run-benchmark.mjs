@@ -152,7 +152,7 @@ const DISCOVERABLE_CONTENT = [
 const SELF_CHECK_GROUPS = [
   'budget', 'agentsBudget', 'agentsDiscover', 'scopeBrake', 'plainTier', 'maintenance', 'skillDesign',
   'wrapupOutput', 'dryRun', 'selfRefs', 'references', 'bottleneckTies', 'blankGate', 'blueprint',
-  'agentFile', 'reportContract'
+  'agentFile', 'reportContract', 'taskContract', 'plainRecord', 'maintContract'
 ];
 
 // One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
@@ -175,7 +175,10 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['blankGate', (group) => ` A project with nothing to verify — no manifest, a manifest with no runnable script, or an explicit --commands list whose scripts the manifest does not define — gets a refusal that exits non-zero instead of reporting a pass it did not earn, the counter reopens the moment a real check runs, a comma inside a quoted command stays one command while a genuine comma-separated list still splits, an unterminated quote is refused leaving nothing behind, and the manual fallback template refuses on the same shapes (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-description slot stays a visible pending marker when the user has not stated one, while a blueprint change rewrites that slot only — the rest of the file survives byte for byte, and a shape this skill did not render is refused rather than guessed at (${group.pass ? 'verified' : `pending ${group.pendingMarked ? 'ok' : 'NO'}; no stack fill ${group.noInventedFill ? 'ok' : 'NO'}; verbatim ${group.verbatim ? 'ok' : 'NO'}; slot-only ${group.slotRewritten && group.restIntact ? 'ok' : 'NO'}; detector ${group.detectorHasTeeth ? 'has teeth' : 'BLIND'}; refusal ${group.refusalHonoured && group.refusedUntouched ? 'ok' : 'NO'}`}).`],
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`]
+  ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`],
+  ['taskContract', (group) => ` Both instruction files scope work to what the user authorized: explicit authorization to advance, picking and status updates only while an authorized deliverable is being executed, a baseline failure split into pre-existing versus introduced, a commit gated on the definition of done rather than on a passing check, existing modifications and untracked files protected from any cleanup, and a read-only task that only reports harness drift (${group.pass ? 'verified' : `engineering missing ${(group.missing?.engineering || []).join(', ') || 'none'}; plain missing ${(group.missing?.plain || []).join(', ') || 'none'}; per-requirement teeth ${group.teeth ? 'ok' : 'BLIND'}; forbidden-list witness ${group.forbidWitness ? 'ok' : 'BLIND'}; old forms ${group.oldFormsRejected ? 'refused' : 'ACCEPTED'}`}).`],
+  ['plainRecord', (group) => ` The non-engineering tier routes its record through a project-owned entry confirmed to exist: a missing entry is reported with its evidence and a blocker in the reply, no path is assumed or created, persistence waits for a user request, and the definition of done and the closeout follow that one rule — so a legitimate declaration of nothing to run is disclosed, not counted as a passing check (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-requirement teeth ${group.teeth ? 'ok' : 'BLIND'}; forbidden-list witness ${group.forbidWitness ? 'ok' : 'BLIND'}; old forms ${group.oldFormsRejected ? 'refused' : 'ACCEPTED'}`}).`],
+  ['maintContract', (group) => ` A full audit score is not an exit condition in the maintenance reference: the score row still routes to the actual misalignment check, keeps the anti-gaming clause, and the shared content-review table states the read-only, baseline-scope, commit-authorization, existing-work and full-score rules — proven per guard, with the whole table deleted, and by the retired short-circuit row (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-guard teeth ${group.teeth ? 'ok' : 'BLIND'}; whole table removed ${group.tableRemovedRefused ? 'refused' : 'ACCEPTED'}; retired row ${group.oldRowRejected ? 'refused' : 'ACCEPTED'}`}).`]
 ]);
 
 // The single behavior this skill must not have. A harness that detected governance modes, assigned
@@ -441,13 +444,303 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['blankGate', 'Blank-project gate'],
   ['blueprint', 'Blueprint slot'],
   ['agentFile', 'Agent-file invariant'],
-  ['reportContract', 'Report contract']
+  ['reportContract', 'Report contract'],
+  ['taskContract', 'Task authorization'],
+  ['plainRecord', 'Plain record entry'],
+  ['maintContract', 'Maintenance contract']
 ]);
 
 
 
 
 
+// ── Task-authorization contract, read off both rendered instruction files ──────────────────
+// Both tiers state the same task conditions, and none of them had a carrier before 09-29: "fix the
+// baseline first", "pick exactly one ticket", "commit when it is safe" and "leave a clean state" each
+// read as a standing instruction to widen the repair, pick work, commit unasked, or clear someone
+// else's changes. Requirements name the SHAPE of a claim, never a whole sentence: these files are
+// prose that keeps getting reworded, and a gate keyed to one sentence fails on a harmless rewrite
+// while passing on a render that dropped the clause it protects. Units are per LINE (a rule is one
+// bullet) and, for a condition on one instruction, per CLAUSE — the only reading in which "仅在…时，
+// 更新其状态" passes while an unconditional "更新其状态" beside it fails.
+const SELF_REFERENCE_TERM = '本技能';
+const selfRefLeaks = (text) => (text.includes(SELF_REFERENCE_TERM) ? [SELF_REFERENCE_TERM] : []);
+// Alternatives for the no-substitute half of the brake, and deliberately NOT the retired 不代做 /
+// 不代建: those name whoever wrote the line, and 不代建 is the plain tier's own term, so accepting
+// either here would let the engineering brake be satisfied by the wording this check retires.
+const BRAKE_NO_SUBSTITUTE = ['不另建替代品', '不另建替代', '不另建', '不建替代品', '不自建'];
+// Verbatim from `templates/agents.md` before 09-29: the negation alone satisfies neither half.
+const SCOPE_BRAKE_OLD_FORM = '本文件**不定义**状态与交接产物，也不承接工程流程——两者由已安装的工程 skill 承接，本技能**不代做**。';
+// The brake is one LINE routing and refusing a substitute together; the heading alone ("承接方是工程
+// skill") would satisfy a file-wide test that never said where the work goes.
+const brakeLineIn = (text) => linesOf(text).find((line) => /工程/.test(line)
+  && /路由|承接/.test(line)
+  && BRAKE_NO_SUBSTITUTE.some((term) => line.includes(term))) || '';
+
+const AUTHORIZATION_RULE = ['显式授权', '明确要求', '显式要求', '明确授权', '只推进'];
+const PICK_AUTHORIZATION = ['授权', '明确要求', '显式要求', '用户要求', '经用户'];
+// How these two tiers word a condition, and nothing wider. The bare 不 / 未 this list used to carry
+// were an F1 hole: in "不新建分支，直接提交所有改动" the negation governs the branch, not the commit,
+// so a negation about something else exempted an unconditional commit. Condition-introducers scope
+// the clause they appear in; the negation group is bound to the very actions this contract checks, so
+// it cannot be borrowed by a neighbouring object.
+//
+// What this buys, stated plainly: the `some` side of a requirement only proves the rule is PRESENT — a
+// render can satisfy "advancing needs explicit authorization" with one sentence that governs nothing.
+// The forbid rows freeze the retired sentences this suite has actually observed. Neither is a proof
+// that arbitrary prose is semantically safe, and these regexes accept the limited phrasings these
+// templates use rather than parsing Chinese; a reworded contract outside this vocabulary has to fail
+// and be re-registered, which is the intended direction to fail in.
+const CONDITION_INTRODUCERS = ['若', '只有', '仅在', '仅当', '除非', '经用户'];
+const COMMIT_CONDITION = [...CONDITION_INTRODUCERS, '不提交'];
+const STATUS_CONDITION = [...CONDITION_INTRODUCERS, '不更新', '不改状态', '不标记'];
+const CONDITION = [
+  ...CONDITION_INTRODUCERS,
+  '不更新', '不提交', '不写入', '不记入', '不保存', '不归档', '不落盘', '不改状态', '不标记'
+];
+const QA = /问答|只读|解释|咨询|审计|评审/;
+const WORK_NOUN = ['工单', '交付物', '任务', '状态', '记录'];
+const PICK_VERB = ['挑', '领', '选', '取'];
+const NEGATION = ['不', '非', '勿', '不得', '无需'];
+const PROTECTED = ['已有修改', '既有修改', '未跟踪', '他人的', '别人的'];
+const DESTRUCTIVE = ['覆盖', '回退', '删除', '丢弃', '清理'];
+// The commit precondition is the PROJECT'S OWN definition of done, never a passing check: a plain
+// project may legitimately declare that it has nothing to run, and demanding a pass there either
+// blocks committing forever or invites claiming one that never happened — treating a declaration as a
+// test result. 完成定义 stays satisfiable either way, because under the waiver it resolves to the
+// disclosure the definition of done itself states.
+const COMMIT_DONE = ['完成定义已满足', '完成定义'];
+const COMMIT_SCOPE = ['本次相关', '本次改动', '本次变更', '本次涉及'];
+// "查看最近提交：运行 git log" reads commits; it does not instruct making one.
+const COMMIT_READER = /查看最近提交|最近提交|git log/;
+// Verbatim from both templates before 09-29. If a run reports one as present, the render regressed.
+const BASELINE_FIX_OLD = '如果基线验证失败，先修复它，再添加新的工作范围。';
+const CLEAN_STATE_OLD = '留下干净状态';
+const WRAPUP_OLD_STEP = '候选改动列出后落地；不做全仓审计';
+
+const TASK_CONTRACT = [
+  { name: 'advancing needs explicit authorization', kind: 'line', anchor: /推进|授权/, groups: [AUTHORIZATION_RULE] },
+  { name: 'records are context, not a queue', kind: 'line', anchor: /待办/, groups: [['不是待办队列', '不是自动待办队列', '不是待办']] },
+  { name: 'picking the next item needs authorization', kind: 'line', anchor: /工单|交付物/, groups: [PICK_AUTHORIZATION] },
+  { name: 'questions and read-only reviews pick nothing', kind: 'line', anchor: QA, groups: [PICK_VERB, NEGATION, WORK_NOUN] },
+  { name: 'questions and read-only reviews update no status', kind: 'line', anchor: QA, groups: [['更新', '状态', '标为', '关闭'], NEGATION] },
+  // Anchored on the update VERB, not on 状态: "状态与依赖" and "状态与交接" are headings and noun
+  // phrases in both tiers, and a clause-wide test on 状态 refuses a correct file.
+  { name: 'a status update is conditional', kind: 'everyClause', anchor: /更新|标为|标记为|关闭/, groups: [STATUS_CONDITION] },
+  { name: 'baseline failures are triaged', kind: 'line', anchor: /基线/, groups: [['原有', '既有', '先前', '之前就', '已存在'], ['本次引入', '本次新增', '本次改动', '本次修改', '本次会话'], ['授权范围', '不扩大', '不擅自', '不接管', '只修', '仅修', '阻塞', '交回用户', '问用户']] },
+  { name: 'no unconditional baseline fix', kind: 'forbid', literals: [BASELINE_FIX_OLD] },
+  { name: 'a commit is gated on the definition of done', kind: 'clause', anchor: /提交/, exclude: COMMIT_READER, groups: [AUTHORIZATION_RULE, COMMIT_DONE, COMMIT_SCOPE] },
+  { name: 'no unconditional commit instruction', kind: 'everyClause', anchor: /提交/, exclude: COMMIT_READER, groups: [COMMIT_CONDITION] },
+  { name: 'existing work is protected', kind: 'line', anchor: /保护|已有修改|未跟踪|他人的/, groups: [PROTECTED, DESTRUCTIVE] },
+  { name: 'harness drift lands inside the authorized scope', kind: 'line', anchor: /候选改动/, groups: [['授权范围', '授权', '本次范围']] },
+  // The wrap-up trigger fires on what the session EXPOSED, and a review session exposes plenty
+  // without being authorized to change anything: "列出后落地" turned a question into an edit.
+  { name: 'a read-only task only reports', kind: 'clause', anchor: /只读/, groups: [['只报告', '仅报告', '只如实报告', '只报']] },
+  { name: 'no clean-state framing', kind: 'forbid', literals: [CLEAN_STATE_OLD] }
+];
+// The sentence each requirement replaced, and the requirement that sentence must FAIL. A fixture that
+// stops tripping its requirement is a gate that has stopped biting.
+const TASK_OLD_FORMS = [
+  ['picking the next item needs authorization', '从 tracker 中恰好挑一个未完成、且阻塞边已全部清空的工单；不修改与它无关的文件'],
+  ['questions and read-only reviews pick nothing', '问答与只读审查也按 tracker 挑一个未完成工单'],
+  ['questions and read-only reviews update no status', '问答与只读审查同样在 tracker 更新工单状态'],
+  ['a status update is conditional', '在 tracker 中更新本会话推进的工单状态与证据'],
+  // Same-line pair: a correctly conditioned clause excusing an unconditional one beside it. This is
+  // the shape the line-scoped 'every*' kinds used to accept, and it is why those kinds split clauses.
+  ['a status update is conditional', '仅在用户要求时更新工单状态；无工单也更新工单状态'],
+  ['baseline failures are triaged', BASELINE_FIX_OLD],
+  ['no unconditional baseline fix', BASELINE_FIX_OLD],
+  ['a commit is gated on the definition of done', '仅在用户明确要求提交且验证通过时，用描述性消息提交本次相关改动'],
+  ['no unconditional commit instruction', '工作处于安全状态后，用描述性消息提交'],
+  ['no unconditional commit instruction', '仅在用户明确要求提交且完成定义已满足时提交本次相关改动；否则也用描述性消息提交'],
+  // F1: an unrelated negation must not exempt the checked action. Both clauses instruct an
+  // unconditional commit; the negation in each governs something else entirely — a branch, a ticket.
+  ['no unconditional commit instruction', '- 不新建分支，直接提交所有改动'],
+  ['no unconditional commit instruction', '- 未完成工单，直接提交所有改动'],
+  ['no unconditional commit instruction', '- 不更新状态，直接提交所有改动'],
+  ['no unconditional commit instruction', '- 不写入记录，直接提交所有改动'],
+  ['a status update is conditional', '- 不提交改动，直接更新工单状态'],
+  ['existing work is protected', `- **${CLEAN_STATE_OLD}**：下次会话必须能立即运行 \`./init.sh\``],
+  ['harness drift lands inside the authorized scope', WRAPUP_OLD_STEP],
+  ['a read-only task only reports', WRAPUP_OLD_STEP],
+  ['no clean-state framing', `- **${CLEAN_STATE_OLD}**：下次会话必须能立即运行 \`./init.sh\``]
+];
+
+// The plain tier's record entry is the one place the generated file must name a location it did not
+// create. Before 09-29 it pointed at "the project's own record location" as though that place existed,
+// and the two ways out are both bad: assume a directory and create one — the double-write this skill
+// exists to prevent — or drop the evidence. So the entry has to be a project-owned place confirmed to
+// exist, and everything downstream follows the same rule, definition of done included.
+const RECORD_ENTRY_RULE = ['记录入口', '记录位置规则'];
+const PLAIN_RECORD_CONTRACT = [
+  { name: 'a missing record entry is reported with evidence', kind: 'line', anchor: /未配置|没有配置|尚未配置|入口未|未确定/, groups: [['报告', '如实', '说明', '告知'], ['阻塞']] },
+  { name: 'no record path is assumed or built', kind: 'line', anchor: /记录|位置/, groups: [['不代建', '不假定', '不假设', '不猜', '不新建', '不创建', '不造']] },
+  { name: 'persistence waits for a user request', kind: 'line', anchor: /记录|位置/, groups: [['用户要求', '用户指定', '用户确认', '用户明确'], ['持久化', '确认', '指定']] },
+  { name: 'definition of done shares the record-entry rule', kind: 'line', section: '完成定义', anchor: /证据|记录/, groups: [RECORD_ENTRY_RULE] },
+  { name: 'closeout shares the record-entry rule', kind: 'line', section: '会话结束', anchor: /证据|记录|交付物/, groups: [RECORD_ENTRY_RULE] },
+  // Anchored on the verb that PERSISTS evidence, not on the word 证据: "未配置时，在回复中报告证据
+  // 与阻塞" is the disclosure this tier must make when no entry exists, it is already policed by the
+  // requirement above, and asking it for a condition it does not need would push toward widening the
+  // keyword fallback until anything passes — which is how a gate stops meaning anything. Narrowing to
+  // the write is the opposite move: it asks a question only the writing clauses can answer.
+  { name: 'evidence is conditional or routed through the entry rule', kind: 'everyClauseAny', anchor: /写入|记入|记在|记录到|更新|保存|归档|落盘/, groups: [CONDITION, RECORD_ENTRY_RULE] },
+  // A declaration that nothing can be run is not a passing check; the definition of done has to say so
+  // in its own words or the commit gate above — gated on 完成定义 — resolves to a check nobody ran.
+  { name: 'the waived definition of done discloses instead of claiming a pass', kind: 'line', section: '完成定义', anchor: /检查|验证/, groups: [['显式无验证命令', '无验证命令'], ['披露', '如实']] },
+  { name: 'no unconditional record writes', kind: 'forbid', literals: ['记入项目自己的记录位置', '在项目自己的记录中更新本会话推进的交付物与证据', '证据已记录在项目自己的记录位置'] }
+];
+const PLAIN_RECORD_OLD_FORMS = [
+  ['definition of done shares the record-entry rule', '- [ ] 证据已记录在项目自己的记录位置'],
+  ['closeout shares the record-entry rule', '1. 在项目自己的记录中更新本会话推进的交付物与证据'],
+  ['evidence is conditional or routed through the entry rule', '完成证据（命令与结果摘要）记入项目自己的记录位置'],
+  // The legal entry-routed write beside an unrouted one: the first clause is exactly right, which is
+  // why this pair is the only honest witness for an any-of-across-groups rule.
+  ['evidence is conditional or routed through the entry rule', '证据按记录入口规则写入已有记录或回复；完成证据记入任意记录'],
+  ['a missing record entry is reported with evidence', '状态与进度由**项目自有**的记录维护，位置由用户指定'],
+  ['the waived definition of done discloses instead of claiming a pass', '- [ ] 项目定义的检查确实运行过（`./init.sh`：lint、链接检查、schema 校验等）'],
+  ['no unconditional record writes', '完成证据（命令与结果摘要）记入项目自己的记录位置']
+];
+
+// The maintenance reference's exception table used to read "审计已满分 | 报「无候选瓶颈」，不改",
+// making a structural score an exit condition — harness rot is invisible to scoring (the file's own
+// line 3 says so), so a full score is exactly when the content still has to be read. The row now
+// routes to the actual misalignment check and keeps the anti-gaming clause, and the shared
+// content-review table carries the same task conditions the templates do.
+const MAINT_MISALIGNMENT = ['失准'];
+const MAINT_ANTI_GAMING = ['堆关键词', '刷分'];
+const MAINT_SCORE_ROW = 'a full score still reviews actual misalignment';
+const MAINT_GUARDS = [
+  { name: 'a read-only request picks nothing', anchor: /问答|只读/, terms: ['不挑', '不更新', '不选', '不领'] },
+  { name: 'baseline scope outside the run is reported', anchor: /基线/, terms: ['区分', '原有', '本次'] },
+  { name: 'commit needs authorization', anchor: /提交/, terms: ['授权', '用户'] },
+  { name: 'existing work survives a commit decision', anchor: /已有修改|未跟踪|既有工作|保留修改/, terms: ['保留', '保护', '不覆盖', '不回退', '不删'] },
+  { name: 'a full score still reviews content', anchor: /满分/, terms: ['内容复核'] }
+];
+const MAINT_OLD_ROW = '| 审计已满分 | 报「无候选瓶颈」，不改；为刷分堆关键词是反模式 |';
+
+// Headings are dropped: "## 状态与交接" is a title, not an instruction. A missing section reads as
+// empty, so a requirement scoped to it fails rather than passing on a file that deleted the heading.
+const linesOf = (text) => String(text).split('\n').map((line) => line.trim()).filter((line) => line && !line.startsWith('#'));
+const clausesOf = (text) => linesOf(text).flatMap((line) => line.split(/[；;。]/)).map((clause) => clause.trim()).filter(Boolean);
+const sectionText = (text, heading) => (heading ? (text.split(/^##\s+/m).slice(1).find((part) => part.startsWith(heading)) || '') : text);
+const anyOf = (unit, terms) => terms.some((term) => unit.includes(term));
+const allGroups = (unit, groups) => groups.every((group) => anyOf(unit, group));
+
+// Every clause-scoped kind splits on the clause boundary. It used to be `kind === 'clause'` alone,
+// so the two 'every*' kinds silently read whole LINES: a bullet whose first clause was correctly
+// conditioned ("仅在…时，更新其状态") excused an unconditional one beside it in the same line
+// ("；无工单也更新工单状态"). One kind list, one rule — a check whose quantifier silently changes
+// with its name is a check nobody can reason about.
+const CLAUSE_KINDS = new Set(['clause', 'everyClause', 'everyClauseAny']);
+
+function requirementHolds(text, req) {
+  if (req.kind === 'forbid') return !req.literals.some((literal) => text.includes(literal));
+  const units = (CLAUSE_KINDS.has(req.kind) ? clausesOf(sectionText(text, req.section)) : linesOf(sectionText(text, req.section)))
+    .filter((unit) => req.anchor.test(unit))
+    .filter((unit) => !req.exclude?.test(unit));
+  // An 'every*' requirement conditions the instructions that DO exist, so an anchor nothing matches
+  // would satisfy it vacuously — the failure mode of "checked nothing, passed".
+  if (req.kind === 'everyClause') return units.length > 0 && units.every((unit) => allGroups(unit, req.groups));
+  // All-of across clauses, any-of across groups: EVERY clause must carry one acceptable shape. The
+  // other reading — `.some` over clauses — lets a single compliant clause excuse an unconditional
+  // one, which is the same hole as reading the line instead of the clause.
+  if (req.kind === 'everyClauseAny') return units.length > 0 && units.every((unit) => req.groups.some((group) => anyOf(unit, group)));
+  return units.some((unit) => allGroups(unit, req.groups));
+}
+
+const contractMissing = (text, contract) => contract.filter((req) => !requirementHolds(text, req)).map((req) => req.name);
+// Teeth, one requirement at a time: delete every alternative that requirement reads and require the
+// predicate to name it. A loop over the contract list cannot notice a requirement being DROPPED from it
+// — it stops testing it and every arm stays green. All alternatives go, not one: the groups are
+// interchangeable by design, so "still passed with this removed" holds for any non-last alternative.
+const withoutTerms = (text, req) => (req.groups || []).flat().reduce((acc, term) => acc.split(term).join(''), text);
+
+// The one runner every contract goes through, so the four arms are identical everywhere and a new
+// contract costs a table plus one line: stated on the live artifact, per-requirement teeth, a witness
+// per forbidden literal, and the pre-09-29 sentence each requirement replaced.
+function runContract(text, contract, oldForms) {
+  const missing = contractMissing(text, contract);
+  const teeth = contract.filter((req) => req.kind !== 'forbid')
+    .every((req) => contractMissing(withoutTerms(text, req), contract).includes(req.name));
+  const forbidWitness = contract.filter((req) => req.kind === 'forbid')
+    .every((req) => req.literals.every((literal) => contractMissing(`${text}\n${literal}`, contract).includes(req.name)));
+  const oldFormsRejected = oldForms.every(([name, form]) => contractMissing(form, contract).includes(name));
+  return { pass: missing.length === 0 && teeth && forbidWitness && oldFormsRejected, missing, teeth, forbidWitness, oldFormsRejected };
+}
+
+// Both tiers rendered once per self-check and both tier contracts evaluated from that one scaffold:
+// three groups reading the same two directories would spawn the generator three times over. Cached,
+// because runSelfCheck() binds them as three separate groups and they are independent checks on one
+// artifact pair. The reference group reads no directory and stays outside the cache.
+let contractCache = null;
+async function evaluateContracts() {
+  if (contractCache) return contractCache;
+  const dirs = [];
+  try {
+    const create = path.join(scriptDir, 'create-harness.mjs');
+    const eng = await mkdtemp(path.join(os.tmpdir(), 'harness-contract-eng-'));
+    const plain = await mkdtemp(path.join(os.tmpdir(), 'harness-contract-plain-'));
+    dirs.push(eng, plain);
+    await execFileAsync('node', [create, '--target', eng]);
+    await execFileAsync('node', [create, '--target', plain, '--no-engineering-owner', '--commands', 'echo baseline-ok']);
+    const tiers = {
+      engineering: await readText(path.join(eng, 'AGENTS.md')),
+      plain: await readText(path.join(plain, 'AGENTS.md'))
+    };
+    const per = Object.fromEntries(Object.entries(tiers)
+      .map(([name, text]) => [name, runContract(text, TASK_CONTRACT, TASK_OLD_FORMS)]));
+    const every = (key) => Object.values(per).every((result) => result[key]);
+    contractCache = {
+      taskContract: {
+        pass: every('pass'),
+        missing: Object.fromEntries(Object.entries(per).map(([name, result]) => [name, result.missing])),
+        teeth: every('teeth'),
+        forbidWitness: every('forbidWitness'),
+        oldFormsRejected: every('oldFormsRejected')
+      },
+      plainRecord: runContract(tiers.plain, PLAIN_RECORD_CONTRACT, PLAIN_RECORD_OLD_FORMS)
+    };
+  } catch (error) {
+    // Reported per group rather than thrown, so one broken scaffold does not hide the other groups.
+    const failed = (missing) => ({ pass: false, missing, teeth: false, forbidWitness: false, oldFormsRejected: false, error: error.message });
+    contractCache = { taskContract: failed({}), plainRecord: failed([]) };
+  } finally {
+    for (const dir of dirs) await rm(dir, { recursive: true, force: true });
+  }
+  return contractCache;
+}
+
+// Read from the shipped reference, like every other reference check: the file IS the artifact under
+// test, and a hand-written copy would only prove the probe's own string is right. The score row is read
+// across every 满分 line, because the reference states the point twice and only one has to carry the
+// whole rule.
+const maintScoreRowHeld = (text) => linesOf(text).filter((line) => line.includes('满分'))
+  .some((line) => anyOf(line, MAINT_MISALIGNMENT) && anyOf(line, MAINT_ANTI_GAMING));
+
+function maintContractMissing(text) {
+  const table = linesOf(sectionText(text, '内容复核'));
+  return [...(maintScoreRowHeld(text) ? [] : [MAINT_SCORE_ROW]), ...MAINT_GUARDS
+    .filter((guard) => !table.some((line) => guard.anchor.test(line) && anyOf(line, guard.terms)))
+    .map((guard) => guard.name)];
+}
+
+async function checkMaintContract() {
+  try {
+    const reference = await readText(path.join(skillRoot, WRAPUP_REFERENCE));
+    const missing = maintContractMissing(reference);
+    // Teeth per guard, then the whole table deleted: a section removed outright satisfies any single
+    // row-level predicate, so the per-guard arms cannot see that case on their own.
+    const teeth = MAINT_GUARDS
+      .every((guard) => maintContractMissing(guard.terms.reduce((acc, term) => acc.split(term).join(''), reference)).includes(guard.name))
+      && maintContractMissing(MAINT_MISALIGNMENT.reduce((acc, term) => acc.split(term).join(''), reference)).includes(MAINT_SCORE_ROW);
+    const tableRemovedRefused = MAINT_GUARDS
+      .every((guard) => maintContractMissing(reference.replace(/^##\s*内容复核[\s\S]*?(?=^##\s)/m, '')).includes(guard.name));
+    const oldRowRejected = maintContractMissing(`## 异常\n\n${MAINT_OLD_ROW}\n`).includes(MAINT_SCORE_ROW);
+    return { pass: missing.length === 0 && teeth && tableRemovedRefused && oldRowRejected, missing, teeth, tableRemovedRefused, oldRowRejected };
+  } catch (error) {
+    return { pass: false, missing: [], teeth: false, tableRemovedRefused: false, oldRowRejected: false, error: error.message };
+  }
+}
 const args = parseArgs(process.argv.slice(2));
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const skillRoot = path.resolve(scriptDir, '..');
@@ -530,7 +823,21 @@ Runs a lightweight harness benchmark:
      each term dropped in turn, a version refused by its own missing term, and a fixture that keeps
      every term while losing the place to put them. The judgment half is the part no tool can settle,
      so the gate proves the handover is stated instead of pretending the tool can make the call.
- 20. Produces a JSON report and optional HTML report.
+ 20. Checks the task conditions both instruction files carry — advance only what the user authorized,
+     pick a ticket or deliverable only inside an authorized delivery, questions and read-only reviews
+     pick nothing and update no status, a baseline failure split into pre-existing versus introduced, a
+     commit gated on the definition of done rather than on a check a project may legitimately have
+     declared it cannot run, existing modifications and untracked files surviving any cleanup, a
+     read-only task only reporting harness drift. Seeded in every direction the failure can hide in:
+     terms deleted requirement by requirement on BOTH tiers, forbidden phrases seeded back, every
+     pre-09-29 sentence refused.
+ 21. Checks the non-engineering tier's record entry — the one location the generated file must not
+     create: reported with evidence and a blocker when missing, never assumed, persistence only on
+     request, definition of done and closeout held to the same rule.
+ 22. Checks that a full audit score is not an exit condition in the maintenance reference: the score
+     row still routes to the actual misalignment check, and the retired row is refused — per guard,
+     and with the whole content-review table deleted too.
+ 23. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -604,16 +911,16 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  AGENTS.md budget: ${pass ? 'PASS' : 'FAIL'} — ${size}/${max} bytes LF-normalized (${max - size >= 0 ? `${max - size} left` : `${size - max} over`}); ${agentLines}/${maxLines} lines; working rules ${ruleCount}/${maxRules}${crlfCount ? `; rendered CRLF (raw ${rawSize})` : ''}; line-ending invariant: ${lineEndingInvariant ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.agentsDiscover) {
-    const { pass, offenders = [], selfRestraintStated, seededCaught, error } = selfCheck.agentsDiscover;
-    lines.push(`  AGENTS.md discoverability: ${pass ? 'PASS' : 'FAIL'} — default render free of restated content: ${offenders.length === 0 ? 'ok' : `NO (${offenders.join(', ')})`}; self-restraint rule stated: ${selfRestraintStated ? 'ok' : 'NO'}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+    const { pass, offenders = [], selfRestraintStated, selfRestraintTeeth, seededCaught, error } = selfCheck.agentsDiscover;
+    lines.push(`  AGENTS.md discoverability: ${pass ? 'PASS' : 'FAIL'} — default render free of restated content: ${offenders.length === 0 ? 'ok' : `NO (${offenders.join(', ')})`}; self-restraint rule stated: ${selfRestraintStated ? 'ok' : 'NO'}; proven load-bearing: ${selfRestraintTeeth ? 'ok' : 'BLIND'}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.scopeBrake) {
-    const { pass, brake, owners, missingOwners = [], ownerTeeth, leaked = [], seeded = [], error } = selfCheck.scopeBrake;
-    lines.push(`  Scope brake: ${pass ? 'PASS' : 'FAIL'} — engineering workflow delegated in the generated AGENTS.md: ${brake ? 'ok' : 'NO'}; one named owner carrying both slots and the setup prerequisite: ${owners ? 'ok' : `MISSING (${missingOwners.join(', ')})`}; owner detector has teeth: ${ownerTeeth ? 'ok' : 'BLIND'}; doctrine carried over from the removed scope: ${leaked.length === 0 ? 'none' : `LEAKED (${leaked.join(', ')})`}; detector catches a seeded violation: ${seeded.length === FORBIDDEN_IN_AGENTS_MD.length ? 'ok' : `BLIND (${seeded.length}/${FORBIDDEN_IN_AGENTS_MD.length} patterns)`}${error ? ` — ${error}` : ''}`);
+    const { pass, brake, brakeTeeth, oldBrakeRejected, selfRefFree, selfRefTeeth, owners, missingOwners = [], ownerTeeth, leaked = [], seeded = [], error } = selfCheck.scopeBrake;
+    lines.push(`  Scope brake: ${pass ? 'PASS' : 'FAIL'} — the generated AGENTS.md routes the engineering workflow and builds no substitute for it: ${brake ? 'ok' : 'NO'}; detector has teeth: ${brakeTeeth ? 'ok' : 'BLIND'}; the retired negation alone is refused: ${oldBrakeRejected ? 'ok' : 'ACCEPTED'}; it does not speak as the author: ${selfRefFree ? 'ok' : 'LEAKED 本技能'} ${selfRefTeeth ? 'ok' : 'BLIND'}; one named owner carrying both slots and the setup prerequisite: ${owners ? 'ok' : `MISSING (${missingOwners.join(', ')})`}; owner detector has teeth: ${ownerTeeth ? 'ok' : 'BLIND'}; doctrine carried over from the removed scope: ${leaked.length === 0 ? 'none' : `LEAKED (${leaked.join(', ')})`}; detector catches a seeded violation: ${seeded.length === FORBIDDEN_IN_AGENTS_MD.length ? 'ok' : `BLIND (${seeded.length}/${FORBIDDEN_IN_AGENTS_MD.length} patterns)`}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.plainTier) {
-    const { pass, ownerFree, plainTeeth, engNamed, engUnmarked, refused, refusalWroteNothing, discloses, neverClaims, undeclaredHonest, listsAgree, missingOwners = [], error } = selfCheck.plainTier;
-    lines.push(`  Plain tier: ${pass ? 'PASS' : 'FAIL'} — a working directory with no engineering workflow gets the same three subsystems with no owner named: ${ownerFree ? 'ok' : 'NO'}; per-term owner detector: ${plainTeeth ? 'ok' : 'BLIND'}; engineering still names every owner: ${engNamed ? 'ok' : `MISSING (${missingOwners.join(', ')})`}; engineering carries no plain marker: ${engUnmarked ? 'ok' : 'NO'}; a declared absence of verification is refused on its own: ${refused ? 'ok' : 'ACCEPTED'}; and the refusal creates nothing: ${refusalWroteNothing ? 'ok' : 'NO'}; the granted waiver discloses: ${discloses ? 'ok' : 'NO'}; and never prints the completion banner: ${neverClaims ? 'ok' : 'NO'}; the same tier without the declaration still fails closed: ${undeclaredHonest ? 'ok' : 'NO'}; the two owner lists agree: ${listsAgree ? 'ok' : 'DIVERGED'}${error ? ` — ${error}` : ''}`);
+    const { pass, ownerFree, plainTeeth, engNamed, engUnmarked, refused, refusalWroteNothing, discloses, neverClaims, undeclaredHonest, listsAgree, selfRefFree, selfRefTeeth, missingOwners = [], error } = selfCheck.plainTier;
+    lines.push(`  Plain tier: ${pass ? 'PASS' : 'FAIL'} — a working directory with no engineering workflow gets the same three subsystems with no owner named: ${ownerFree ? 'ok' : 'NO'}; per-term owner detector: ${plainTeeth ? 'ok' : 'BLIND'}; engineering still names every owner: ${engNamed ? 'ok' : `MISSING (${missingOwners.join(', ')})`}; engineering carries no plain marker: ${engUnmarked ? 'ok' : 'NO'}; a declared absence of verification is refused on its own: ${refused ? 'ok' : 'ACCEPTED'}; and the refusal creates nothing: ${refusalWroteNothing ? 'ok' : 'NO'}; the granted waiver discloses: ${discloses ? 'ok' : 'NO'}; and never prints the completion banner: ${neverClaims ? 'ok' : 'NO'}; the same tier without the declaration still fails closed: ${undeclaredHonest ? 'ok' : 'NO'}; the two owner lists agree: ${listsAgree ? 'ok' : 'DIVERGED'}; the plain render does not speak as the author: ${selfRefFree ? 'ok' : 'LEAKED 本技能'} ${selfRefTeeth ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.maintenance) {
     const { pass, stated, missing = [], leaked = [], teeth, oldFormRejected, hybridRejected, forbiddenWitness, error } = selfCheck.maintenance;
@@ -659,6 +966,18 @@ function consoleSelfCheckLines(selfCheck) {
     const { pass, honouredFlag, reported = [], claimsModel, seededCaught, error } = selfCheck.reportContract;
     lines.push(`  Report contract: ${pass ? 'PASS' : 'FAIL'} — --html honoured by the renderer: ${honouredFlag ? 'ok' : 'DROPPED (wrote to the default path)'}; report names the model's subsystem count: ${claimsModel ? 'ok' : 'NO'}; contradicting claim: ${reported.length === 0 ? 'none' : `FOUND (${reported.join(', ')})`}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.taskContract) {
+    const { pass, missing = {}, teeth, forbidWitness, oldFormsRejected, error } = selfCheck.taskContract;
+    lines.push(`  Task authorization: ${pass ? 'PASS' : 'FAIL'} — both tiers scope work to what the user authorized, missing: engineering ${(missing.engineering || []).join(', ') || 'none'}; plain ${(missing.plain || []).join(', ') || 'none'}; per-requirement teeth: ${teeth ? 'ok' : 'BLIND'}; forbidden-list witness: ${forbidWitness ? 'ok' : 'BLIND'}; pre-09-29 sentences refused: ${oldFormsRejected ? 'ok' : 'ACCEPTED'}${error ? ` — ${error}` : ''}`);
+  }
+  if (selfCheck.plainRecord) {
+    const { pass, missing = [], teeth, forbidWitness, oldFormsRejected, error } = selfCheck.plainRecord;
+    lines.push(`  Plain record entry: ${pass ? 'PASS' : 'FAIL'} — the record routes through a confirmed project-owned entry that the definition of done and the closeout share, missing: ${missing.join(', ') || 'none'}; per-requirement teeth: ${teeth ? 'ok' : 'BLIND'}; forbidden-list witness: ${forbidWitness ? 'ok' : 'BLIND'}; pre-09-29 sentences refused: ${oldFormsRejected ? 'ok' : 'ACCEPTED'}${error ? ` — ${error}` : ''}`);
+  }
+  if (selfCheck.maintContract) {
+    const { pass, missing = [], teeth, tableRemovedRefused, oldRowRejected, error } = selfCheck.maintContract;
+    lines.push(`  Maintenance contract: ${pass ? 'PASS' : 'FAIL'} — a full audit score still routes to the actual misalignment check instead of ending the review, missing: ${missing.join(', ') || 'none'}; per-guard teeth: ${teeth ? 'ok' : 'BLIND'}; whole content-review table removed: ${tableRemovedRefused ? 'ok' : 'ACCEPTED'}; retired short-circuit row refused: ${oldRowRejected ? 'ok' : 'ACCEPTED'}${error ? ` — ${error}` : ''}`);
+  }
   if (selfCheck.reportCoverage) {
     const { pass, unbound = [], missingLines = [], orphanLines = [], missingConsole = [] } = selfCheck.reportCoverage;
     lines.push(`  Report coverage: ${pass ? 'PASS' : 'FAIL'} — every self-check group is bound, gated, reported and shown on the console: ${pass ? 'ok' : `NO (unbound: ${unbound.join(', ') || 'none'}; missing report line: ${missingLines.join(', ') || 'none'}; orphan line: ${orphanLines.join(', ') || 'none'}; missing console line: ${missingConsole.join(', ') || 'none'})`}`);
@@ -701,7 +1020,10 @@ async function runSelfCheck() {
       blankGate: () => checkBlankProjectGate(),
       blueprint: () => checkBlueprintSlot(),
       agentFile: () => checkAgentFileInvariant(),
-      reportContract: () => checkReportContract()
+      reportContract: () => checkReportContract(),
+      taskContract: async () => (await evaluateContracts()).taskContract,
+      plainRecord: async () => (await evaluateContracts()).plainRecord,
+      maintContract: () => checkMaintContract()
     };
     const groups = {};
     for (const key of SELF_CHECK_GROUPS) groups[key] = await groupChecks[key]();
@@ -834,6 +1156,13 @@ function discoverableOffenders(text) {
   return DISCOVERABLE_CONTENT.filter(({ pattern }) => pattern.test(text)).map(({ name }) => name);
 }
 
+// A pure predicate so the check can strip a term from the live render and require the verdict to
+// change. Declared here, ahead of the runSelfCheck() call site, for the temporal-dead-zone reason
+// recorded above the SELF_CHECK_GROUPS list.
+function selfRestraintRuleStated(text) {
+  return /长期不变量/.test(text) && (/本文件自我约束/.test(text) || /不超过\s*8\s*条/.test(text));
+}
+
 async function checkAgentFileDiscoverability() {
   let dir;
   try {
@@ -843,12 +1172,16 @@ async function checkAgentFileDiscoverability() {
     const offenders = discoverableOffenders(rendered);
     // The self-restraint rule is the only thing in the shipped file that tells a future editor to
     // stop adding; losing it silently would re-open the unbounded growth this check exists to close.
-    const selfRestraintStated = /本文件自我约束/.test(rendered) && /长期不变量/.test(rendered);
+    const selfRestraintStated = selfRestraintRuleStated(rendered);
+    // Teeth: dropping either half of the rule — the invariant the section holds, or the cap that
+    // bounds it — must turn it red, so the shorter lead-in cannot make it a constant.
+    const selfRestraintTeeth = !selfRestraintRuleStated(rendered.split('长期不变量').join(''))
+      && !selfRestraintRuleStated(rendered.split('不超过 8 条').join(''));
     const seeded = `${rendered}\n## 目录结构\n\n\`\`\`\n├── src\n└── dist\n\`\`\`\n\n- 技术栈：React + TypeScript\n`;
     const seededCaught = discoverableOffenders(seeded).length >= 2;
-    return { pass: offenders.length === 0 && selfRestraintStated && seededCaught, offenders, selfRestraintStated, seededCaught };
+    return { pass: offenders.length === 0 && selfRestraintStated && selfRestraintTeeth && seededCaught, offenders, selfRestraintStated, selfRestraintTeeth, seededCaught };
   } catch (error) {
-    return { pass: false, offenders: [], selfRestraintStated: false, seededCaught: false, error: error.message };
+    return { pass: false, offenders: [], selfRestraintStated: false, selfRestraintTeeth: false, seededCaught: false, error: error.message };
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
   }
@@ -860,13 +1193,19 @@ async function checkScopeBoundary() {
     dir = await mkdtemp(path.join(os.tmpdir(), 'harness-scope-'));
     await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
     const text = await readText(path.join(dir, 'AGENTS.md'));
-    // The brake, kept as its own label: the file must say the engineering workflow belongs to the
-    // engineering skills, and that this file does not do that work itself. "Some engineering skill
-    // owns this" is unfalsifiable on its own, which is why the names that make it checkable live in
-    // OWNER_TERMS below rather than here — and why a file that keeps the sentence but loses a name
-    // still fails, on the other point, so the failure says which claim went missing. The forbidden
-    // half is unchanged in shape (see FORBIDDEN_IN_AGENTS_MD).
-    const brake = /工程\s*skill/.test(text) && /不代做/.test(text);
+    // The brake: the file must ROUTE the engineering workflow to the named owner and state that no
+    // substitute artifact is built. Re-keyed 09-29 from the bare negation ("工程 skill" + "不代做"),
+    // which named a subject the reader of the rendered file cannot resolve and was satisfied by a
+    // file that routed nothing at all. The forbidden half is unchanged (FORBIDDEN_IN_AGENTS_MD).
+    const brake = brakeLineIn(text) !== '';
+    // A re-keyed predicate nobody has watched fail is a predicate nobody has watched: deleting every
+    // alternative the brake reads must make it fail, and the retired sentence must be refused alone.
+    const brakeTeeth = brakeLineIn(BRAKE_NO_SUBSTITUTE.reduce((acc, term) => acc.split(term).join(''), text)) === '';
+    const oldBrakeRejected = brakeLineIn(SCOPE_BRAKE_OLD_FORM) === '';
+    // Neither tier may speak as the author: "本技能" in a file a project agent reads names a
+    // subject the reader cannot resolve, and it is what the 09-29 rewrite removed from both renders.
+    const selfRefFree = selfRefLeaks(text).length === 0;
+    const selfRefTeeth = selfRefLeaks(`${text}\n本技能**不代做**。`).length === 1;
     // The positive half, its own label: the single owner's name, both fixed slots, and the setup
     // prerequisite that makes them reachable. A render that carries the boundary sentence but drops a
     // slot fails on this point specifically instead of on the brake as a whole.
@@ -884,8 +1223,13 @@ async function checkScopeBoundary() {
       .filter(({ pattern }) => pattern.test(`${text}${SEEDED_VIOLATION}`))
       .map(({ name }) => name);
     return {
-      pass: brake && owners && ownerTeeth && leaked.length === 0 && seeded.length === FORBIDDEN_IN_AGENTS_MD.length,
+      pass: brake && brakeTeeth && oldBrakeRejected && selfRefFree && selfRefTeeth && owners
+        && ownerTeeth && leaked.length === 0 && seeded.length === FORBIDDEN_IN_AGENTS_MD.length,
       brake,
+      brakeTeeth,
+      oldBrakeRejected,
+      selfRefFree,
+      selfRefTeeth,
       owners,
       missingOwners,
       ownerTeeth,
@@ -893,7 +1237,7 @@ async function checkScopeBoundary() {
       seeded
     };
   } catch (error) {
-    return { pass: false, brake: false, owners: false, missingOwners: [], ownerTeeth: false, leaked: [], seeded: [], error: error.message };
+    return { pass: false, brake: false, brakeTeeth: false, oldBrakeRejected: false, selfRefFree: false, selfRefTeeth: false, owners: false, missingOwners: [], ownerTeeth: false, leaked: [], seeded: [], error: error.message };
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
   }
@@ -981,9 +1325,14 @@ async function checkPlainTier() {
     const listsAgree = OWNER_TERMS.length === DELEGATION_OWNER_TERMS.length
       && OWNER_TERMS.every((term) => DELEGATION_OWNER_TERMS.includes(term));
 
+    const selfRefFree = selfRefLeaks(plain).length === 0;
+    const selfRefTeeth = selfRefLeaks(`${plain}\n本技能**不代建**。`).length === 1;
+
     return {
       pass: ownerFree && plainTeeth && engNamed && engUnmarked && refused && refusalWroteNothing
-        && discloses && neverClaims && undeclaredHonest && listsAgree,
+        && discloses && neverClaims && undeclaredHonest && listsAgree && selfRefFree && selfRefTeeth,
+      selfRefFree,
+      selfRefTeeth,
       ownerFree,
       plainTeeth,
       engNamed,

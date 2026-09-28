@@ -292,12 +292,12 @@ if (missingAgentSections.length > 0) {
 // delegated state capability exists at all, and that configuration belongs to the upstream skill.
 console.log('');
 if (plain) {
-  console.log('Next: read AGENTS.md for the startup path and the invariants. This project has no engineering');
-  console.log('owner, so nothing is delegated and nothing is named: state and progress stay wherever the');
-  console.log('project already keeps them, and this skill neither creates that place nor points at one.');
+  console.log(`Next: read ${agentFile} for the startup path and the invariants. No engineering owner is named.`);
+  console.log('Use the project record only when its location is confirmed. Otherwise report evidence in the');
+  console.log('reply; ask for a location only when persistence is requested. No record system is created.');
   console.log('It derives no entries, acceptance criteria or decisions on its own.');
 } else {
-  console.log('Next: run /setup-matt-pocock-skills once to configure the tracker, then use to-tickets for');
+  console.log('Next: only if the task needs a tracker and none is configured, run /setup-matt-pocock-skills; use to-tickets for');
   console.log('state and blocking edges. The engineering workflow belongs to mattpocock as a whole, and that');
   console.log('system dispatches its own stages. This skill derives no entries, acceptance criteria or');
   console.log('decisions on its own, and ships no in-repo substitute for state or handoff.');
