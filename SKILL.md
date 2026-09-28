@@ -65,7 +65,7 @@ node <技能目录>/scripts/create-harness.mjs --target /path/to/project
 
 🔴 CHECKPOINT：先跑 `--dry-run`，把将创建/跳过的**产物清单**展示给用户，**停下等回复**，获批后才真写。
 
-选项：`--agent-file CLAUDE.md`、`--package-manager npm|pnpm|yarn|bun`、`--commands "cmd one,cmd two"`、`--no-engineering-owner`（非工程档）、`--no-verification`（仅非工程档，须显式声明）、`--blueprint "一行蓝图"`（已存在时只改该行）；其余见 `--help`。`--force` 覆盖已存在文件——🔴 CHECKPOINT：使用前**必须**获批并列出被覆盖文件；含第三方块的文件不用 `--force`。
+选项：`--agent-file CLAUDE.md`、`--package-manager npm|pnpm|yarn|bun`、`--commands "cmd one,cmd two"`、`--no-engineering-owner`（非工程档）、`--no-verification`（仅非工程档，须显式声明）、`--blueprint "一行蓝图"`（已存在时只改该行）；其余见 `--help`。`--force` 覆盖已存在文件——🔴 CHECKPOINT：使用前**必须**获批并列出被覆盖文件；含第三方块的文件**禁用** `--force`。
 
 **`AGENTS.md` 的章节以 `templates/agents.md` 为唯一来源**；已存在时脚本只报告缺失章节，不写盘，合并由代理执行。
 
