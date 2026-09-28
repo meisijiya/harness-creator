@@ -11,6 +11,7 @@ import {
   exists,
   formatScoreReport,
   htmlReport,
+  initScriptFromCommands,
   loadHarnessFiles,
   parseArgs,
   pickBottlenecks,
@@ -159,7 +160,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
   ['references', (group) => ` A documented command that no longer resolves is caught rather than silently trusted: the audit resolves manifest scripts and runnable files, reports by name what it cannot resolve, and is proven in both directions (${group.pass ? 'verified' : `dangling fixture ${group.danglingCaught ? 'caught' : 'MISSED'}; guarded fixture ${group.guardedExcused ? 'excused' : 'FALSELY FLAGGED'}; unchecked bucket ${group.uncheckedListed ? 'populated' : 'SILENT'}; uncollected scan ${group.uncollectedRefused ? 'refused' : 'PASSED'}`}).`],
   ['bottleneckTies', (group) => ` The bottleneck line names ${group.tieCount} tied subsystem(s) as a tie instead of picking one (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['blankGate', (group) => ` A project with nothing to verify — no manifest, or a manifest with no runnable script — gets a placeholder step that exits non-zero instead of reporting a pass it did not earn, and the manual fallback template refuses on the same two shapes (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['blankGate', (group) => ` A project with nothing to verify — no manifest, a manifest with no runnable script, or an explicit --commands list whose scripts the manifest does not define — gets a refusal that exits non-zero instead of reporting a pass it did not earn, the counter reopens the moment a real check runs, and the manual fallback template refuses on the same shapes (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-description slot stays a visible pending marker when the user has not stated one, while a blueprint change rewrites that slot only — the rest of the file survives byte for byte, and a shape this skill did not render is refused rather than guessed at (${group.pass ? 'verified' : `pending ${group.pendingMarked ? 'ok' : 'NO'}; no stack fill ${group.noInventedFill ? 'ok' : 'NO'}; verbatim ${group.verbatim ? 'ok' : 'NO'}; slot-only ${group.slotRewritten && group.restIntact ? 'ok' : 'NO'}; detector ${group.detectorHasTeeth ? 'has teeth' : 'BLIND'}; refusal ${group.refusalHonoured && group.refusedUntouched ? 'ok' : 'NO'}`}).`],
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`],
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`]
@@ -474,7 +475,10 @@ Runs a lightweight harness benchmark:
  12. Checks the blank-project gate: the placeholder verification step must exit non-zero, a real
      command must still run, and — asserted through the real generator, not a hand-written string —
      a manifest that defines no check/typecheck/lint/test/build also refuses instead of exiting 0
-     having verified nothing. The same invariant has a second producer, the hand-copy fallback
+     having verified nothing. A third shape is armed beside them, because the first two both route
+     through verificationCommands and the explicit --commands path bypasses it entirely: an
+     assembled script whose guarded steps could all skip must fail closed, and must reopen the
+     moment a check really runs. The same invariant has a second producer, the hand-copy fallback
      templates/init.sh, which the generator probes cannot reach: every refusal it prints must be
      armed with a non-zero exit, both refusals must still be present, and a success tail must
      remain. A gate that cannot fail is not a gate.
@@ -623,8 +627,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Bottleneck ties: ${pass ? 'PASS' : 'FAIL'} — tie names all 3 subsystems: ${tieCount === 3 ? 'ok' : `NO (${tieCount})`}; unique minimum names one: ${uniqueCount === 1 ? 'ok' : `NO (${uniqueCount})`}; complete harness reports none: ${noneCount === 0 ? 'ok' : `NO (${noneCount})`} — ${tieLabel}`);
   }
   if (selfCheck.blankGate) {
-    const { pass, placeholderFails, realRuns, scriptlessRefuses, withTestRuns, templateRefusals, templateRefusalsExitNonZero, templateStillRuns } = selfCheck.blankGate;
-    lines.push(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}; a manifest with no runnable script refuses too: ${scriptlessRefuses ? 'ok' : 'NO'}; a manifest with a real script still runs: ${withTestRuns ? 'ok' : 'NO'}; the manual fallback carries ${templateRefusals} refusal(s) each armed with a non-zero exit: ${templateRefusalsExitNonZero ? 'ok' : 'NO'}; and still reaches a success tail: ${templateStillRuns ? 'ok' : 'NO'}`);
+    const { pass, placeholderFails, realRuns, scriptlessRefuses, withTestRuns, explicitFailsClosed, explicitOpensWhenRun, templateRefusals, templateRefusalsExitNonZero, templateStillRuns } = selfCheck.blankGate;
+    lines.push(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}; a manifest with no runnable script refuses too: ${scriptlessRefuses ? 'ok' : 'NO'}; a manifest with a real script still runs: ${withTestRuns ? 'ok' : 'NO'}; an explicit --commands list the manifest cannot run fails closed: ${explicitFailsClosed ? 'ok' : 'NO'}; and opens again once a check really runs: ${explicitOpensWhenRun ? 'ok' : 'NO'}; the manual fallback carries ${templateRefusals} refusal(s) each armed with a non-zero exit: ${templateRefusalsExitNonZero ? 'ok' : 'NO'}; and still reaches a success tail: ${templateStillRuns ? 'ok' : 'NO'}`);
   }
   if (selfCheck.blueprint) {
     const { pass, pendingMarked, noInventedFill, verbatim, slotRewritten, restIntact, detectorHasTeeth, refusalHonoured, refusedUntouched, error } = selfCheck.blueprint;
@@ -1453,6 +1457,31 @@ async function checkBlankProjectGate() {
     const rendered = renderVerificationStep(command);
     return !/\bexit 1\b/.test(rendered) && rendered.includes('npm test');
   });
+  // A third shape, and the one nothing armed. Both arms above route through verificationCommands —
+  // one with an empty script set, one with a test script. The explicit --commands path never reaches
+  // it at all (create-harness.mjs takes the user's list verbatim and skips verificationCommands
+  // entirely), so the refusal branch at the foot of verificationCommands was bypassed wholesale.
+  // Measured on a repo with no manifest: `--commands "npm test,npm run lint"` rendered both steps as
+  // has_script guards that SKIPPED, the script printed "Verification Complete" and exited 0, and the
+  // audit still scored that repo 100/100 with "Verification fails fast" PASS. One axis was armed
+  // while the other stayed blind, so the suite reported a pass it had not earned. Asserted through
+  // the real assembler rather than a fixture: a hand-written script would only prove this probe's
+  // copy of the string is right.
+  const explicit = initScriptFromCommands(['npm test']);
+  // Fails closed: the counter exists, and a zero count refuses with a non-zero exit. Read the
+  // refusal the same way the fallback-template arm below does — split on the sentinel each refusal
+  // prints immediately before refusing, then require the first statement of the block to be a
+  // non-zero exit. A byte-window regex was the first attempt and it was wrong: it counted the
+  // refusal's own explanatory lines against the window, so widening the message would silently
+  // unarm this check. The sentinel does not move when the message does.
+  const explicitRefusalBlocks = explicit.split('a gate that cannot fail is not a gate').slice(1);
+  const explicitFailsClosed = /\bRAN=0\b/.test(explicit)
+    && explicitRefusalBlocks.length >= 1
+    && explicitRefusalBlocks.every((block) => /^[ \t]*exit[ \t]+[1-9]\d*[ \t]*$/m.test(block.slice(0, 200)));
+  // Opens when a check really ran — inside the guard's success branch, not beside the SKIP notice.
+  // Without this arm, "refuse unconditionally" would satisfy the assertion above while making the
+  // gate useless: the mirror-image failure of a gate that cannot fail.
+  const explicitOpensWhenRun = /has_script\s+"test";\s*then[\s\S]*?\bRAN=1\b/.test(explicit);
   // The same invariant has a SECOND producer, and it went uncovered. templates/init.sh is the
   // manual fallback — what the agent copies by hand when the runtime has no Node — so none of the
   // generator probes above reach it. Measured, not assumed: replacing both of its `exit 1`
@@ -1480,11 +1509,14 @@ async function checkBlankProjectGate() {
   const templateStillRuns = /=== Verification Complete ===/.test(template);
   return {
     pass: placeholderFails && realRuns && scriptlessRefuses && withTestRuns
+      && explicitFailsClosed && explicitOpensWhenRun
       && templateRefusalsExitNonZero && templateStillRuns,
     placeholderFails,
     realRuns,
     scriptlessRefuses,
     withTestRuns,
+    explicitFailsClosed,
+    explicitOpensWhenRun,
     templateRefusals,
     templateRefusalsExitNonZero,
     templateStillRuns

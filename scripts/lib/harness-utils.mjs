@@ -322,7 +322,25 @@ explain_failure() {
 }
 trap explain_failure ERR
 
+# Counts the checks that actually ran. A guarded step SKIPS with a notice when package.json does not
+# define the script yet, so before this counter existed ./init.sh could skip every check, print
+# "Verification Complete" and exit 0 having verified nothing — the gate cannot fail, and "no feature
+# may be marked done without evidence" becomes structurally unreachable on exactly the fresh skeleton
+# where it matters most. Emitted unconditionally, because the branch that reaches the success tail at
+# exit 0 must be the one that earned it. Same contract as the manual fallback templates/init.sh,
+# which is the other producer of this file and carried the counter while this one did not.
+RAN=0
+
 ${body}
+
+if [ "$RAN" -eq 0 ]; then
+  echo ""
+  echo "ERROR: nothing in this harness verified anything — every check was skipped."
+  echo "This project does not define the scripts named above yet, so none of them ran."
+  echo "Replace them in ./init.sh with commands this repository can really run."
+  echo "Until then ./init.sh MUST fail: a gate that cannot fail is not a gate."
+  exit 1
+fi
 
 echo "=== Verification Complete ==="
 echo ""
@@ -372,16 +390,26 @@ fi`;
   const script = command.match(SCRIPT_STEP);
   if (script && !NON_SCRIPT_ARGS.has(script[1])) {
     const name = script[1];
+    // RAN=1 sits inside the branch that really executes, never beside the SKIP notice. The counter,
+    // not the notice, is what lets the assembled script tell "this check ran" apart from "this check
+    // was skipped" — and a notice cannot be asserted on without asserting on our own prose.
     return `if has_script "${name}"; then
   echo "=== ${escapeForEcho(command)} ==="
   ${command}
+  RAN=1
 else
   echo "SKIP: ${escapeForEcho(command)} (package.json has no \\"${name}\\" script yet)"
 fi`;
   }
 
+  // Reached by every command that is not a package-manager script step and not an install: pytest,
+  // cargo test, mvn test, dotnet test, and anything handed in through --commands. It always runs, so
+  // it always counts. The install branch above deliberately does not: installing dependencies is a
+  // prerequisite, and a run whose only step was an install is exactly the shape the refusal at the
+  // foot of the script exists to catch.
   return `echo "=== ${escapeForEcho(command)} ==="
-${command}`;
+${command}
+RAN=1`;
 }
 
 function escapeForEcho(value) {
