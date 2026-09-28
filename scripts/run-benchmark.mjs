@@ -8,13 +8,16 @@ import { fileURLToPath } from 'node:url';
 import {
   bottleneckLabel,
   collectCommandReferences,
+  DELEGATION_OWNER_TERMS,
   exists,
   formatScoreReport,
   htmlReport,
   initScriptFromCommands,
   loadHarnessFiles,
+  NO_VERIFICATION_MARKER,
   parseArgs,
   pickBottlenecks,
+  PLAIN_DELEGATION_TERMS,
   readJson,
   readText,
   renderVerificationStep,
@@ -70,7 +73,15 @@ const execFileAsync = promisify(execFile);
 // Cutting that content is a user decision, not a side effect of removing superpowers. The baseline
 // drops 130 rather than the 157 bytes the removed rule held: the ceiling is 1.25x the baseline, so
 // subtracting the content delta from the baseline would over-cut the ceiling by a quarter of it.
-const SKILL_MD_BASELINE_BYTES = 9820;
+// 9820 -> 10290 on 2026-09-28, the second raise and the second time for scope rather than wording:
+// the user kept this skill in charge of non-engineering working directories (documentation sets,
+// skill repositories, teaching outlines) instead of giving that up, which adds a second tier the
+// skill's own routing has to name. The raise is 470 bytes for 545 bytes of new text measured on the
+// rendered file, rounded up so the ceiling lands at 12862 with 53 bytes spare — deliberately not
+// padded, because the point of a baseline is to be the tightest number the current scope justifies.
+// An unnamed tier would be the defect this skill tells everyone else to fix: a capability with no
+// entry point in the artifact that routes to it, reachable only by someone who already knew.
+const SKILL_MD_BASELINE_BYTES = 10290;
 const SKILL_MD_GROWTH = 1.25; // widened from 1.15 by user decision, 2026-09-23
 const SKILL_MD_MAX_BYTES = Math.floor(SKILL_MD_BASELINE_BYTES * SKILL_MD_GROWTH);
 
@@ -139,7 +150,7 @@ const DISCOVERABLE_CONTENT = [
 // a file the skill no longer writes is the same "check and template on the same side" defect one
 // level up: the gate would be asserting the existence of the thing that was removed.
 const SELF_CHECK_GROUPS = [
-  'budget', 'agentsBudget', 'agentsDiscover', 'scopeBrake', 'maintenance', 'skillDesign',
+  'budget', 'agentsBudget', 'agentsDiscover', 'scopeBrake', 'plainTier', 'maintenance', 'skillDesign',
   'wrapupOutput', 'dryRun', 'selfRefs', 'references', 'bottleneckTies', 'blankGate', 'blueprint',
   'agentFile', 'reportContract'
 ];
@@ -153,6 +164,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['agentsBudget', (group) => ` The generated AGENTS.md stays inside its external byte, line and working-rule budgets (${group.pass ? 'verified' : 'FAILED'}).`],
   ['agentsDiscover', (group) => ` The instruction file does not restate what the agent can read for itself, and the detector is proven to have teeth by a seeded violation (${group.pass ? 'verified' : 'FAILED'}).`],
   ['scopeBrake', (group) => ` The generated instruction file names one delegated owner for the engineering workflow, keeps both of its slots and their setup prerequisite, and carries none of the removed doctrine (${group.pass ? 'verified' : `missing owner terms ${(group.missingOwners || []).join(', ') || 'none'}; owner detector ${group.ownerTeeth ? 'has teeth' : 'BLIND'}; brake ${group.brake ? 'present' : 'MISSING'}; leaked ${(group.leaked || []).join(', ') || 'none'}; doctrine detector ${group.seeded?.length ? 'has teeth' : 'BLIND'}`}).`],
+  ['plainTier', (group) => ` A working directory with no engineering workflow to hand to anyone gets the same three subsystems with no owner named, chosen by an explicit flag rather than inferred, while the tier that does have an owner still names every term; the waiver for having nothing to run is refused unless the plain tier was asked for, and when granted it discloses rather than reports a pass (${group.pass ? 'verified' : `plain render owner-free ${group.ownerFree ? 'yes' : 'NO'}; per-term detector ${group.plainTeeth ? 'has teeth' : 'BLIND'}; engineering still names its owner ${group.engNamed ? 'yes' : 'NO'}; engineering unmarked ${group.engUnmarked ? 'yes' : 'NO'}; waiver refused on its own ${group.refused ? 'yes' : 'NO'}; refusal wrote nothing ${group.refusalWroteNothing ? 'yes' : 'NO'}; disclosure present ${group.discloses ? 'yes' : 'NO'}; no completion banner ${group.neverClaims ? 'yes' : 'NO'}; undeclared still fails closed ${group.undeclaredHonest ? 'yes' : 'NO'}; owner lists agree ${group.listsAgree ? 'yes' : 'NO'}`}).`],
   ['maintenance', (group) => ` Harness maintenance has a moment to happen: the generated instruction file tells the agent to optimise the harness at wrap-up when the session's own output leaves it stale or thin, rather than when the harness files happen to have been touched, and the detector is proven to have teeth per term, against the retired diff-keyed sentence, against that sentence wearing the new vocabulary, and against a shortened forbidden list (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; retired phrasing ${(group.leaked || []).length ? `LEAKED (${group.leaked.join(', ')})` : 'absent'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old-form rejection ${group.oldFormRejected ? 'honoured' : 'ACCEPTED'}; hybrid form ${group.hybridRejected ? 'rejected' : 'ACCEPTED'}; forbidden-list shrink witness ${group.forbiddenWitness ? 'has teeth' : 'BLIND'}`}).`],
   ['skillDesign', (group) => ` The skill's own design rules are machine-checked rather than trusted to prose: SKILL.md's design section states the wrap-up criterion on the session's own output, and the detector is proven to have teeth per term, against the pre-09-25 rule line, against the old condition wearing the new vocabulary, and against a shortened requirement list (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; diff key ${(group.leaked || []).length ? `LEAKED (${group.leaked.join(', ')})` : 'absent'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old rule line ${group.oldFormRejected ? 'rejected' : 'ACCEPTED'}; hybrid form ${group.hybridRejected ? 'rejected' : 'ACCEPTED'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}`}).`],
   ['wrapupOutput', (group) => ` The wrap-up procedure a maintainer actually reads carries both of its outputs: the candidate changes, and the judgment items that are handed to the user instead of being decided — the part that stops a fresh session from treating already-dead rules as live — plus a net-change report, which is what keeps blind increment from hiding in wording (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; own section ${group.heading ? 'present' : 'ABSENT'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; heading requirement ${group.headingArm ? 'has teeth' : 'BLIND'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}`}).`],
@@ -160,7 +172,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
   ['references', (group) => ` A documented command that no longer resolves is caught rather than silently trusted: the audit resolves manifest scripts and runnable files, reports by name what it cannot resolve, and is proven in both directions (${group.pass ? 'verified' : `dangling fixture ${group.danglingCaught ? 'caught' : 'MISSED'}; guarded fixture ${group.guardedExcused ? 'excused' : 'FALSELY FLAGGED'}; unchecked bucket ${group.uncheckedListed ? 'populated' : 'SILENT'}; uncollected scan ${group.uncollectedRefused ? 'refused' : 'PASSED'}`}).`],
   ['bottleneckTies', (group) => ` The bottleneck line names ${group.tieCount} tied subsystem(s) as a tie instead of picking one (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['blankGate', (group) => ` A project with nothing to verify — no manifest, a manifest with no runnable script, or an explicit --commands list whose scripts the manifest does not define — gets a refusal that exits non-zero instead of reporting a pass it did not earn, the counter reopens the moment a real check runs, and the manual fallback template refuses on the same shapes (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['blankGate', (group) => ` A project with nothing to verify — no manifest, a manifest with no runnable script, or an explicit --commands list whose scripts the manifest does not define — gets a refusal that exits non-zero instead of reporting a pass it did not earn, the counter reopens the moment a real check runs, a comma inside a quoted command stays one command while a genuine comma-separated list still splits, an unterminated quote is refused leaving nothing behind, and the manual fallback template refuses on the same shapes (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-description slot stays a visible pending marker when the user has not stated one, while a blueprint change rewrites that slot only — the rest of the file survives byte for byte, and a shape this skill did not render is refused rather than guessed at (${group.pass ? 'verified' : `pending ${group.pendingMarked ? 'ok' : 'NO'}; no stack fill ${group.noInventedFill ? 'ok' : 'NO'}; verbatim ${group.verbatim ? 'ok' : 'NO'}; slot-only ${group.slotRewritten && group.restIntact ? 'ok' : 'NO'}; detector ${group.detectorHasTeeth ? 'has teeth' : 'BLIND'}; refusal ${group.refusalHonoured && group.refusedUntouched ? 'ok' : 'NO'}`}).`],
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`],
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`]
@@ -418,6 +430,7 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['agentsBudget', 'AGENTS.md budget'],
   ['agentsDiscover', 'AGENTS.md discoverability'],
   ['scopeBrake', 'Scope brake'],
+  ['plainTier', 'Plain tier'],
   ['maintenance', 'Maintenance trigger'],
   ['skillDesign', 'SKILL.md design rule'],
   ['wrapupOutput', 'Wrap-up outputs'],
@@ -598,6 +611,10 @@ function consoleSelfCheckLines(selfCheck) {
     const { pass, brake, owners, missingOwners = [], ownerTeeth, leaked = [], seeded = [], error } = selfCheck.scopeBrake;
     lines.push(`  Scope brake: ${pass ? 'PASS' : 'FAIL'} — engineering workflow delegated in the generated AGENTS.md: ${brake ? 'ok' : 'NO'}; one named owner carrying both slots and the setup prerequisite: ${owners ? 'ok' : `MISSING (${missingOwners.join(', ')})`}; owner detector has teeth: ${ownerTeeth ? 'ok' : 'BLIND'}; doctrine carried over from the removed scope: ${leaked.length === 0 ? 'none' : `LEAKED (${leaked.join(', ')})`}; detector catches a seeded violation: ${seeded.length === FORBIDDEN_IN_AGENTS_MD.length ? 'ok' : `BLIND (${seeded.length}/${FORBIDDEN_IN_AGENTS_MD.length} patterns)`}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.plainTier) {
+    const { pass, ownerFree, plainTeeth, engNamed, engUnmarked, refused, refusalWroteNothing, discloses, neverClaims, undeclaredHonest, listsAgree, missingOwners = [], error } = selfCheck.plainTier;
+    lines.push(`  Plain tier: ${pass ? 'PASS' : 'FAIL'} — a working directory with no engineering workflow gets the same three subsystems with no owner named: ${ownerFree ? 'ok' : 'NO'}; per-term owner detector: ${plainTeeth ? 'ok' : 'BLIND'}; engineering still names every owner: ${engNamed ? 'ok' : `MISSING (${missingOwners.join(', ')})`}; engineering carries no plain marker: ${engUnmarked ? 'ok' : 'NO'}; a declared absence of verification is refused on its own: ${refused ? 'ok' : 'ACCEPTED'}; and the refusal creates nothing: ${refusalWroteNothing ? 'ok' : 'NO'}; the granted waiver discloses: ${discloses ? 'ok' : 'NO'}; and never prints the completion banner: ${neverClaims ? 'ok' : 'NO'}; the same tier without the declaration still fails closed: ${undeclaredHonest ? 'ok' : 'NO'}; the two owner lists agree: ${listsAgree ? 'ok' : 'DIVERGED'}${error ? ` — ${error}` : ''}`);
+  }
   if (selfCheck.maintenance) {
     const { pass, stated, missing = [], leaked = [], teeth, oldFormRejected, hybridRejected, forbiddenWitness, error } = selfCheck.maintenance;
     lines.push(`  Maintenance trigger: ${pass ? 'PASS' : 'FAIL'} — wrap-up step keys on the session's own output leaving the harness stale, not on the harness files having been touched: ${stated ? 'ok' : `MISSING (${missing.join(', ') || 'section not found'})`}; retired diff-keyed phrasing: ${leaked.length === 0 ? 'absent' : `LEAKED (${leaked.join(', ')})`}; per-term detector: ${teeth ? 'ok' : 'BLIND'}; diff-keyed sentence rejected: ${oldFormRejected ? 'ok' : 'ACCEPTED'}; hybrid form rejected: ${hybridRejected ? 'ok' : 'ACCEPTED'}; forbidden-list shrink caught: ${forbiddenWitness ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
@@ -627,8 +644,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Bottleneck ties: ${pass ? 'PASS' : 'FAIL'} — tie names all 3 subsystems: ${tieCount === 3 ? 'ok' : `NO (${tieCount})`}; unique minimum names one: ${uniqueCount === 1 ? 'ok' : `NO (${uniqueCount})`}; complete harness reports none: ${noneCount === 0 ? 'ok' : `NO (${noneCount})`} — ${tieLabel}`);
   }
   if (selfCheck.blankGate) {
-    const { pass, placeholderFails, realRuns, scriptlessRefuses, withTestRuns, explicitFailsClosed, explicitOpensWhenRun, templateRefusals, templateRefusalsExitNonZero, templateStillRuns } = selfCheck.blankGate;
-    lines.push(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}; a manifest with no runnable script refuses too: ${scriptlessRefuses ? 'ok' : 'NO'}; a manifest with a real script still runs: ${withTestRuns ? 'ok' : 'NO'}; an explicit --commands list the manifest cannot run fails closed: ${explicitFailsClosed ? 'ok' : 'NO'}; and opens again once a check really runs: ${explicitOpensWhenRun ? 'ok' : 'NO'}; the manual fallback carries ${templateRefusals} refusal(s) each armed with a non-zero exit: ${templateRefusalsExitNonZero ? 'ok' : 'NO'}; and still reaches a success tail: ${templateStillRuns ? 'ok' : 'NO'}`);
+    const { pass, placeholderFails, realRuns, scriptlessRefuses, withTestRuns, explicitFailsClosed, explicitOpensWhenRun, quotedCommaUnsplit, listStillSplits, unterminatedRefused, templateRefusals, templateRefusalsExitNonZero, templateStillRuns } = selfCheck.blankGate;
+    lines.push(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}; a manifest with no runnable script refuses too: ${scriptlessRefuses ? 'ok' : 'NO'}; a manifest with a real script still runs: ${withTestRuns ? 'ok' : 'NO'}; an explicit --commands list the manifest cannot run fails closed: ${explicitFailsClosed ? 'ok' : 'NO'}; and opens again once a check really runs: ${explicitOpensWhenRun ? 'ok' : 'NO'}; a comma inside a quoted command stays one command: ${quotedCommaUnsplit ? 'ok' : 'NO'}; a genuine comma-separated list still splits: ${listStillSplits ? 'ok' : 'NO'}; an unterminated quote is refused and leaves nothing behind: ${unterminatedRefused ? 'ok' : 'NO'}; the manual fallback carries ${templateRefusals} refusal(s) each armed with a non-zero exit: ${templateRefusalsExitNonZero ? 'ok' : 'NO'}; and still reaches a success tail: ${templateStillRuns ? 'ok' : 'NO'}`);
   }
   if (selfCheck.blueprint) {
     const { pass, pendingMarked, noInventedFill, verbatim, slotRewritten, restIntact, detectorHasTeeth, refusalHonoured, refusedUntouched, error } = selfCheck.blueprint;
@@ -673,6 +690,7 @@ async function runSelfCheck() {
       agentsBudget: () => checkAgentFileBudget(),
       agentsDiscover: () => checkAgentFileDiscoverability(),
       scopeBrake: () => checkScopeBoundary(),
+      plainTier: () => checkPlainTier(),
       maintenance: () => checkMaintenanceTrigger(),
       skillDesign: () => checkSkillDesignRule(),
       wrapupOutput: () => checkWrapupOutputs(),
@@ -878,6 +896,112 @@ async function checkScopeBoundary() {
     return { pass: false, brake: false, owners: false, missingOwners: [], ownerTeeth: false, leaked: [], seeded: [], error: error.message };
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
+  }
+}
+
+// The shipped render used to have exactly one shape, and it named one owner. A working directory
+// with no engineering workflow to hand to anyone — a documentation set, a skill repository, a
+// teaching outline — therefore could not use this skill at all: the render named an owner it did not
+// have, and the audit then scored it down for saying so. The plain tier is the same three subsystems
+// with no owner named, chosen by an explicit flag rather than inferred from the directory.
+//
+// This group is what keeps the two tiers from collapsing into each other, and both directions are
+// asserted because either one alone is satisfied by a degenerate file: engineering must NAME the
+// owner, plain must NOT. A single arm would be satisfied by "remove the delegation everywhere".
+//
+// The waiver is the other half, and it is the shape this suite exists to distrust — a gate that
+// cannot fail. It is therefore read in both directions: refused outright without the plain tier, so
+// a repository that does have a baseline cannot collect it, and never a pass when it is granted, so
+// the generated gate says plainly that nothing was verified instead of printing the banner. Asserted
+// on the generated text rather than by running it: this suite is pure Node and executes no shell,
+// and making it require bash would fail wholesale on hosts that lack it — a gate that refuses
+// everything verifies nothing.
+async function checkPlainTier() {
+  let plainDir;
+  let engDir;
+  let blankDir;
+  let waivedDir;
+  let refuseParent;
+  try {
+    const create = path.join(scriptDir, 'create-harness.mjs');
+    plainDir = await mkdtemp(path.join(os.tmpdir(), 'harness-plain-'));
+    engDir = await mkdtemp(path.join(os.tmpdir(), 'harness-plain-eng-'));
+    await execFileAsync('node', [create, '--target', plainDir, '--no-engineering-owner', '--commands', 'echo baseline-ok']);
+    await execFileAsync('node', [create, '--target', engDir]);
+    const plain = await readText(path.join(plainDir, 'AGENTS.md'));
+    const plainInit = await readText(path.join(plainDir, 'init.sh'));
+    const eng = await readText(path.join(engDir, 'AGENTS.md'));
+
+    // One predicate per question, so the render and its audit cannot drift into two rules that only
+    // happen to agree today. The marker is asked for by its own words rather than through the
+    // constant that writes it: a silent change to that constant then shows up here instead of
+    // re-pointing this check at whatever the render now emits.
+    const plainLeaks = (text) => OWNER_TERMS.filter((term) => text.includes(term));
+    const claimed = /档位：非工程/.test(plain) && PLAIN_DELEGATION_TERMS.every((term) => plain.includes(term));
+    const ownerFree = plainLeaks(plain).length === 0 && plainLeaks(plainInit).length === 0 && claimed;
+    // Teeth, one term at a time, the way the scope brake proves its owner detector: seeding a name
+    // must make exactly that name report. One seeded blob would only prove the string reads.
+    const plainTeeth = OWNER_TERMS.every((term) => {
+      const reported = plainLeaks(`${plain}\n${term}`);
+      return reported.length === 1 && reported[0] === term;
+    });
+    // The other tier, so "drop the delegation everywhere" cannot satisfy the arm above. Engineering
+    // still names every term, and must not carry the marker that would quietly reclassify it.
+    const engNamed = missingOwnerTerms(eng).length === 0;
+    const engUnmarked = !/档位：非工程/.test(eng);
+    // Refused on its own, before anything is created: a project with an engineering workflow always
+    // has a baseline to run. A refusal that still left a directory behind would be cosmetic, so the
+    // absence of the target is asserted as part of the refusal rather than assumed from the exit code.
+    refuseParent = await mkdtemp(path.join(os.tmpdir(), 'harness-plain-refuse-'));
+    const refuseTarget = path.join(refuseParent, 'target');
+    let refused = false;
+    try {
+      await execFileAsync('node', [create, '--target', refuseTarget, '--no-verification']);
+    } catch {
+      refused = true;
+    }
+    const refusalWroteNothing = !(await exists(refuseTarget));
+    // Granted, the two halves are separate claims and both are asserted: the disclosure is present,
+    // AND the completion banner is absent. A script that printed both would satisfy the first alone.
+    waivedDir = await mkdtemp(path.join(os.tmpdir(), 'harness-plain-waived-'));
+    await execFileAsync('node', [create, '--target', waivedDir, '--no-engineering-owner', '--no-verification']);
+    const waivedInit = await readText(path.join(waivedDir, 'init.sh'));
+    const waivedAgents = await readText(path.join(waivedDir, 'AGENTS.md'));
+    const discloses = waivedInit.includes(NO_VERIFICATION_MARKER) && waivedAgents.includes('无验证命令');
+    const neverClaims = !waivedInit.includes('Verification Complete');
+    // The same tier without the declaration still fails closed through the real generator, so the
+    // waiver is a flag the user set and not a property of asking for this tier.
+    blankDir = await mkdtemp(path.join(os.tmpdir(), 'harness-plain-blank-'));
+    await execFileAsync('node', [create, '--target', blankDir, '--no-engineering-owner']);
+    const blankInit = await readText(path.join(blankDir, 'init.sh'));
+    const undeclaredHonest = /\bexit 1\b/.test(blankInit) && !blankInit.includes(NO_VERIFICATION_MARKER);
+    // The two owner lists live in two files on purpose — the audit must be able to disagree with the
+    // gate — so the divergence is asserted rather than trusted to stay in sync. Without this arm one
+    // list could shrink while the other kept the suite green.
+    const listsAgree = OWNER_TERMS.length === DELEGATION_OWNER_TERMS.length
+      && OWNER_TERMS.every((term) => DELEGATION_OWNER_TERMS.includes(term));
+
+    return {
+      pass: ownerFree && plainTeeth && engNamed && engUnmarked && refused && refusalWroteNothing
+        && discloses && neverClaims && undeclaredHonest && listsAgree,
+      ownerFree,
+      plainTeeth,
+      engNamed,
+      engUnmarked,
+      refused,
+      refusalWroteNothing,
+      discloses,
+      neverClaims,
+      undeclaredHonest,
+      listsAgree,
+      missingOwners: missingOwnerTerms(eng)
+    };
+  } catch (error) {
+    return { pass: false, error: error.message };
+  } finally {
+    for (const dir of [plainDir, engDir, blankDir, waivedDir, refuseParent]) {
+      if (dir) await rm(dir, { recursive: true, force: true });
+    }
   }
 }
 
@@ -1355,7 +1479,13 @@ function scoreEvals(evalsJson) {
     // docs name a script that no longer exists reports that, rather than trusting the prose — and
     // whether it keeps the check honest in both directions: no false alarm on a guarded command,
     // and no quiet pass over what it could not resolve.
-    ['Covers command reference integrity', /命令引用/]
+    ['Covers command reference integrity', /命令引用/],
+    // Added with the plain tier. The gate proves the two renders make mutually exclusive claims and
+    // that the waiver cannot be collected without asking for it; only a case shows what an agent
+    // does with a documentation directory — whether it keeps the verification honest instead of
+    // letting "no owner" quietly become "no gates", and whether it hands back a waiver the user
+    // never asked for.
+    ['Covers the plain tier for non-engineering working directories', /非工程/]
   ];
   for (const [message, pattern] of familyEntries) {
     checks.push({ pass: cases.some((item) => pattern.test(item.name)), message });
@@ -1507,20 +1637,65 @@ async function checkBlankProjectGate() {
   // The other direction, for the same reason the generator arms carry one: a fallback that
   // refused unconditionally would satisfy the arm above while verifying nothing.
   const templateStillRuns = /=== Verification Complete ===/.test(template);
-  return {
-    pass: placeholderFails && realRuns && scriptlessRefuses && withTestRuns
-      && explicitFailsClosed && explicitOpensWhenRun
-      && templateRefusalsExitNonZero && templateStillRuns,
-    placeholderFails,
-    realRuns,
-    scriptlessRefuses,
-    withTestRuns,
-    explicitFailsClosed,
-    explicitOpensWhenRun,
-    templateRefusals,
-    templateRefusalsExitNonZero,
-    templateStillRuns
-  };
+  // --commands is a comma-separated list, so a comma INSIDE one of the commands used to split it in
+  // two: `--commands "bash -c 'echo a,b'"` became the steps `bash -c 'echo a` and `b'`, and the
+  // second half is not a check at all. That is the same defect as the arms above, one layer up — a
+  // gate silently rewritten into a step that cannot fail — and it was armed on neither axis. The
+  // list is now split with quoting respected, and an unterminated quote is refused rather than
+  // guessed at. Three directions through the real generator, because each fails differently:
+  // quoting must protect the comma, a genuine comma-separated list must still split (or "never
+  // split" would satisfy the first arm while breaking every existing caller), and the refusal must
+  // leave nothing behind (or "refuse after writing" would satisfy the second).
+  const commaDir = await mkdtemp(path.join(os.tmpdir(), 'harness-comma-'));
+  const listDir = await mkdtemp(path.join(os.tmpdir(), 'harness-cmdlist-'));
+  const badCmdDir = await mkdtemp(path.join(os.tmpdir(), 'harness-badcmd-'));
+  try {
+    const createScript = path.join(scriptDir, 'create-harness.mjs');
+    await execFileAsync('node', [
+      createScript, '--target', commaDir, '--no-engineering-owner', '--commands', "bash -c 'echo a,b'"
+    ]);
+    await execFileAsync('node', [
+      createScript, '--target', listDir, '--no-engineering-owner', '--commands', 'npm test,npm run lint'
+    ]);
+    const commaAgents = await readText(path.join(commaDir, 'AGENTS.md'));
+    const listAgents = await readText(path.join(listDir, 'AGENTS.md'));
+    // One command, comma intact, and no orphaned half of it registered as an entry of its own.
+    const quotedCommaUnsplit = commaAgents.includes("- `bash -c 'echo a,b'`")
+      && !/^- `b'`$/m.test(commaAgents);
+    const listStillSplits = /^- `npm test`$/m.test(listAgents) && /^- `npm run lint`$/m.test(listAgents);
+    // The refusal has to be a refusal, not a warning printed on the way to writing the files anyway.
+    let refusedCode = null;
+    try {
+      await execFileAsync('node', [
+        createScript, '--target', badCmdDir, '--no-engineering-owner', '--commands', "bash -c 'echo a,b"
+      ]);
+      refusedCode = 0;
+    } catch (error) {
+      refusedCode = error.code;
+    }
+    const unterminatedRefused = refusedCode !== 0 && refusedCode !== null
+      && (await readdir(badCmdDir)).length === 0;
+    return {
+      pass: placeholderFails && realRuns && scriptlessRefuses && withTestRuns
+        && explicitFailsClosed && explicitOpensWhenRun
+        && templateRefusalsExitNonZero && templateStillRuns
+        && quotedCommaUnsplit && listStillSplits && unterminatedRefused,
+      placeholderFails,
+      realRuns,
+      scriptlessRefuses,
+      withTestRuns,
+      explicitFailsClosed,
+      explicitOpensWhenRun,
+      templateRefusals,
+      templateRefusalsExitNonZero,
+      templateStillRuns,
+      quotedCommaUnsplit,
+      listStillSplits,
+      unterminatedRefused
+    };
+  } finally {
+    for (const dir of [commaDir, listDir, badCmdDir]) await rm(dir, { recursive: true, force: true });
+  }
 }
 
 // The plain-description slot. AGENTS.md's one place that answers "what is this project"

@@ -108,6 +108,16 @@ node ~/.agents/skills/harness-creator/scripts/validate-harness.mjs --target /pat
 
 `create-harness.mjs` 可检测常见的项目类型与包管理器。在基础验证命令层面支持 Node/npm/pnpm/yarn/bun、Python、Go、Rust、Maven、Gradle 和 .NET。
 
+### 两档：工程档与非工程档
+
+默认是**工程档**：指令文件把工程流程**具名委派**出去（`mattpocock`，含 `to-tickets` / `handoff` 与 `/setup-matt-pocock-skills` 前置）。
+
+如果一个目录**没有工程阶段可以交出去**——文档集、技能仓、教学材料——用 `--no-engineering-owner` 选**非工程档**：同样三个子系统、同样两个产物，但指令文件**不具名任何承接方**，而是写明状态与进度由项目自有的记录维护、位置由你指定、本技能不代建。档位**由标志显式选择，不按目录内容推断**——「这里没有 `package.json`」同时描述一个空的工程仓，据此路由会在最需要门禁的地方把门禁关掉。
+
+验证入口在非工程档下**照样要求真实检查**（`markdownlint-cli2`、链接检查、frontmatter 校验都算），用 `--commands` 给即可；不给就照旧失败关闭。确实没有可跑的东西时，`--no-verification` 允许**显式声明**这一点，但它被三条约束夹住：不能单独使用（没有 `--no-engineering-owner` 时直接拒绝、非零退出、什么都不创建）；生成的 `init.sh` 只打印 `NO VERIFICATION DECLARED` 与「本脚本什么都没验证」，**绝不打印完成横幅**；同一档位不给这个标志时 `init.sh` 仍然退出码 1。声明会**同时**写进 `AGENTS.md` 与 `init.sh`。
+
+需要留意的限度：审计按**产物形态**打分（工程档带占位符同样是满分），所以一份合法的声明档也会拿到满分——「什么都没验证」这个事实由 `init.sh` 的运行输出与 `AGENTS.md` 那一行承载，**不由分数承载**。详见 [`references/non-engineering-harness.md`](references/non-engineering-harness.md)。
+
 ## 它会检查什么
 
 `validate-harness.mjs` 对**三个** harness 子系统进行评分：
@@ -205,6 +215,7 @@ harness-creator/
 │   └── lib/harness-utils.mjs
 ├── templates/
 │   ├── agents.md
+│   ├── agents-plain.md
 │   └── init.sh
 ├── references/
 └── evals/evals.json

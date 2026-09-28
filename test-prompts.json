@@ -87,6 +87,11 @@
   {
     "id": 18,
     "prompt": "我这台机器上 mattpocock/skills 和 superpowers 都装了。我只想让 mattpocock 一个体系管工程阶段——superpowers 别再出现在 AGENTS.md 里，别让代理每次都来问我。",
-    "expected": "写出**单一 owner、无条件**的承接声明，而不是并列两个让人挑：工程阶段整体归 mattpocock 的模型可调用 skill，由那个体系自行分派——不逐阶段列举，也不写任何运行期条件（不按「系统提示里有没有某个引导词」分流，因此也没有在场／不在场／判不出的三态）。**状态与阻塞边（to-tickets）与会话交接（handoff）具名固定**，共同前置是一次性运行 /setup-matt-pocock-skills（它配置 tracker）。已剔除的 superpowers **不得出现在生成物的任何位置**：不是分支、不是降级兜底、也不是「若已安装则可用」的可选项——用户已判定它只增加负担、看不出两者一起的作用。判别走生成物里已写明的归属，不做安装检查、也不做在场判别；不改写承接方的产物落点，也不替用户调用它们"
+    "expected": "写出**单一 owner、无条件**的承接声明，而不是并列两个让人挑：工程阶段整体归 mattpocock 的模型可调用 skill，由那个体系自行分派——不逐阶段列举，也不写任何运行期条件（不按「系统提示里有没有某个引导词」分流，因此也没有在场／不在场／判不出的三态）。**状态与阻塞边（to-tickets）与会话交接（handoff）具名固定**，共同前置是一次性运行 /setup-matt-pocock-skills（它配置 tracker）。已剔除的 superpowers **不得出现在生成物的任何位置**：不是分支、不是降级兜底、也不是「若已安装则可用」的可选项——用户已判定它只增加负担、看不出两者一起的作用。    判别走生成物里已写明的归属，不做安装检查、也不做在场判别；不改写承接方的产物落点，也不替用户调用它们"
+  },
+  {
+    "id": 19,
+    "prompt": "我有个只放文档的目录——一堆 markdown、一份目录约定，不写代码。想给它建 AGENTS.md 和验证入口，但不要 mattpocock 那套工程流程，这里没有工程阶段可以交出去。怎么做？",
+    "expected": "用 --no-engineering-owner 显式选非工程档（不由目录内容推断——「没有 package.json」同时描述一个空的工程仓），交付仍是同一套两个产物。AGENTS.md 的「状态与交接」节不具名任何承接方：写明状态与进度由项目自有的记录维护、位置由用户指定、本技能不代建；工作规则与完成定义改用交付物口径。生成物与 init.sh 尾注中**不得出现** mattpocock / to-tickets / handoff / setup-matt-pocock-skills。验证入口照样要求真实检查（markdownlint-cli2、链接检查、frontmatter 校验都算），用 --commands 给出；不给就照旧失败关闭（退出码 1）。确实没有可跑的东西时，--no-verification 允许显式声明，但它不能单独使用（没有 --no-engineering-owner 时拒绝、非零退出、什么都不创建），声明必须同时出现在 AGENTS.md 与 init.sh，生成的 init.sh 只打印 NO VERIFICATION DECLARED 与「本脚本什么都没验证」，绝不打印完成横幅。另注意：审计按产物形态打分，声明档也是满分——「什么都没验证」由 init.sh 的输出承载，不由分数承载"
   }
 ]

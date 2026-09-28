@@ -10,6 +10,7 @@ import {
   exists,
   initScriptFromCommands,
   parseArgs,
+  PLAIN_TEMPLATE,
   readText,
   replaceBlueprintSlot,
   scriptCommand,
@@ -21,7 +22,7 @@ import {
 const args = parseArgs(process.argv.slice(2));
 
 if (args.help) {
-  console.log(`Usage: ${scriptCommand('create-harness.mjs')} [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--blueprint "WHAT THIS PROJECT IS"] [--commands "a,b"] [--force] [--dry-run]
+  console.log(`Usage: ${scriptCommand('create-harness.mjs')} [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--blueprint "WHAT THIS PROJECT IS"] [--commands "a,b"] [--no-engineering-owner] [--no-verification] [--force] [--dry-run]
 
 Creates a minimal production harness — the three subsystems this skill owns, no more:
   AGENTS.md or CLAUDE.md (an existing CLAUDE.md is kept and preferred)
@@ -64,9 +65,46 @@ An existing AGENTS.md/CLAUDE.md is never rewritten (skip, or --force) — instea
 sections it lacks are reported so the agent can merge them by hand, keeping third-party blocks
 such as a "## Agent skills" section another skill owns.
 
+--no-engineering-owner renders the PLAIN tier: a working directory with no engineering workflow to
+hand to anyone — a documentation set, a skill repository, a teaching outline. Same three subsystems,
+same two artifacts, but the instruction file names no owner, because there is nothing the engineering
+stages could be delegated to. It says instead that state stays with the project's own record, whose
+location this skill neither creates nor guesses. The tier is chosen by this flag alone and never
+inferred: "there is no package.json here" describes an empty engineering repo exactly as well.
+
+--no-verification lets a PLAIN project declare that it has nothing to run. It is refused on its own
+(exit non-zero, nothing created), because a project with an engineering workflow always has a
+baseline, and an absent gate there is a gate that cannot fail. When granted, the generated init.sh
+prints a disclosure instead of the completion banner and never claims anything was verified, and the
+same declaration is written into the instruction file so a reader sees it without opening the script.
+Leaving the flag out keeps the ordinary behaviour on the plain tier: init.sh exits 1 until a real
+check replaces the placeholder.
+
+--commands takes a comma-separated list, one check per entry: --commands "npm test,npm run lint".
+A comma inside a command has to be quoted, or it would separate rather than belong: --commands
+"bash -c 'echo a,b'" is ONE command. An unterminated quote is refused with a non-zero exit and
+nothing created, rather than split into steps that no longer check anything.
+
 Existing files are skipped unless --force is set. --force does not overwrite a file whose content
 another skill owns; it only lifts the skip on this skill's own artifacts.`);
   process.exit(0);
+}
+
+// The plain tier: a working directory with no engineering workflow to hand to anyone — a
+// documentation set, a skill repository, a teaching outline. It is an explicit flag and never
+// inferred, because this skill does not guess a project's shape from what the directory contains,
+// and "there is no package.json here" describes an empty engineering repo exactly as well.
+const plain = Boolean(args.noEngineeringOwner);
+// A plain project may declare that it has nothing to run. The declaration is refused on its own:
+// without the plain tier there is no such thing as "nothing to verify", so a repository that does
+// have a baseline can never collect it as a waiver. Checked before anything is created, so a
+// rejected invocation leaves the target byte-untouched.
+const noVerification = Boolean(args.noVerification);
+if (noVerification && !plain) {
+  console.error('REFUSED: --no-verification is only available together with --no-engineering-owner.');
+  console.error('A project with an engineering workflow always has a baseline to run, so an absent');
+  console.error('verification gate there is a gate that cannot fail. Nothing was created.');
+  process.exit(1);
 }
 
 const target = path.resolve(args.target || args._[0] || process.cwd());
@@ -82,9 +120,55 @@ const force = Boolean(args.force);
 const dryRun = Boolean(args.dryRun);
 const project = await detectProject(target);
 project.packageManager = detectPackageManager(target, args.packageManager);
-const commands = args.commands
-  ? String(args.commands).split(',').map((command) => command.trim()).filter(Boolean)
-  : verificationCommands(project, args.packageManager);
+// --commands is a comma-separated list, and a comma INSIDE one of the commands used to split it in
+// two: `--commands "bash -c 'echo a,b'"` became the steps `bash -c 'echo a` and `b'`, the second of
+// which is not a check at all — a gate silently rewritten into something that cannot fail, which is
+// the silent degradation this skill exists to forbid. The split is now quote-aware, and an
+// unterminated quote is refused instead of guessed at, because guessing is what produced the split.
+// Quoting is the only escape; there is no backslash form to remember.
+function splitCommandList(raw) {
+  const parts = [];
+  let current = '';
+  let quote = null;
+  for (const char of String(raw)) {
+    if (quote) {
+      current += char;
+      if (char === quote) quote = null;
+    } else if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      current += char;
+    } else if (char === ',') {
+      parts.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  if (quote) return { error: `unterminated ${quote} in --commands` };
+  parts.push(current);
+  return { commands: parts.map((part) => part.trim()).filter(Boolean) };
+}
+
+const commandSplit = noVerification
+  ? { commands: [] }
+  : args.commands
+    ? splitCommandList(String(args.commands))
+    : { commands: verificationCommands(project, args.packageManager) };
+if (commandSplit.error) {
+  console.error(`REFUSED: ${commandSplit.error}.`);
+  console.error('--commands separates commands with commas, so a comma inside a command must be');
+  console.error('quoted: --commands "bash -c \'echo a,b\'" is one command. Splitting it silently');
+  console.error('would ship a gate that no longer checks what it was asked to. Nothing was created.');
+  process.exit(1);
+}
+const commands = commandSplit.commands;
+
+// The tier decides which instruction file is rendered. Two templates rather than one with branches,
+// because the engineering render has to stay byte-identical to what it produced before the tier
+// existed — a separate file makes that a property of the construction rather than something a
+// conditional can quietly break. The cost is that the two templates can drift, which is why the
+// self-check asserts their shared skeleton is equal instead of trusting it.
+const templateName = plain ? PLAIN_TEMPLATE : 'agents.md';
 
 // Skipped under --dry-run: a preview must not change the filesystem, and creating the target
 // directory counts as a change. The existence probes above already tolerate a missing path.
@@ -104,13 +188,22 @@ const replacements = {
   PROJECT_PURPOSE: args.blueprint
     ? String(args.blueprint)
     : '待补——由用户陈述「这个项目是什么、最终交付什么」后填入；此字样存在即表示尚未确定',
-  VERIFICATION_COMMANDS: commands.map((command) => `- \`${command}\``).join('\n'),
-  PRIMARY_VERIFICATION_COMMAND: './init.sh'
+  VERIFICATION_COMMANDS: noVerification
+    ? '- （本项目显式声明：无验证命令）'
+    : commands.map((command) => `- \`${command}\``).join('\n'),
+  PRIMARY_VERIFICATION_COMMAND: './init.sh',
+  // Rendered at the end of the plain tier's marker line and empty on every other path, so the
+  // engineering render gains no byte from it. A waiver has to be visible in the artifact the agent
+  // reads, not only in the script it runs — an agent that reads AGENTS.md must be able to see that
+  // nothing is verified here without opening init.sh.
+  PLAIN_VERIFICATION_NOTE: noVerification
+    ? ' 本仓库同时声明：**无验证命令**（`./init.sh` 只作启动路径，不验证任何东西）。'
+    : ''
 };
 
 const results = [];
 const agentPath = path.join(target, agentFile);
-const agentResult = await copyTemplate('agents.md', agentPath, replacements, { force, dryRun });
+const agentResult = await copyTemplate(templateName, agentPath, replacements, { force, dryRun });
 results.push(agentResult);
 
 // A blueprint change is not a re-run of create. The blueprint is the one slot the user owns and
@@ -128,7 +221,7 @@ if (blueprintUpdate?.ok && !dryRun) await writeText(agentPath, blueprintUpdate.m
 // section in English or in another wording, and would add a second startup path — two competing
 // instruction files is the drift this skill exists to prevent. Merging is the agent's call.
 const missingAgentSections = agentResult.status === 'skipped'
-  ? diffSections(await readText(path.join(TEMPLATE_DIR, 'agents.md')), await readText(agentPath))
+  ? diffSections(await readText(path.join(TEMPLATE_DIR, templateName)), await readText(agentPath))
   : [];
 
 // No state artifacts are written. State and handoff are delegated to the engineering skills, and
@@ -138,7 +231,7 @@ const missingAgentSections = agentResult.status === 'skipped'
 const initPath = path.join(target, 'init.sh');
 if (force || !await exists(initPath)) {
   if (!dryRun) {
-    await writeText(initPath, initScriptFromCommands(commands));
+    await writeText(initPath, initScriptFromCommands(commands, { plain, noVerification }));
     await chmod(initPath, 0o755);
   }
   results.push({ path: initPath, status: 'written' });
@@ -154,9 +247,13 @@ if (dryRun) {
   console.log(`Created harness for ${target}`);
 }
 console.log(`Detected stack: ${project.stack}`);
+console.log(`Tier: ${plain ? 'plain (no engineering owner)' : 'engineering (owner delegated)'}`);
 console.log(`Verification commands:`);
 for (const command of commands) {
   console.log(`  - ${command}`);
+}
+if (noVerification) {
+  console.log('  - (none declared — the generated init.sh says so and verifies nothing)');
 }
 console.log('');
 for (const result of results) {
@@ -194,7 +291,14 @@ if (missingAgentSections.length > 0) {
 // The next step is the user's, not this skill's: the tracker has to be configured before the
 // delegated state capability exists at all, and that configuration belongs to the upstream skill.
 console.log('');
-console.log('Next: run /setup-matt-pocock-skills once to configure the tracker, then use to-tickets for');
-console.log('state and blocking edges. The engineering workflow belongs to mattpocock as a whole, and that');
-console.log('system dispatches its own stages. This skill derives no entries, acceptance criteria or');
-console.log('decisions on its own, and ships no in-repo substitute for state or handoff.');
+if (plain) {
+  console.log('Next: read AGENTS.md for the startup path and the invariants. This project has no engineering');
+  console.log('owner, so nothing is delegated and nothing is named: state and progress stay wherever the');
+  console.log('project already keeps them, and this skill neither creates that place nor points at one.');
+  console.log('It derives no entries, acceptance criteria or decisions on its own.');
+} else {
+  console.log('Next: run /setup-matt-pocock-skills once to configure the tracker, then use to-tickets for');
+  console.log('state and blocking edges. The engineering workflow belongs to mattpocock as a whole, and that');
+  console.log('system dispatches its own stages. This skill derives no entries, acceptance criteria or');
+  console.log('decisions on its own, and ships no in-repo substitute for state or handoff.');
+}
