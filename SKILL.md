@@ -33,7 +33,7 @@ license: MIT
 
 本技能只负责 harness 产物就位，以及把它们与别的技能串起来；**不承接工程流程本身**。
 
-- **承接方是具名的工程 skill**：工程阶段（需求对齐、规格与计划、实现与测试、代码审查、分支收尾）**整体归 `mattpocock`** 的模型可调用 skill，由它按任务自行分派；其中**状态与阻塞边 → `to-tickets`**、**会话交接 → `handoff`** 具名固定，共同前置是一次性运行 `/setup-matt-pocock-skills` 配置 tracker。本技能**不代为发起或执行**，也不为其产物指定位置。
+- **承接方是具名的工程 skill**：工程阶段（需求对齐＝`grilling`、规格与计划、实现与测试、代码审查、分支收尾）**整体归 `mattpocock`** 的模型可调用 skill，由它按任务自行分派；其中**状态与阻塞边 → `to-tickets`**、**会话交接 → `handoff`** 具名固定，共同前置是一次性运行 `/setup-matt-pocock-skills` 配置 tracker。本技能**不代为发起或执行**，也不为其产物指定位置。
 - **两档**：以上是**工程档**（默认）。`--no-engineering-owner` 渲染**非工程档**——同样三个子系统、同样两个产物，但**不具名任何承接方**，用于文档／技能／教学这类没有工程阶段可交出去的目录。档位由标志选择，**不按目录内容推断**。**非工程档下，全文承接方指向改述为「状态归项目自有记录、位置由用户指定」。** 见 `references/non-engineering-harness.md`。
 - **不让代理主动扩范围**：不得因本技能而主动开启与 harness 无关的工作——那会与其他 skill 争抢触发时机，导致系统混乱。
 - **同一事实只问一次**：属别的 skill 管辖的问题交由它问，本技能不重复询问。
@@ -65,7 +65,7 @@ node <技能目录>/scripts/create-harness.mjs --target /path/to/project
 
 🔴 CHECKPOINT：先跑 `--dry-run`，把将创建/跳过的**产物清单**展示给用户，**停下等回复**，获批后才真写。
 
-选项：`--agent-file CLAUDE.md`、`--package-manager npm|pnpm|yarn|bun`、`--commands "cmd one,cmd two"`、`--no-engineering-owner`（非工程档）、`--no-verification`（仅非工程档，须显式声明）、`--blueprint "一行蓝图"`（已存在时只改该行）；其余见 `--help`。`--force` 覆盖已存在文件——🔴 CHECKPOINT：使用前**必须**获批并列出被覆盖文件；含第三方块的文件一律不用。
+选项：`--agent-file CLAUDE.md`、`--package-manager npm|pnpm|yarn|bun`、`--commands "cmd one,cmd two"`、`--no-engineering-owner`（非工程档）、`--no-verification`（仅非工程档，须显式声明）、`--blueprint "一行蓝图"`（已存在时只改该行）；其余见 `--help`。`--force` 覆盖已存在文件——🔴 CHECKPOINT：使用前**必须**获批并列出被覆盖文件；含第三方块的文件不用 `--force`。
 
 **`AGENTS.md` 的章节以 `templates/agents.md` 为唯一来源**；已存在时脚本只报告缺失章节，不写盘，合并由代理执行。
 
@@ -115,7 +115,7 @@ node <技能目录>/scripts/run-benchmark.mjs --target /path/to/project --html /
 | 指令文件已含其他工具的块 | 脚本只报告缺失章节、不写盘；合并由代理执行，保留现有全部内容 | 合并后仍冲突 → 列出冲突点交用户裁定，不自动取舍 |
 | 用户要求本技能建仓内状态或交接文件 | 拒绝并指路承接方：**状态与阻塞边 → `to-tickets`**、**会话交接 → `handoff`**；**产物位置由承接方决定，本技能不指定**；前置 `/setup-matt-pocock-skills` | 用户坚持要本技能代建 → 仍拒绝，说明双写必然漂移 |
 | 无法识别项目栈或包管理器 | 用 `--package-manager` 与 `--commands` 显式指定 | 用户也答不上来 → 留「待补」、`init.sh` 保持 `exit 1`，不按栈推断 |
-| 空项目下 `init.sh` **必然失败**（退出码 1） | 这是**正确状态**：占位步骤带 `exit 1`，强制「先替换，再谈完成」 | 要求「先让它变绿」 → 拒绝，除非给出真实命令；删占位行即门禁消失 |
+| 工程档空项目下 `init.sh` **必然失败**（退出码 1） | 这是**正确状态**：占位步骤带 `exit 1`，强制「先替换，再谈完成」 | 要求「先让它变绿」 → 拒绝，除非给出真实命令；删占位行即门禁消失 |
 | `validate` 总分 < 70 | 最低分子系统作为候选瓶颈，给前 2-3 项改动 | 改完仍 < 70 → 用失败、日志或任务结果确认因果，不刷关键词 |
 | 运行环境无 Node，或无法写入文件（权限/只读） | 按 `templates/` 手工创建产物；或输出确切文件内容与命令并标注目标路径 | 两者都不可行 → 贴进回复供用户粘贴，标明脚本**未跑过**，绝不声称「已创建」 |
 | `run-benchmark` 自检 FAIL | 视为 skill 自身损坏——先修脚本，再谈交付 | 修不动 → 告知本次交付**未经自检**，不按通过交付 |
@@ -125,7 +125,7 @@ node <技能目录>/scripts/run-benchmark.mjs --target /path/to/project --html /
 
 - 根指令文件保持简短：只做路由与不变量，不做完整手册。判据是「每次动作是否可能需要」，不是「段落有多长」。
 - 验证命令必须明确且可直接运行。
-- 收尾＝按会话产出按需优化**本技能所管的文件**（指令文件、`init.sh`、工作规则），不做全仓审计；跨会话交接由用户调用 `handoff` 产生，本技能不代建。
+- 收尾＝按会话产出按需优化**本技能所管的文件**，不做全仓审计；跨会话交接由用户调用 `handoff` 产生，本技能不代建。
 - 禁止项见文末「反例黑名单」。
 
 ## 反例黑名单
@@ -148,7 +148,7 @@ harness 设计中不要做的事；交付前对照一次。
 
 最小化 harness 应为目标项目留下：
 
-- [ ] `AGENTS.md` 或 `CLAUDE.md`（含承接方指向：`mattpocock`、`to-tickets`、`handoff`、`/setup-matt-pocock-skills`）
+- [ ] `AGENTS.md` 或 `CLAUDE.md`（**工程档**含承接方指向：`mattpocock`、`to-tickets`、`handoff`、`/setup-matt-pocock-skills`）
 - [ ] `init.sh`（空项目下**必然失败**：占位验证带 `exit 1`，须替换为真实命令；声明无验证的除外）
 - [ ] 已文档化的验证证据或下一步
 
