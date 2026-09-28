@@ -322,7 +322,25 @@ explain_failure() {
 }
 trap explain_failure ERR
 
+# Counts the checks that actually ran. A guarded step SKIPS with a notice when package.json does not
+# define the script yet, so before this counter existed ./init.sh could skip every check, print
+# "Verification Complete" and exit 0 having verified nothing — the gate cannot fail, and "no feature
+# may be marked done without evidence" becomes structurally unreachable on exactly the fresh skeleton
+# where it matters most. Emitted unconditionally, because the branch that reaches the success tail at
+# exit 0 must be the one that earned it. Same contract as the manual fallback templates/init.sh,
+# which is the other producer of this file and carried the counter while this one did not.
+RAN=0
+
 ${body}
+
+if [ "$RAN" -eq 0 ]; then
+  echo ""
+  echo "ERROR: nothing in this harness verified anything — every check was skipped."
+  echo "This project does not define the scripts named above yet, so none of them ran."
+  echo "Replace them in ./init.sh with commands this repository can really run."
+  echo "Until then ./init.sh MUST fail: a gate that cannot fail is not a gate."
+  exit 1
+fi
 
 echo "=== Verification Complete ==="
 echo ""
@@ -372,16 +390,26 @@ fi`;
   const script = command.match(SCRIPT_STEP);
   if (script && !NON_SCRIPT_ARGS.has(script[1])) {
     const name = script[1];
+    // RAN=1 sits inside the branch that really executes, never beside the SKIP notice. The counter,
+    // not the notice, is what lets the assembled script tell "this check ran" apart from "this check
+    // was skipped" — and a notice cannot be asserted on without asserting on our own prose.
     return `if has_script "${name}"; then
   echo "=== ${escapeForEcho(command)} ==="
   ${command}
+  RAN=1
 else
   echo "SKIP: ${escapeForEcho(command)} (package.json has no \\"${name}\\" script yet)"
 fi`;
   }
 
+  // Reached by every command that is not a package-manager script step and not an install: pytest,
+  // cargo test, mvn test, dotnet test, and anything handed in through --commands. It always runs, so
+  // it always counts. The install branch above deliberately does not: installing dependencies is a
+  // prerequisite, and a run whose only step was an install is exactly the shape the refusal at the
+  // foot of the script exists to catch.
   return `echo "=== ${escapeForEcho(command)} ==="
-${command}`;
+${command}
+RAN=1`;
 }
 
 function escapeForEcho(value) {
@@ -563,17 +591,18 @@ export function scoreHarness(files, { references } = {}) {
       // State and handoff are delegated, so what the instruction file must state is WHO owns them
       // and what the prerequisite is — not where a local file lives. Requiring an in-repo artifact
       // here is what made this scorer reward shipping one.
-      structuredHas(agents, ['to-tickets', 'handoff', 'setup-matt-pocock-skills', '承接方', 'delegat'], 'Delegated state and handoff owners named'),
-      // Raised 09-24 by user decision. Previously a single `承接方` mention satisfied the row above,
-      // which let a file claim delegation without ever saying WHO owns the engineering workflow or
-      // on what condition. The render now routes between two owners on a runtime signal, so the
-      // audit requires both names to appear (all-of, not any-of) plus the absent/undecidable case.
-      structuredHasAll(agents, ['superpowers', 'mattpocock'], 'Delegated owners routed between two owners, not named as a single owner'),
-      // The absent-case check must be falsifiable by removing the absence language. An earlier draft
-      // of this needle set included `引导词`, which appears in the PRESENT-case bullet too, so the
-      // check passed on the survivor when both absence markers were deleted — an unfalsifiable check
-      // dressed up as coverage. Kept to markers that only ever appear in the absent/undecidable case.
-      structuredHas(agents, ['不在场', '判不出'], 'Routing states the absent or undecidable case')
+      //
+      // All-of, not any-of, since 09-28: the two fixed slots ARE the content of the delegation, and
+      // `.some()` let a file name only one of them and still pass. The conjunction used to be carried
+      // by the two-owner check below; when the user collapsed the delegation to a single owner the
+      // conjunction moved to the slots rather than leaving this helper unwired.
+      structuredHasAll(agents, ['to-tickets', 'handoff'], 'Delegated state and handoff owners named'),
+      // Was all-of over two owners until 09-28, when the user removed the runtime-routed second owner
+      // (superpowers) and made the engineering workflow one system's. What the render must now name is
+      // that single owner; the removed one is forbidden instead, in FORBIDDEN_IN_AGENTS_MD over in
+      // run-benchmark.mjs. A required name and a forbidden name are the two sides of the same claim,
+      // and either alone is satisfied by a degenerate file.
+      structuredHas(agents, ['mattpocock'], 'Single named owner holds the engineering workflow')
     ],
     verification: [
       hasFile(byPath, ['init.sh'], 'Verification entrypoint exists'),
@@ -679,16 +708,14 @@ function structuredHas(markdown, needles, message) {
   return textHas(structuredText(markdown), needles, message);
 }
 
-// The routing half needs conjunction, which structuredHas cannot express — it is `.some()`, so a
-// file that names only ONE of the two delegated owners still passes it. Raised 09-24 by user
-// decision: naming an owner is no longer sufficient, the file must place them in a condition.
-// Requiring BOTH names is what makes that unfalsifiable-by-survivor — a render that kept
-// `superpowers` while losing `mattpocock` fails, which is exactly the degradation the routing rule
-// exists to prevent.
+// Conjunction, which structuredHas cannot express — it is `.some()`, so a file that names only ONE
+// of the two delegated slots still passes it. Carried by the two-owner check until 09-28, when the
+// user collapsed the delegation to a single owner and removed the second one; the conjunction moved
+// to the two slots that remain, because those names ARE the content of the delegation sentence.
 //
-// Scope note: this audit check is deliberately coarse. The exact condition wording (present /
-// absent / undecidable, and the fallback when undecidable) is enforced with word-by-word precision
-// by the GATE on files this skill renders — `checkScopeBoundary`'s `ROUTING_TERMS`. The audit scores
+// Scope note: this audit check is deliberately coarse. The exact wording the render must carry — the
+// owner's name, both slots and the setup prerequisite — is enforced with word-by-word precision by
+// the GATE on files this skill renders, `checkScopeBoundary`'s OWNER_TERMS. The audit scores
 // arbitrary repos, including hand-written ones, and the doctrine at the top of this file applies:
 // a scorer that fails a correct outcome is worse than no scorer.
 function structuredHasAll(markdown, needles, message) {

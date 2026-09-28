@@ -11,6 +11,7 @@ import {
   exists,
   formatScoreReport,
   htmlReport,
+  initScriptFromCommands,
   loadHarnessFiles,
   parseArgs,
   pickBottlenecks,
@@ -56,12 +57,20 @@ const execFileAsync = promisify(execFile);
 // decision moves; the baseline is not.
 //
 // The BASELINE moved 9623 -> 9950 on 2026-09-24, also by user decision, and for a different reason
-// than the multiplier: the scope grew rather than the prose thickening. The boundary section now has
-// to route between two delegated owners (superpowers and mattpocock) on a runtime condition instead
-// of naming one, and that routing cannot be compressed into a pointer without leaving the agent
-// unable to tell who owns the stage it is standing in. Recorded here because a raised cap with no
-// stated reason reads, six months on, exactly like an unexamined ratchet.
-const SKILL_MD_BASELINE_BYTES = 9950;
+// than the multiplier: the scope grew rather than the prose thickening. The boundary section had to
+// route between two delegated owners (superpowers and mattpocock) on a runtime condition instead of
+// naming one. Recorded here because a raised cap with no stated reason reads, six months on, exactly
+// like an unexamined ratchet.
+//
+// 9950 -> 9820 on 2026-09-28, in the direction that does not need the user: the user removed the
+// runtime-routed second owner, so the rule that justified the raise went with it and the raise goes
+// back. It is a PARTIAL revert, and the reason is worth stating rather than burying: returning to the
+// pre-09-24 9623 would put SKILL.md 236 bytes over its ceiling, because scope added after that commit
+// (the wrap-up criterion, the blueprint rewrite path, the update task) still occupies the difference.
+// Cutting that content is a user decision, not a side effect of removing superpowers. The baseline
+// drops 130 rather than the 157 bytes the removed rule held: the ceiling is 1.25x the baseline, so
+// subtracting the content delta from the baseline would over-cut the ceiling by a quarter of it.
+const SKILL_MD_BASELINE_BYTES = 9820;
 const SKILL_MD_GROWTH = 1.25; // widened from 1.15 by user decision, 2026-09-23
 const SKILL_MD_MAX_BYTES = Math.floor(SKILL_MD_BASELINE_BYTES * SKILL_MD_GROWTH);
 
@@ -80,15 +89,19 @@ const SKILL_MD_MAX_BYTES = Math.floor(SKILL_MD_BASELINE_BYTES * SKILL_MD_GROWTH)
 // language-neutral where bytes are not. Raising either number is a scope decision for the user,
 // not a side effect of the template growing.
 //
-// Raised 3200 -> 3680 on 2026-09-24 by user decision, and this one is worth flagging rather than
-// burying: it is precisely the move the paragraph above warns against. The anchor WAS external (the
-// upstream template plus a CJK allowance) and it no longer holds, because the scope itself changed —
-// the file now routes between two delegated owners on a runtime condition. The measured need was
-// +518 bytes for that routing rule; the alternative on the table was to cut steps out of the startup
-// or wrap-up routine to buy the room, which trades a real loss in the artifact for a fake constraint
-// on the template. What keeps it from being a ratchet is that the delta is anchored to the rule that
-// required it rather than to whatever the template happens to render at.
-const AGENTS_MD_BASELINE_BYTES = 3680;
+// Raised 3200 -> 3680 on 2026-09-24 by user decision, and it was flagged rather than buried back
+// then: it is precisely the move the paragraph above warns against. The anchor WAS external (the
+// upstream template plus a CJK allowance) and the scope itself then changed — the file began routing
+// between two delegated owners on a runtime condition. What kept it from being a ratchet was that the
+// delta was anchored to the rule that required it rather than to whatever the template rendered at.
+//
+// 3680 -> 3510 on 2026-09-28 for the same discipline in reverse: the user removed the second owner, so
+// the rule that required the delta is gone and the delta goes back with it. Partial, not full — 3200
+// would put the render 201 bytes over its ceiling, because the scope added after 09-24 (the wrap-up
+// criterion rewrite, the blueprint path) is still there and cutting it needs the user's ruling. The
+// drop is 170 against 346 bytes of removed content: the ceiling runs at 1.15x the baseline, so
+// subtracting the content delta from the baseline would over-cut the ceiling.
+const AGENTS_MD_BASELINE_BYTES = 3510;
 const AGENTS_MD_MAX_BYTES = Math.floor(AGENTS_MD_BASELINE_BYTES * 1.15);
 const AGENTS_MD_MAX_LINES = 90;
 // The template states this limit in its own self-restraint rule; the check keeps the statement
@@ -139,7 +152,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['budget', (group) => ` SKILL.md sits at ${group.size}/${group.max} bytes (${group.pass ? 'within' : 'OVER'} budget).`],
   ['agentsBudget', (group) => ` The generated AGENTS.md stays inside its external byte, line and working-rule budgets (${group.pass ? 'verified' : 'FAILED'}).`],
   ['agentsDiscover', (group) => ` The instruction file does not restate what the agent can read for itself, and the detector is proven to have teeth by a seeded violation (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['scopeBrake', (group) => ` The generated instruction file routes between its two delegated owners on a runtime condition, names to-tickets, handoff and their setup prerequisite, and carries none of the removed doctrine (${group.pass ? 'verified' : `missing routing ${(group.missingRouting || []).join(', ') || 'none'}; routing detector ${group.routingTeeth ? 'has teeth' : 'BLIND'}; brake ${group.brake ? 'present' : 'MISSING'}; leaked ${(group.leaked || []).join(', ') || 'none'}; doctrine detector ${group.seeded?.length ? 'has teeth' : 'BLIND'}`}).`],
+  ['scopeBrake', (group) => ` The generated instruction file names one delegated owner for the engineering workflow, keeps both of its slots and their setup prerequisite, and carries none of the removed doctrine (${group.pass ? 'verified' : `missing owner terms ${(group.missingOwners || []).join(', ') || 'none'}; owner detector ${group.ownerTeeth ? 'has teeth' : 'BLIND'}; brake ${group.brake ? 'present' : 'MISSING'}; leaked ${(group.leaked || []).join(', ') || 'none'}; doctrine detector ${group.seeded?.length ? 'has teeth' : 'BLIND'}`}).`],
   ['maintenance', (group) => ` Harness maintenance has a moment to happen: the generated instruction file tells the agent to optimise the harness at wrap-up when the session's own output leaves it stale or thin, rather than when the harness files happen to have been touched, and the detector is proven to have teeth per term, against the retired diff-keyed sentence, against that sentence wearing the new vocabulary, and against a shortened forbidden list (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; retired phrasing ${(group.leaked || []).length ? `LEAKED (${group.leaked.join(', ')})` : 'absent'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old-form rejection ${group.oldFormRejected ? 'honoured' : 'ACCEPTED'}; hybrid form ${group.hybridRejected ? 'rejected' : 'ACCEPTED'}; forbidden-list shrink witness ${group.forbiddenWitness ? 'has teeth' : 'BLIND'}`}).`],
   ['skillDesign', (group) => ` The skill's own design rules are machine-checked rather than trusted to prose: SKILL.md's design section states the wrap-up criterion on the session's own output, and the detector is proven to have teeth per term, against the pre-09-25 rule line, against the old condition wearing the new vocabulary, and against a shortened requirement list (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; diff key ${(group.leaked || []).length ? `LEAKED (${group.leaked.join(', ')})` : 'absent'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old rule line ${group.oldFormRejected ? 'rejected' : 'ACCEPTED'}; hybrid form ${group.hybridRejected ? 'rejected' : 'ACCEPTED'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}`}).`],
   ['wrapupOutput', (group) => ` The wrap-up procedure a maintainer actually reads carries both of its outputs: the candidate changes, and the judgment items that are handed to the user instead of being decided — the part that stops a fresh session from treating already-dead rules as live — plus a net-change report, which is what keeps blind increment from hiding in wording (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; own section ${group.heading ? 'present' : 'ABSENT'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; heading requirement ${group.headingArm ? 'has teeth' : 'BLIND'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}`}).`],
@@ -147,7 +160,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
   ['references', (group) => ` A documented command that no longer resolves is caught rather than silently trusted: the audit resolves manifest scripts and runnable files, reports by name what it cannot resolve, and is proven in both directions (${group.pass ? 'verified' : `dangling fixture ${group.danglingCaught ? 'caught' : 'MISSED'}; guarded fixture ${group.guardedExcused ? 'excused' : 'FALSELY FLAGGED'}; unchecked bucket ${group.uncheckedListed ? 'populated' : 'SILENT'}; uncollected scan ${group.uncollectedRefused ? 'refused' : 'PASSED'}`}).`],
   ['bottleneckTies', (group) => ` The bottleneck line names ${group.tieCount} tied subsystem(s) as a tie instead of picking one (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['blankGate', (group) => ` A project with nothing to verify — no manifest, or a manifest with no runnable script — gets a placeholder step that exits non-zero instead of reporting a pass it did not earn, and the manual fallback template refuses on the same two shapes (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['blankGate', (group) => ` A project with nothing to verify — no manifest, a manifest with no runnable script, or an explicit --commands list whose scripts the manifest does not define — gets a refusal that exits non-zero instead of reporting a pass it did not earn, the counter reopens the moment a real check runs, and the manual fallback template refuses on the same shapes (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-description slot stays a visible pending marker when the user has not stated one, while a blueprint change rewrites that slot only — the rest of the file survives byte for byte, and a shape this skill did not render is refused rather than guessed at (${group.pass ? 'verified' : `pending ${group.pendingMarked ? 'ok' : 'NO'}; no stack fill ${group.noInventedFill ? 'ok' : 'NO'}; verbatim ${group.verbatim ? 'ok' : 'NO'}; slot-only ${group.slotRewritten && group.restIntact ? 'ok' : 'NO'}; detector ${group.detectorHasTeeth ? 'has teeth' : 'BLIND'}; refusal ${group.refusalHonoured && group.refusedUntouched ? 'ok' : 'NO'}`}).`],
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`],
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`]
@@ -187,44 +200,47 @@ const FORBIDDEN_IN_AGENTS_MD = [
   { name: 'controlled release', pattern: /受控放行/ },
   { name: 'governance modes', pattern: /两种模式|--mode\b/ },
   { name: 'extracted agent-doc layer', pattern: /tracking-policy\.md|escalation\.md/ },
-  // Narrowed 09-24 by the same user ruling that added ROUTING_TERMS above. What is forbidden is an
+  // Added 09-28, with the user's ruling that the engineering workflow belongs to one system. This is
+  // the other half of the single-owner claim the audit makes over in harness-utils.mjs: that check
+  // REQUIRES `mattpocock` to be named, this one requires the removed owner NOT to be. Either alone is
+  // satisfied by a degenerate file, and a render that quietly re-adds the branch satisfies the
+  // required half perfectly while being exactly the regression this gate exists to catch.
+  { name: 'removed second owner', pattern: /superpowers/ },
+  // The installation check stays forbidden now that the routing key is gone. What is forbidden is an
   // INSTALLATION check: telling the agent to test whether another skill is installed, or to point the
-  // user at installing one. That was the shape this pattern was added for on 09-23 and it has not
-  // changed. What is now required, and therefore allowed, is a RUNTIME presence read — the render
-  // routes between superpowers and mattpocock on whether the superpowers bootstrap is in the agent's
-  // own system prompt, which the agent observes without inspecting anything on disk. Different
-  // sentence, different subject. The routing rule cannot be stated without the second, so the pattern
-  // stays on installation shape and the positive half lives in ROUTING_TERMS.
-  // The pattern is deliberately narrow — it must not fire on the correct render, which says "承接方默认已安装，本技能不检查、
-  // 不安装" (a negation). Matching a bare 已安装 would make the gate reject its own correct output.
+  // user at installing one (the shape this pattern was added for on 09-23). It was narrowed on 09-24
+  // because a RUNTIME presence read was legitimate while two owners were being routed between; that
+  // read left with the second owner, so what remains is the standing rule the pattern always
+  // described. It must stay narrow — the correct render says "承接方默认已安装，本技能不检查、不安装"
+  // (a negation), so matching a bare 已安装 would make the gate reject its own correct output.
   { name: 'owner-installation check', pattern: /承接方.{0,10}(未安装|是否已安装)|提示安装|检查.{0,4}是否已安装/ }
 ];
 const SEEDED_VIOLATION = '\n状态写入 feature_list.json 与 progress.md；产物追踪策略；'
   + '五落点；受控放行；两种模式；分册 tracking-policy.md 与 escalation.md；'
-  + '承接方未安装时提示安装。';
+  + '承接方未安装时提示安装；工程阶段归 superpowers。';
 
-// The other half of the boundary. The render no longer names ONE delegated owner; it routes between
-// two on a runtime condition, and these are the terms that make that routing legible to an agent
-// standing in a target repo. Each is load-bearing: drop the absence branch and an agent whose session
-// carries no superpowers bootstrap is left with no owner at all, which is the common case in a plain
-// checkout rather than an edge case.
+// The positive half of the boundary. The render no longer routes between two owners on a runtime
+// condition; it names one, and these are the terms that make that naming legible to an agent standing
+// in a target repo. Each is load-bearing on its own: drop the owner's name and the agent has no idea
+// whose system to reach for; drop either slot and one of the two capabilities the delegation exists
+// for has no home; drop the prerequisite and a fresh checkout points at a capability it cannot reach.
 //
 // The negative proof is per-term instead of one seeded blob. A blob proves the predicate reads the
 // string; deleting exactly one term at a time and requiring the predicate to name exactly that term
-// proves it is sensitive to each of them independently, so a render that kept "superpowers" while
-// losing the fallback cannot pass on the strength of its survivors.
+// proves it is sensitive to each of them independently, so a render that kept "mattpocock" while
+// losing a slot cannot pass on the strength of its survivors.
 //
-// Declared here, ahead of the runSelfCheck() call site (line 314), for the temporal-dead-zone reason
-// this file has already paid for twice.
+// Declared here, ahead of the runSelfCheck() call site, for the temporal-dead-zone reason this file
+// has already paid for twice.
 //
-// '判不出' joined 09-24. The first four terms made the two-way routing legible but left its own
-// failure mode silent: an agent that cannot tell whether the bootstrap is present had no stated
-// recourse, and a three-way condition (present / absent / undecidable) was being carried by two
-// terms. Undecidable falls to the absence branch deliberately — the absence branch is the one that
-// still has an owner, so the undecidable case degrades to a working default rather than to no owner
-// at all. The term is here so that branch cannot be dropped quietly.
-const ROUTING_TERMS = ['superpowers', '引导词', '不在场', '判不出', 'mattpocock'];
-const missingRoutingTerms = (text) => ROUTING_TERMS.filter((term) => !text.includes(term));
+// Was ROUTING_TERMS with five terms until 09-28. The three-condition routing (present / absent /
+// undecidable) and its arbitration key left with the second owner: with one owner there is no
+// condition to branch on, so `superpowers`, `引导词`, `不在场` and `判不出` were removed rather than
+// re-pointed — and each is now FORBIDDEN in the render instead (FORBIDDEN_IN_AGENTS_MD above), so the
+// removal has a two-sided carrier rather than just an absence. What replaced them is the set of names
+// the single owner's sentence cannot be written without.
+const OWNER_TERMS = ['mattpocock', 'to-tickets', 'handoff', 'setup-matt-pocock-skills'];
+const missingOwnerTerms = (text) => OWNER_TERMS.filter((term) => !text.includes(term));
 
 // The maintenance trigger's semantics — and why the first version of this gate was not enough.
 //
@@ -459,7 +475,10 @@ Runs a lightweight harness benchmark:
  12. Checks the blank-project gate: the placeholder verification step must exit non-zero, a real
      command must still run, and — asserted through the real generator, not a hand-written string —
      a manifest that defines no check/typecheck/lint/test/build also refuses instead of exiting 0
-     having verified nothing. The same invariant has a second producer, the hand-copy fallback
+     having verified nothing. A third shape is armed beside them, because the first two both route
+     through verificationCommands and the explicit --commands path bypasses it entirely: an
+     assembled script whose guarded steps could all skip must fail closed, and must reopen the
+     moment a check really runs. The same invariant has a second producer, the hand-copy fallback
      templates/init.sh, which the generator probes cannot reach: every refusal it prints must be
      armed with a non-zero exit, both refusals must still be present, and a success tail must
      remain. A gate that cannot fail is not a gate.
@@ -576,8 +595,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  AGENTS.md discoverability: ${pass ? 'PASS' : 'FAIL'} — default render free of restated content: ${offenders.length === 0 ? 'ok' : `NO (${offenders.join(', ')})`}; self-restraint rule stated: ${selfRestraintStated ? 'ok' : 'NO'}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.scopeBrake) {
-    const { pass, brake, routing, missingRouting = [], routingTeeth, leaked = [], seeded = [], error } = selfCheck.scopeBrake;
-    lines.push(`  Scope brake: ${pass ? 'PASS' : 'FAIL'} — engineering workflow delegated in the generated AGENTS.md: ${brake ? 'ok' : 'NO'}; routes between both owners on a runtime condition: ${routing ? 'ok' : `MISSING (${missingRouting.join(', ')})`}; routing detector has teeth: ${routingTeeth ? 'ok' : 'BLIND'}; doctrine carried over from the removed scope: ${leaked.length === 0 ? 'none' : `LEAKED (${leaked.join(', ')})`}; detector catches a seeded violation: ${seeded.length >= 7 ? 'ok' : `BLIND (${seeded.length}/7 patterns)`}${error ? ` — ${error}` : ''}`);
+    const { pass, brake, owners, missingOwners = [], ownerTeeth, leaked = [], seeded = [], error } = selfCheck.scopeBrake;
+    lines.push(`  Scope brake: ${pass ? 'PASS' : 'FAIL'} — engineering workflow delegated in the generated AGENTS.md: ${brake ? 'ok' : 'NO'}; one named owner carrying both slots and the setup prerequisite: ${owners ? 'ok' : `MISSING (${missingOwners.join(', ')})`}; owner detector has teeth: ${ownerTeeth ? 'ok' : 'BLIND'}; doctrine carried over from the removed scope: ${leaked.length === 0 ? 'none' : `LEAKED (${leaked.join(', ')})`}; detector catches a seeded violation: ${seeded.length === FORBIDDEN_IN_AGENTS_MD.length ? 'ok' : `BLIND (${seeded.length}/${FORBIDDEN_IN_AGENTS_MD.length} patterns)`}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.maintenance) {
     const { pass, stated, missing = [], leaked = [], teeth, oldFormRejected, hybridRejected, forbiddenWitness, error } = selfCheck.maintenance;
@@ -608,8 +627,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Bottleneck ties: ${pass ? 'PASS' : 'FAIL'} — tie names all 3 subsystems: ${tieCount === 3 ? 'ok' : `NO (${tieCount})`}; unique minimum names one: ${uniqueCount === 1 ? 'ok' : `NO (${uniqueCount})`}; complete harness reports none: ${noneCount === 0 ? 'ok' : `NO (${noneCount})`} — ${tieLabel}`);
   }
   if (selfCheck.blankGate) {
-    const { pass, placeholderFails, realRuns, scriptlessRefuses, withTestRuns, templateRefusals, templateRefusalsExitNonZero, templateStillRuns } = selfCheck.blankGate;
-    lines.push(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}; a manifest with no runnable script refuses too: ${scriptlessRefuses ? 'ok' : 'NO'}; a manifest with a real script still runs: ${withTestRuns ? 'ok' : 'NO'}; the manual fallback carries ${templateRefusals} refusal(s) each armed with a non-zero exit: ${templateRefusalsExitNonZero ? 'ok' : 'NO'}; and still reaches a success tail: ${templateStillRuns ? 'ok' : 'NO'}`);
+    const { pass, placeholderFails, realRuns, scriptlessRefuses, withTestRuns, explicitFailsClosed, explicitOpensWhenRun, templateRefusals, templateRefusalsExitNonZero, templateStillRuns } = selfCheck.blankGate;
+    lines.push(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}; a manifest with no runnable script refuses too: ${scriptlessRefuses ? 'ok' : 'NO'}; a manifest with a real script still runs: ${withTestRuns ? 'ok' : 'NO'}; an explicit --commands list the manifest cannot run fails closed: ${explicitFailsClosed ? 'ok' : 'NO'}; and opens again once a check really runs: ${explicitOpensWhenRun ? 'ok' : 'NO'}; the manual fallback carries ${templateRefusals} refusal(s) each armed with a non-zero exit: ${templateRefusalsExitNonZero ? 'ok' : 'NO'}; and still reaches a success tail: ${templateStillRuns ? 'ok' : 'NO'}`);
   }
   if (selfCheck.blueprint) {
     const { pass, pendingMarked, noInventedFill, verbatim, slotRewritten, restIntact, detectorHasTeeth, refusalHonoured, refusedUntouched, error } = selfCheck.blueprint;
@@ -823,24 +842,23 @@ async function checkScopeBoundary() {
     dir = await mkdtemp(path.join(os.tmpdir(), 'harness-scope-'));
     await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
     const text = await readText(path.join(dir, 'AGENTS.md'));
-    // The brake: the file must say the engineering workflow belongs to the engineering skills.
-    // The required half moved from a generic boundary to the NAMED owners. "Some engineering skill
-    // owns this" is unfalsifiable and leaves the agent with nowhere to look, so the render must
-    // name to-tickets and handoff, and must name the setup prerequisite that makes them work —
-    // otherwise a fresh repo points at a capability it cannot reach yet. The forbidden half is
-    // unchanged in shape and re-scoped in content (see FORBIDDEN_IN_AGENTS_MD).
-    const brake = /工程\s*skill/.test(text) && /不代做/.test(text)
-      && /to-tickets/.test(text) && /handoff/.test(text) && /setup-matt-pocock-skills/.test(text);
-    // The routing half, kept as its own label: a render that names both owners but loses the absence
-    // branch fails on that point specifically instead of on the brake as a whole, so the failure says
-    // which rule went missing rather than only that something did.
-    const missingRouting = missingRoutingTerms(text);
-    const routing = missingRouting.length === 0;
+    // The brake, kept as its own label: the file must say the engineering workflow belongs to the
+    // engineering skills, and that this file does not do that work itself. "Some engineering skill
+    // owns this" is unfalsifiable on its own, which is why the names that make it checkable live in
+    // OWNER_TERMS below rather than here — and why a file that keeps the sentence but loses a name
+    // still fails, on the other point, so the failure says which claim went missing. The forbidden
+    // half is unchanged in shape (see FORBIDDEN_IN_AGENTS_MD).
+    const brake = /工程\s*skill/.test(text) && /不代做/.test(text);
+    // The positive half, its own label: the single owner's name, both fixed slots, and the setup
+    // prerequisite that makes them reachable. A render that carries the boundary sentence but drops a
+    // slot fails on this point specifically instead of on the brake as a whole.
+    const missingOwners = missingOwnerTerms(text);
+    const owners = missingOwners.length === 0;
     // Teeth, one term at a time. Deleting a term and requiring the predicate to report exactly that
     // term proves the check is sensitive to each term on its own; a single seeded blob would only
     // prove it reads the string.
-    const routingTeeth = ROUTING_TERMS.every((term) => {
-      const reported = missingRoutingTerms(text.split(term).join('\u0000'));
+    const ownerTeeth = OWNER_TERMS.every((term) => {
+      const reported = missingOwnerTerms(text.split(term).join('\u0000'));
       return reported.length === 1 && reported[0] === term;
     });
     const leaked = FORBIDDEN_IN_AGENTS_MD.filter(({ pattern }) => pattern.test(text)).map(({ name }) => name);
@@ -848,16 +866,16 @@ async function checkScopeBoundary() {
       .filter(({ pattern }) => pattern.test(`${text}${SEEDED_VIOLATION}`))
       .map(({ name }) => name);
     return {
-      pass: brake && routing && routingTeeth && leaked.length === 0 && seeded.length === FORBIDDEN_IN_AGENTS_MD.length,
+      pass: brake && owners && ownerTeeth && leaked.length === 0 && seeded.length === FORBIDDEN_IN_AGENTS_MD.length,
       brake,
-      routing,
-      missingRouting,
-      routingTeeth,
+      owners,
+      missingOwners,
+      ownerTeeth,
       leaked,
       seeded
     };
   } catch (error) {
-    return { pass: false, brake: false, routing: false, missingRouting: [], routingTeeth: false, leaked: [], seeded: [], error: error.message };
+    return { pass: false, brake: false, owners: false, missingOwners: [], ownerTeeth: false, leaked: [], seeded: [], error: error.message };
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
   }
@@ -1325,11 +1343,13 @@ function scoreEvals(evalsJson) {
     // only a case shows whether an agent aligns with the user beforehand, and refuses rather than
     // guessing when the file's shape is one this skill did not render.
     ['Covers the blueprint rewrite path', /蓝图变更/],
-    // Added with the two-owner routing rule. The gate proves the generated file CARRIES the routing
-    // sentence; only a case shows whether an agent, handed both skill sets, routes rather than asking
-    // the user which one is installed — and whether it keeps state and handoff with the owner that
-    // can actually serve them. Same split the maintenance and blueprint entries record above.
-    ['Covers the two-owner routing condition', /分流/],
+    // Added with the single-owner rule on 09-28, replacing the entry that covered the two-owner
+    // routing condition. The gate proves the generated file CARRIES the claim; only a case shows
+    // whether an agent handed a machine with superpowers installed still routes the engineering
+    // workflow to the one owner the harness names, rather than reintroducing the branch it removed —
+    // and whether it keeps state and handoff with the owner that can serve them. Same split the
+    // maintenance and blueprint entries record above.
+    ['Covers the single-owner delegation', /单一 owner/],
     // Added with the command-reference check in the verification subsystem. The gate proves the
     // SCRIPT flags a dead command; only a case shows whether an agent handed a harness whose own
     // docs name a script that no longer exists reports that, rather than trusting the prose — and
@@ -1437,6 +1457,31 @@ async function checkBlankProjectGate() {
     const rendered = renderVerificationStep(command);
     return !/\bexit 1\b/.test(rendered) && rendered.includes('npm test');
   });
+  // A third shape, and the one nothing armed. Both arms above route through verificationCommands —
+  // one with an empty script set, one with a test script. The explicit --commands path never reaches
+  // it at all (create-harness.mjs takes the user's list verbatim and skips verificationCommands
+  // entirely), so the refusal branch at the foot of verificationCommands was bypassed wholesale.
+  // Measured on a repo with no manifest: `--commands "npm test,npm run lint"` rendered both steps as
+  // has_script guards that SKIPPED, the script printed "Verification Complete" and exited 0, and the
+  // audit still scored that repo 100/100 with "Verification fails fast" PASS. One axis was armed
+  // while the other stayed blind, so the suite reported a pass it had not earned. Asserted through
+  // the real assembler rather than a fixture: a hand-written script would only prove this probe's
+  // copy of the string is right.
+  const explicit = initScriptFromCommands(['npm test']);
+  // Fails closed: the counter exists, and a zero count refuses with a non-zero exit. Read the
+  // refusal the same way the fallback-template arm below does — split on the sentinel each refusal
+  // prints immediately before refusing, then require the first statement of the block to be a
+  // non-zero exit. A byte-window regex was the first attempt and it was wrong: it counted the
+  // refusal's own explanatory lines against the window, so widening the message would silently
+  // unarm this check. The sentinel does not move when the message does.
+  const explicitRefusalBlocks = explicit.split('a gate that cannot fail is not a gate').slice(1);
+  const explicitFailsClosed = /\bRAN=0\b/.test(explicit)
+    && explicitRefusalBlocks.length >= 1
+    && explicitRefusalBlocks.every((block) => /^[ \t]*exit[ \t]+[1-9]\d*[ \t]*$/m.test(block.slice(0, 200)));
+  // Opens when a check really ran — inside the guard's success branch, not beside the SKIP notice.
+  // Without this arm, "refuse unconditionally" would satisfy the assertion above while making the
+  // gate useless: the mirror-image failure of a gate that cannot fail.
+  const explicitOpensWhenRun = /has_script\s+"test";\s*then[\s\S]*?\bRAN=1\b/.test(explicit);
   // The same invariant has a SECOND producer, and it went uncovered. templates/init.sh is the
   // manual fallback — what the agent copies by hand when the runtime has no Node — so none of the
   // generator probes above reach it. Measured, not assumed: replacing both of its `exit 1`
@@ -1464,11 +1509,14 @@ async function checkBlankProjectGate() {
   const templateStillRuns = /=== Verification Complete ===/.test(template);
   return {
     pass: placeholderFails && realRuns && scriptlessRefuses && withTestRuns
+      && explicitFailsClosed && explicitOpensWhenRun
       && templateRefusalsExitNonZero && templateStillRuns,
     placeholderFails,
     realRuns,
     scriptlessRefuses,
     withTestRuns,
+    explicitFailsClosed,
+    explicitOpensWhenRun,
     templateRefusals,
     templateRefusalsExitNonZero,
     templateStillRuns
