@@ -34,6 +34,7 @@ license: MIT
 本技能只负责 harness 产物就位，以及把它们与别的技能串起来；**不承接工程流程本身**。
 
 - **承接方是具名的工程 skill**：工程阶段（需求对齐、规格与计划、实现与测试、代码审查、分支收尾）**整体归 `mattpocock`** 的模型可调用 skill，由它按任务自行分派；其中**状态与阻塞边 → `to-tickets`**、**会话交接 → `handoff`** 具名固定，共同前置是一次性运行 `/setup-matt-pocock-skills` 配置 tracker。本技能**不代为发起或执行**，也不为其产物指定位置。
+- **两档**：以上是**工程档**（默认）。`--no-engineering-owner` 渲染**非工程档**——同样三个子系统、同样两个产物，但**不具名任何承接方**，用于文档／技能／教学这类没有工程阶段可交出去的目录。档位由标志选择，**不按目录内容推断**。见 `references/non-engineering-harness.md`。
 - **不让代理主动扩范围**：不得因本技能而主动开启与 harness 无关的工作——那会与其他 skill 争抢触发时机，导致系统混乱。
 - **同一事实只问一次**：属别的 skill 管辖的问题交由它问，本技能不重复询问。
 - **只做用户已对齐的事**：用户未陈述的项目事实一律留空待补，不由技术栈推断代填。
@@ -64,7 +65,7 @@ node <技能目录>/scripts/create-harness.mjs --target /path/to/project
 
 🔴 CHECKPOINT：先跑 `--dry-run`，把将创建/跳过的**产物清单**展示给用户，**停下等回复**，获批后才真写。
 
-选项：`--agent-file CLAUDE.md`、`--package-manager npm|pnpm|yarn|bun`、`--commands "cmd one,cmd two"`、`--blueprint "一行蓝图"`（已存在时只改该行）；其余见 `--help`。`--force` 覆盖已存在文件——🔴 CHECKPOINT：使用前**必须**获批并列出被覆盖文件；含第三方块的文件一律不用。
+选项：`--agent-file CLAUDE.md`、`--package-manager npm|pnpm|yarn|bun`、`--commands "cmd one,cmd two"`、`--no-engineering-owner`（非工程档）、`--no-verification`（仅非工程档，须显式声明）、`--blueprint "一行蓝图"`（已存在时只改该行）；其余见 `--help`。`--force` 覆盖已存在文件——🔴 CHECKPOINT：使用前**必须**获批并列出被覆盖文件；含第三方块的文件一律不用。
 
 **`AGENTS.md` 的章节以 `templates/agents.md` 为唯一来源**；已存在时脚本只报告缺失章节，不写盘，合并由代理执行。
 
@@ -100,6 +101,7 @@ node <技能目录>/scripts/run-benchmark.mjs --target /path/to/project --html /
 - 任务委派与并行代理：`multi-agent-pattern.md`
 - 钩子、启动、长时间运行的工作：`lifecycle-bootstrap-pattern.md`
 - harness 维护：`harness-maintenance-pattern.md`
+- 非工程目录（文档/技能/教学）：`non-engineering-harness.md`
 - 不易察觉的失败模式：`gotchas.md`
 
 ## 异常与边界条件

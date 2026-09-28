@@ -19,6 +19,41 @@ export function scriptCommand(scriptName) {
 // five checks per subsystem, all failing on artifacts that are supposed to be absent.
 export const SUBSYSTEMS = ['instructions', 'verification', 'scope'];
 
+// --- Tier: engineering (default) vs plain -------------------------------------------------
+//
+// A plain target is a working directory with no engineering workflow to hand to anyone: a
+// documentation set, a skill repository, a teaching outline. The artifact is the same one — a
+// startup path, a verification entrypoint, invariants — but there is no owner to name, because
+// there is nothing the engineering stages could be delegated to. The tier is chosen by the USER
+// through a flag and never inferred from the directory: this skill's standing rule is that it does
+// not guess a project's shape from what the directory happens to contain, and a tier inferred from
+// "there is no package.json here" would fire on every empty engineering repo too.
+//
+// The marker is a structured line the render writes and the scorer reads, so the two tiers can
+// never be satisfied by the same file: engineering must NAME the owner, plain must NOT.
+export const PLAIN_TEMPLATE = 'agents-plain.md';
+export const PLAIN_TIER_MARKER = '档位：非工程';
+// Both halves of the plain tier's claim. A file that merely omits the owner names has said
+// nothing at all; a file that states the plain claim while still naming an owner has said two
+// contradictory things, and each half is checked so neither can stand in for the other.
+export const PLAIN_DELEGATION_TERMS = ['项目自有', '不代建'];
+// Duplicated on purpose, not shared with the self-check's OWNER_TERMS: the audit and the gate
+// must be able to disagree. One shared list would let a single shrinkage weaken both sides at
+// once, so the self-check instead asserts the two lists are set-equal and a divergence is caught
+// rather than drifting quietly.
+export const DELEGATION_OWNER_TERMS = ['mattpocock', 'to-tickets', 'handoff', 'setup-matt-pocock-skills'];
+// Printed by the generated init.sh when a plain project explicitly declares it has nothing to
+// verify. It is a disclosure, never a pass: the script must not print the completion banner.
+export const NO_VERIFICATION_MARKER = 'NO VERIFICATION DECLARED';
+
+export function isPlainTier(markdown) {
+  return String(markdown).includes(PLAIN_TIER_MARKER);
+}
+
+export function termsAbsentFrom(text, terms) {
+  return terms.filter((term) => !String(text).includes(term));
+}
+
 export function parseArgs(argv) {
   const args = { _: [] };
   for (let i = 0; i < argv.length; i += 1) {
@@ -282,8 +317,9 @@ export function verificationCommands(project, explicitPackageManager) {
   return [install, ...real];
 }
 
-export function initScriptFromCommands(commands) {
-  const body = commands.map(renderVerificationStep).join('\n\n');
+export function initScriptFromCommands(commands, { plain = false, noVerification = false } = {}) {
+  if (noVerification) return noVerificationScript();
+  const body = (commands || []).map(renderVerificationStep).join('\n\n');
   // The next-steps block names state, so it names exactly the artifacts this skill writes and
   // nothing else. A startup script that tells the agent to read a file this skill never creates is
   // a dangling instruction, and the artifact list stays clean because the leak sits in the
@@ -293,7 +329,15 @@ export function initScriptFromCommands(commands) {
   // to it is the instruction file, which exists before the tracker is configured. Naming the
   // tracker's own files instead would be exactly the dangling pointer this block is built to
   // avoid — a fresh repo has none of them until setup has run.
-  const nextSteps = [
+  // The startup route has to match the tier the artifact was rendered for. A plain project has no
+  // tracker to configure and no tickets to pick from, so naming them here would send the agent after
+  // files this skill deliberately does not create — the dangling pointer this block exists to avoid.
+  const nextSteps = plain ? [
+    '1. Read AGENTS.md for the startup path and the invariants',
+    '2. Pick ONE unfinished deliverable whose prerequisites are clear',
+    '3. Produce only that deliverable, staying inside its scope',
+    '4. Re-run this script before claiming done'
+  ] : [
     '1. Configure the tracker once: /setup-matt-pocock-skills',
     '2. Read AGENTS.md for the startup path, the invariants and where state lives',
     '3. Pick ONE unfinished ticket whose blocking edges are clear',
@@ -346,6 +390,36 @@ echo "=== Verification Complete ==="
 echo ""
 echo "Next steps:"
 ${nextSteps.map((line) => `echo "${line}"`).join('\n')}
+`;
+}
+
+// A plain project that declares it has nothing to verify still gets a startup script: the
+// instruction file tells the agent to run ./init.sh, so the file has to exist and has to be honest.
+// What it must never do is report a success it did not earn. The completion banner the other
+// branches print is deliberately absent here, the disclosure leads, and the exit-0 answers "is the
+// startup path walkable?" — never "was anything verified?". The declaration is reachable only
+// through an explicit flag AND the plain tier, so a repository that does have a baseline cannot
+// collect it as a waiver; there, the placeholder branch still exits 1 until a real check replaces it.
+function noVerificationScript() {
+  const body = [
+    'echo "=== Harness Initialization ==="',
+    'echo ""',
+    `echo "=== ${NO_VERIFICATION_MARKER} ==="`,
+    'echo "This non-engineering project declares that it has no runnable baseline check."',
+    'echo "This script therefore verified NOTHING. It exits 0 so the startup path stays walkable."',
+    'echo "Nothing here proves a deliverable is complete: evidence is still required by AGENTS.md."',
+    'echo "Replace this file with real checks when the project has any."',
+    'exit 0'
+  ].join('\n');
+  return `#!/bin/bash
+set -e
+
+# Verification gate — DECLARED ABSENT.
+#
+# A gate that cannot fail is not a gate, so this file does not pretend to be one. It is a
+# disclosure, not a pass: the project has declared, explicitly and in AGENTS.md as well, that there
+# is nothing to run. Deleting this file is not a bypass — replacing it with real checks is the fix.
+${body}
 `;
 }
 
@@ -575,6 +649,28 @@ export function scoreHarness(files, { references } = {}) {
   const agents = byPath.get('AGENTS.md') || byPath.get('CLAUDE.md') || '';
   const init = byPath.get('init.sh') || '';
 
+  // The tier is read OFF THE ARTIFACT rather than passed in, because validate-harness.mjs only
+  // ever receives a directory: there is no flag to thread through, and inferring the tier from the
+  // directory's contents is exactly what this skill refuses to do. The marker is written by the
+  // render, so it is a claim the artifact makes about itself — and both halves are then checked, so
+  // a file cannot make the claim and contradict it in the same breath.
+  const plain = isPlainTier(agents);
+  const structured = structuredText(agents);
+  const plainDelegation = {
+    pass: plain
+      && PLAIN_DELEGATION_TERMS.every((term) => structured.includes(term))
+      && DELEGATION_OWNER_TERMS.every((term) => !agents.includes(term)),
+    message: 'Owner-free: state left to the project, and no delegated owner named'
+  };
+  // A plain project may legitimately have nothing to verify, but only by SAYING SO in both places
+  // an agent looks: the instruction file it reads and the script it runs. Silence still falls
+  // through to the ordinary static-check requirement, so this arm cannot be satisfied by omission —
+  // and the engineering tier keeps the plain check unchanged, so the disclosure is not a route out
+  // of the gate for a repository that does have a baseline.
+  const plainGate =
+    textHas(init + agents, ['build', 'type', 'lint', 'compile', '类型', '构建']).pass
+    || (init.includes(NO_VERIFICATION_MARKER) && agents.includes('无验证命令'));
+
   // A harness is scored on the artifacts a harness ships — and only on the ones this skill ships.
   // Nothing below reads CONTEXT.md, docs/adr/, docs/agents/*, feature_list.json or progress.md.
   // The first three belong to whichever skill produces them; the last two no longer exist here at
@@ -596,18 +692,36 @@ export function scoreHarness(files, { references } = {}) {
       // `.some()` let a file name only one of them and still pass. The conjunction used to be carried
       // by the two-owner check below; when the user collapsed the delegation to a single owner the
       // conjunction moved to the slots rather than leaving this helper unwired.
-      structuredHasAll(agents, ['to-tickets', 'handoff'], 'Delegated state and handoff owners named'),
-      // Was all-of over two owners until 09-28, when the user removed the runtime-routed second owner
-      // (superpowers) and made the engineering workflow one system's. What the render must now name is
-      // that single owner; the removed one is forbidden instead, in FORBIDDEN_IN_AGENTS_MD over in
-      // run-benchmark.mjs. A required name and a forbidden name are the two sides of the same claim,
-      // and either alone is satisfied by a degenerate file.
-      structuredHas(agents, ['mattpocock'], 'Single named owner holds the engineering workflow')
+      // On the plain tier these two collapse into one check: there is no owner to name, so what the
+      // artifact must state instead is WHERE state goes when nobody owns it — and that it names no
+      // owner anyway. The tiers are mutually exclusive by construction (one requires the names the
+      // other forbids), so neither can be satisfied by the other's render.
+      ...(plain
+        ? [plainDelegation]
+        : [
+            structuredHasAll(agents, ['to-tickets', 'handoff'], 'Delegated state and handoff owners named'),
+            // Was all-of over two owners until 09-28, when the user removed the runtime-routed second
+            // owner (superpowers) and made the engineering workflow one system's. What the render must
+            // now name is that single owner; the removed one is forbidden instead, in
+            // FORBIDDEN_IN_AGENTS_MD over in run-benchmark.mjs. A required name and a forbidden name
+            // are the two sides of the same claim, and either alone is satisfied by a degenerate file.
+            structuredHas(agents, ['mattpocock'], 'Single named owner holds the engineering workflow')
+          ])
     ],
     verification: [
       hasFile(byPath, ['init.sh'], 'Verification entrypoint exists'),
       textHas(init, ['set -e'], 'Verification fails fast'),
-      textHas(init + agents, ['test', 'pytest', 'vitest', 'cargo test', 'go test', 'dotnet test', '测试'], 'Test command documented'),
+      // The engineering tier asks for a test command; a plain target has no such concept, so that
+      // one requirement is replaced by the tier's own: EITHER a real static check is documented, OR
+      // both the instruction file and the generated gate carry the explicit no-verification
+      // disclosure. Silence satisfies neither half, so the waiver cannot be collected by saying
+      // nothing. The static-check requirement below stays in force for BOTH tiers — which is what
+      // gives the declaration a visible cost: the harness still scores, but no longer perfectly, and
+      // the audit can say why. A waiver that reached full marks would be the cheapest route to a
+      // perfect score, and this suite exists to stop exactly that.
+      ...(plain
+        ? [{ pass: plainGate, message: 'A real static check, or an explicit no-verification disclosure in both places' }]
+        : [textHas(init + agents, ['test', 'pytest', 'vitest', 'cargo test', 'go test', 'dotnet test', '测试'], 'Test command documented')]),
       textHas(init + agents, ['build', 'type', 'lint', 'compile', '类型', '构建'], 'Static/build check documented'),
       textHas(allText, ['Evidence', 'Verification Evidence', 'command and output', '证据', 'CI'], 'Verification evidence is recorded'),
       // Inside the existing verification subsystem, never a fourth one: the three subsystems are a
@@ -618,10 +732,14 @@ export function scoreHarness(files, { references } = {}) {
       referencesCheck(references)
     ],
     scope: [
-      structuredHas(agents, ['One feature at a time', 'one-feature-at-a-time', 'one requirement at a time', 'one ticket at a time', '一次一个功能', '一次一个需求', '一次一个工单'], 'One-ticket-at-a-time rule exists'),
+      // The one-at-a-time rule is the same invariant on both tiers; only its noun differs, because a
+      // plain working directory produces deliverables rather than tickets. Both nouns are listed
+      // here rather than branched, since this is one requirement and a branch would let the two
+      // tiers drift into two separate rules that no longer have to agree.
+      structuredHas(agents, ['One feature at a time', 'one-feature-at-a-time', 'one requirement at a time', 'one ticket at a time', '一次一个功能', '一次一个需求', '一次一个工单', '一次一个交付物'], 'One-ticket-at-a-time rule exists'),
       textHas(agents, ['dependencies', 'blocking', '阻塞边', '依赖'], 'Blocking edges are stated'),
       textHas(agents, ['status', '状态'], 'Ticket status is explicit'),
-      structuredHas(agents, ['Stay in scope', 'scope', '保持在本工单范围内', '保持在范围内', '范围'], 'Scope boundary documented'),
+      structuredHas(agents, ['Stay in scope', 'scope', '保持在本工单范围内', '保持在范围内', '保持在本交付物范围内', '范围'], 'Scope boundary documented'),
       structuredHas(agents, ['Definition of Done', '完成定义'], 'Completion gate limits scope closure')
     ]
   };
