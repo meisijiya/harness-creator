@@ -80,6 +80,11 @@ same declaration is written into the instruction file so a reader sees it withou
 Leaving the flag out keeps the ordinary behaviour on the plain tier: init.sh exits 1 until a real
 check replaces the placeholder.
 
+--commands takes a comma-separated list, one check per entry: --commands "npm test,npm run lint".
+A comma inside a command has to be quoted, or it would separate rather than belong: --commands
+"bash -c 'echo a,b'" is ONE command. An unterminated quote is refused with a non-zero exit and
+nothing created, rather than split into steps that no longer check anything.
+
 Existing files are skipped unless --force is set. --force does not overwrite a file whose content
 another skill owns; it only lifts the skip on this skill's own artifacts.`);
   process.exit(0);
@@ -115,11 +120,48 @@ const force = Boolean(args.force);
 const dryRun = Boolean(args.dryRun);
 const project = await detectProject(target);
 project.packageManager = detectPackageManager(target, args.packageManager);
-const commands = noVerification
-  ? []
+// --commands is a comma-separated list, and a comma INSIDE one of the commands used to split it in
+// two: `--commands "bash -c 'echo a,b'"` became the steps `bash -c 'echo a` and `b'`, the second of
+// which is not a check at all — a gate silently rewritten into something that cannot fail, which is
+// the silent degradation this skill exists to forbid. The split is now quote-aware, and an
+// unterminated quote is refused instead of guessed at, because guessing is what produced the split.
+// Quoting is the only escape; there is no backslash form to remember.
+function splitCommandList(raw) {
+  const parts = [];
+  let current = '';
+  let quote = null;
+  for (const char of String(raw)) {
+    if (quote) {
+      current += char;
+      if (char === quote) quote = null;
+    } else if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      current += char;
+    } else if (char === ',') {
+      parts.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  if (quote) return { error: `unterminated ${quote} in --commands` };
+  parts.push(current);
+  return { commands: parts.map((part) => part.trim()).filter(Boolean) };
+}
+
+const commandSplit = noVerification
+  ? { commands: [] }
   : args.commands
-    ? String(args.commands).split(',').map((command) => command.trim()).filter(Boolean)
-    : verificationCommands(project, args.packageManager);
+    ? splitCommandList(String(args.commands))
+    : { commands: verificationCommands(project, args.packageManager) };
+if (commandSplit.error) {
+  console.error(`REFUSED: ${commandSplit.error}.`);
+  console.error('--commands separates commands with commas, so a comma inside a command must be');
+  console.error('quoted: --commands "bash -c \'echo a,b\'" is one command. Splitting it silently');
+  console.error('would ship a gate that no longer checks what it was asked to. Nothing was created.');
+  process.exit(1);
+}
+const commands = commandSplit.commands;
 
 // The tier decides which instruction file is rendered. Two templates rather than one with branches,
 // because the engineering render has to stay byte-identical to what it produced before the tier

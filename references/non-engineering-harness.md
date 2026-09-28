@@ -24,7 +24,8 @@
 
 - 仍然只有**两个产物**：`AGENTS.md`（或既有 `CLAUDE.md`）+ `init.sh`；
 - 仍然是同样三个子系统与同一套判据；
-- **验证入口照样要求真实检查**。文档类的真实检查是存在的：`markdownlint-cli2`、链接检查、frontmatter schema 校验、拼写检查。用 `--commands` 显式给出即可。
+- **验证入口照样要求真实检查**。文档类的真实检查是存在的：`markdownlint-cli2`、链接检查、frontmatter schema 校验、拼写检查。用 `--commands` 显式给出即可（**逗号分隔**；命令内部含逗号时用引号包住，如 `--commands "bash -c 'echo a,b'"`——未闭合的引号会被拒绝，不会猜着切开）。
+- **工具的默认规则与本仓既有约定冲突时，以本仓约定为准**：改写检查配置或换一个工具，**绝不为了让工具变绿而改约定**。实测例子：`markdownlint` 默认的 MD025 把 frontmatter 的 `title` 也当成一级标题，与「frontmatter title 与正文 H1 并存」的约定冲突——此时该改的是检查，不是删掉正文标题。手写的检查还要自证有牙（见 `gotchas.md` #18）。
 
 非工程档下改变的：
 

@@ -172,7 +172,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
   ['references', (group) => ` A documented command that no longer resolves is caught rather than silently trusted: the audit resolves manifest scripts and runnable files, reports by name what it cannot resolve, and is proven in both directions (${group.pass ? 'verified' : `dangling fixture ${group.danglingCaught ? 'caught' : 'MISSED'}; guarded fixture ${group.guardedExcused ? 'excused' : 'FALSELY FLAGGED'}; unchecked bucket ${group.uncheckedListed ? 'populated' : 'SILENT'}; uncollected scan ${group.uncollectedRefused ? 'refused' : 'PASSED'}`}).`],
   ['bottleneckTies', (group) => ` The bottleneck line names ${group.tieCount} tied subsystem(s) as a tie instead of picking one (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['blankGate', (group) => ` A project with nothing to verify — no manifest, a manifest with no runnable script, or an explicit --commands list whose scripts the manifest does not define — gets a refusal that exits non-zero instead of reporting a pass it did not earn, the counter reopens the moment a real check runs, and the manual fallback template refuses on the same shapes (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['blankGate', (group) => ` A project with nothing to verify — no manifest, a manifest with no runnable script, or an explicit --commands list whose scripts the manifest does not define — gets a refusal that exits non-zero instead of reporting a pass it did not earn, the counter reopens the moment a real check runs, a comma inside a quoted command stays one command while a genuine comma-separated list still splits, an unterminated quote is refused leaving nothing behind, and the manual fallback template refuses on the same shapes (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-description slot stays a visible pending marker when the user has not stated one, while a blueprint change rewrites that slot only — the rest of the file survives byte for byte, and a shape this skill did not render is refused rather than guessed at (${group.pass ? 'verified' : `pending ${group.pendingMarked ? 'ok' : 'NO'}; no stack fill ${group.noInventedFill ? 'ok' : 'NO'}; verbatim ${group.verbatim ? 'ok' : 'NO'}; slot-only ${group.slotRewritten && group.restIntact ? 'ok' : 'NO'}; detector ${group.detectorHasTeeth ? 'has teeth' : 'BLIND'}; refusal ${group.refusalHonoured && group.refusedUntouched ? 'ok' : 'NO'}`}).`],
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`],
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`]
@@ -644,8 +644,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Bottleneck ties: ${pass ? 'PASS' : 'FAIL'} — tie names all 3 subsystems: ${tieCount === 3 ? 'ok' : `NO (${tieCount})`}; unique minimum names one: ${uniqueCount === 1 ? 'ok' : `NO (${uniqueCount})`}; complete harness reports none: ${noneCount === 0 ? 'ok' : `NO (${noneCount})`} — ${tieLabel}`);
   }
   if (selfCheck.blankGate) {
-    const { pass, placeholderFails, realRuns, scriptlessRefuses, withTestRuns, explicitFailsClosed, explicitOpensWhenRun, templateRefusals, templateRefusalsExitNonZero, templateStillRuns } = selfCheck.blankGate;
-    lines.push(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}; a manifest with no runnable script refuses too: ${scriptlessRefuses ? 'ok' : 'NO'}; a manifest with a real script still runs: ${withTestRuns ? 'ok' : 'NO'}; an explicit --commands list the manifest cannot run fails closed: ${explicitFailsClosed ? 'ok' : 'NO'}; and opens again once a check really runs: ${explicitOpensWhenRun ? 'ok' : 'NO'}; the manual fallback carries ${templateRefusals} refusal(s) each armed with a non-zero exit: ${templateRefusalsExitNonZero ? 'ok' : 'NO'}; and still reaches a success tail: ${templateStillRuns ? 'ok' : 'NO'}`);
+    const { pass, placeholderFails, realRuns, scriptlessRefuses, withTestRuns, explicitFailsClosed, explicitOpensWhenRun, quotedCommaUnsplit, listStillSplits, unterminatedRefused, templateRefusals, templateRefusalsExitNonZero, templateStillRuns } = selfCheck.blankGate;
+    lines.push(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}; a manifest with no runnable script refuses too: ${scriptlessRefuses ? 'ok' : 'NO'}; a manifest with a real script still runs: ${withTestRuns ? 'ok' : 'NO'}; an explicit --commands list the manifest cannot run fails closed: ${explicitFailsClosed ? 'ok' : 'NO'}; and opens again once a check really runs: ${explicitOpensWhenRun ? 'ok' : 'NO'}; a comma inside a quoted command stays one command: ${quotedCommaUnsplit ? 'ok' : 'NO'}; a genuine comma-separated list still splits: ${listStillSplits ? 'ok' : 'NO'}; an unterminated quote is refused and leaves nothing behind: ${unterminatedRefused ? 'ok' : 'NO'}; the manual fallback carries ${templateRefusals} refusal(s) each armed with a non-zero exit: ${templateRefusalsExitNonZero ? 'ok' : 'NO'}; and still reaches a success tail: ${templateStillRuns ? 'ok' : 'NO'}`);
   }
   if (selfCheck.blueprint) {
     const { pass, pendingMarked, noInventedFill, verbatim, slotRewritten, restIntact, detectorHasTeeth, refusalHonoured, refusedUntouched, error } = selfCheck.blueprint;
@@ -1637,20 +1637,65 @@ async function checkBlankProjectGate() {
   // The other direction, for the same reason the generator arms carry one: a fallback that
   // refused unconditionally would satisfy the arm above while verifying nothing.
   const templateStillRuns = /=== Verification Complete ===/.test(template);
-  return {
-    pass: placeholderFails && realRuns && scriptlessRefuses && withTestRuns
-      && explicitFailsClosed && explicitOpensWhenRun
-      && templateRefusalsExitNonZero && templateStillRuns,
-    placeholderFails,
-    realRuns,
-    scriptlessRefuses,
-    withTestRuns,
-    explicitFailsClosed,
-    explicitOpensWhenRun,
-    templateRefusals,
-    templateRefusalsExitNonZero,
-    templateStillRuns
-  };
+  // --commands is a comma-separated list, so a comma INSIDE one of the commands used to split it in
+  // two: `--commands "bash -c 'echo a,b'"` became the steps `bash -c 'echo a` and `b'`, and the
+  // second half is not a check at all. That is the same defect as the arms above, one layer up — a
+  // gate silently rewritten into a step that cannot fail — and it was armed on neither axis. The
+  // list is now split with quoting respected, and an unterminated quote is refused rather than
+  // guessed at. Three directions through the real generator, because each fails differently:
+  // quoting must protect the comma, a genuine comma-separated list must still split (or "never
+  // split" would satisfy the first arm while breaking every existing caller), and the refusal must
+  // leave nothing behind (or "refuse after writing" would satisfy the second).
+  const commaDir = await mkdtemp(path.join(os.tmpdir(), 'harness-comma-'));
+  const listDir = await mkdtemp(path.join(os.tmpdir(), 'harness-cmdlist-'));
+  const badCmdDir = await mkdtemp(path.join(os.tmpdir(), 'harness-badcmd-'));
+  try {
+    const createScript = path.join(scriptDir, 'create-harness.mjs');
+    await execFileAsync('node', [
+      createScript, '--target', commaDir, '--no-engineering-owner', '--commands', "bash -c 'echo a,b'"
+    ]);
+    await execFileAsync('node', [
+      createScript, '--target', listDir, '--no-engineering-owner', '--commands', 'npm test,npm run lint'
+    ]);
+    const commaAgents = await readText(path.join(commaDir, 'AGENTS.md'));
+    const listAgents = await readText(path.join(listDir, 'AGENTS.md'));
+    // One command, comma intact, and no orphaned half of it registered as an entry of its own.
+    const quotedCommaUnsplit = commaAgents.includes("- `bash -c 'echo a,b'`")
+      && !/^- `b'`$/m.test(commaAgents);
+    const listStillSplits = /^- `npm test`$/m.test(listAgents) && /^- `npm run lint`$/m.test(listAgents);
+    // The refusal has to be a refusal, not a warning printed on the way to writing the files anyway.
+    let refusedCode = null;
+    try {
+      await execFileAsync('node', [
+        createScript, '--target', badCmdDir, '--no-engineering-owner', '--commands', "bash -c 'echo a,b"
+      ]);
+      refusedCode = 0;
+    } catch (error) {
+      refusedCode = error.code;
+    }
+    const unterminatedRefused = refusedCode !== 0 && refusedCode !== null
+      && (await readdir(badCmdDir)).length === 0;
+    return {
+      pass: placeholderFails && realRuns && scriptlessRefuses && withTestRuns
+        && explicitFailsClosed && explicitOpensWhenRun
+        && templateRefusalsExitNonZero && templateStillRuns
+        && quotedCommaUnsplit && listStillSplits && unterminatedRefused,
+      placeholderFails,
+      realRuns,
+      scriptlessRefuses,
+      withTestRuns,
+      explicitFailsClosed,
+      explicitOpensWhenRun,
+      templateRefusals,
+      templateRefusalsExitNonZero,
+      templateStillRuns,
+      quotedCommaUnsplit,
+      listStillSplits,
+      unterminatedRefused
+    };
+  } finally {
+    for (const dir of [commaDir, listDir, badCmdDir]) await rm(dir, { recursive: true, force: true });
+  }
 }
 
 // The plain-description slot. AGENTS.md's one place that answers "what is this project"
