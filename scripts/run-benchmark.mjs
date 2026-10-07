@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -148,9 +149,9 @@ const DISCOVERABLE_CONTENT = [
 // a file the skill no longer writes is the same "check and template on the same side" defect one
 // level up: the gate would be asserting the existence of the thing that was removed.
 const SELF_CHECK_GROUPS = [
-  'budget', 'agentsBudget', 'agentsDiscover', 'maintenance', 'skillDesign',
+  'budget', 'agentsBudget', 'agentsDiscover', 'artifactPurity', 'maintenance', 'skillDesign',
   'wrapupOutput', 'dryRun', 'selfRefs', 'references', 'bottleneckTies', 'foreignAudit', 'blankGate',
-  'blueprint', 'agentFile', 'reportContract', 'taskContract', 'maintContract'
+  'blueprint', 'agentFile', 'reportContract', 'taskContract', 'maintContract', 'noDeadDecls'
 ];
 
 // One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
@@ -161,6 +162,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['budget', (group) => ` SKILL.md sits at ${group.size}/${group.max} bytes (${group.pass ? 'within' : 'OVER'} budget).`],
   ['agentsBudget', (group) => ` The generated AGENTS.md stays inside its external byte, line and working-rule budgets (${group.pass ? 'verified' : 'FAILED'}).`],
   ['agentsDiscover', (group) => ` The instruction file does not restate what the agent can read for itself, and the detector is proven to have teeth by a seeded violation (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['artifactPurity', (group) => ` The generated artifacts carry none of this skill's retired machinery (${group.total} forbidden patterns, ${group.seeded} caught by the seeded violation) and name no external system at all (${group.named.length ? `NAMED ${group.named.join(', ')}` : 'none'}); both detectors are proven per-entry rather than by one blob (${group.pass ? 'verified' : `leaked ${(group.leaked || []).join(', ') || 'none'}; per-entry teeth ${group.perEntryTeeth ? 'ok' : 'BLIND'}; external teeth ${group.externalTeeth ? 'ok' : 'BLIND'}`}).`],
   ['maintenance', (group) => ` Harness maintenance has a moment to happen: the generated instruction file tells the agent to optimise the harness at wrap-up when the session's own output leaves it stale or thin, rather than when the harness files happen to have been touched, and the detector is proven to have teeth per term, against the retired diff-keyed sentence, against that sentence wearing the new vocabulary, and against a shortened forbidden list (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; retired phrasing ${(group.leaked || []).length ? `LEAKED (${group.leaked.join(', ')})` : 'absent'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old-form rejection ${group.oldFormRejected ? 'honoured' : 'ACCEPTED'}; hybrid form ${group.hybridRejected ? 'rejected' : 'ACCEPTED'}; forbidden-list shrink witness ${group.forbiddenWitness ? 'has teeth' : 'BLIND'}`}).`],
   ['skillDesign', (group) => ` The skill's own design rules are machine-checked rather than trusted to prose: SKILL.md's design section states the wrap-up criterion on the session's own output, and the detector is proven to have teeth per term, against the pre-09-25 rule line, against the old condition wearing the new vocabulary, and against a shortened requirement list (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; diff key ${(group.leaked || []).length ? `LEAKED (${group.leaked.join(', ')})` : 'absent'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old rule line ${group.oldFormRejected ? 'rejected' : 'ACCEPTED'}; hybrid form ${group.hybridRejected ? 'rejected' : 'ACCEPTED'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}`}).`],
   ['wrapupOutput', (group) => ` The wrap-up procedure a maintainer actually reads carries both of its outputs: the candidate changes, and the judgment items that are handed to the user instead of being decided — the part that stops a fresh session from treating already-dead rules as live — plus a net-change report, which is what keeps blind increment from hiding in wording (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; own section ${group.heading ? 'present' : 'ABSENT'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; heading requirement ${group.headingArm ? 'has teeth' : 'BLIND'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}`}).`],
@@ -174,7 +176,8 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`],
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`],
   ['taskContract', (group) => ` The instruction file scopes work to what the user authorized: explicit authorization to advance, picking and status updates only while an authorized deliverable is being executed, a baseline failure split into pre-existing versus introduced, a commit gated on the definition of done rather than on a passing check, existing modifications and untracked files protected from any cleanup, and a read-only task that only reports harness drift (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-requirement teeth ${group.teeth ? 'ok' : 'BLIND'}; forbidden-list witness ${group.forbidWitness ? 'ok' : 'BLIND'}; old forms ${group.oldFormsRejected ? 'refused' : 'ACCEPTED'}`}).`],
-  ['maintContract', (group) => ` A full audit score is not an exit condition in the maintenance reference: the score row still routes to the actual misalignment check, keeps the anti-gaming clause, and the shared content-review table states the read-only, baseline-scope, commit-authorization, existing-work and full-score rules — proven per guard, with the whole table deleted, and by the retired short-circuit row (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-guard teeth ${group.teeth ? 'ok' : 'BLIND'}; whole table removed ${group.tableRemovedRefused ? 'refused' : 'ACCEPTED'}; retired row ${group.oldRowRejected ? 'refused' : 'ACCEPTED'}`}).`]
+  ['maintContract', (group) => ` A full audit score is not an exit condition in the maintenance reference: the score row still routes to the actual misalignment check, keeps the anti-gaming clause, and the shared content-review table states the read-only, baseline-scope, commit-authorization, existing-work and full-score rules — proven per guard, with the whole table deleted, and by the retired short-circuit row (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-guard teeth ${group.teeth ? 'ok' : 'BLIND'}; whole table removed ${group.tableRemovedRefused ? 'refused' : 'ACCEPTED'}; retired row ${group.oldRowRejected ? 'refused' : 'ACCEPTED'}`}).`],
+  ['noDeadDecls', (group) => ` This suite carries no orphan: ${group.declaredCount} top-level declarations under scripts/ are all read somewhere in the tree, the ${group.helpEntries} numbered --help entries annotate exactly the ${SELF_CHECK_GROUPS.length} live group keys in both directions, and every flag the generator documents is a flag it reads (${group.pass ? 'verified' : `unread ${(group.dead || []).join(', ') || 'none'}; ghost keys ${(group.ghostKeys || []).join(', ') || 'none'}; groups with no help entry ${(group.missingKeys || []).join(', ') || 'none'}; keys documented twice ${(group.duplicateKeys || []).join(', ') || 'none'}; documented-but-unread flags ${(group.unreadFlags || []).join(', ') || 'none'}; detector teeth decls ${group.teethDeclarations ? 'ok' : 'BLIND'}, help ${group.teethHelp ? 'ok' : 'BLIND'}, flags ${group.teethFlags ? 'ok' : 'BLIND'}`}).`]
 ]);
 
 // The single behavior this skill must not have. A harness that detected governance modes, assigned
@@ -408,6 +411,7 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['budget', 'SKILL.md budget'],
   ['agentsBudget', 'AGENTS.md budget'],
   ['agentsDiscover', 'AGENTS.md discoverability'],
+  ['artifactPurity', 'Artifact purity'],
   ['maintenance', 'Maintenance trigger'],
   ['skillDesign', 'SKILL.md design rule'],
   ['wrapupOutput', 'Wrap-up outputs'],
@@ -421,7 +425,8 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['agentFile', 'Agent-file invariant'],
   ['reportContract', 'Report contract'],
   ['taskContract', 'Task authorization'],
-  ['maintContract', 'Maintenance contract']
+  ['maintContract', 'Maintenance contract'],
+  ['noDeadDecls', 'Orphan declarations']
 ]);
 
 
@@ -457,10 +462,6 @@ const PICK_AUTHORIZATION = ['授权', '明确要求', '显式要求', '用户要
 const CONDITION_INTRODUCERS = ['若', '只有', '仅在', '仅当', '除非', '经用户'];
 const COMMIT_CONDITION = [...CONDITION_INTRODUCERS, '不提交'];
 const STATUS_CONDITION = [...CONDITION_INTRODUCERS, '不更新', '不改状态', '不标记'];
-const CONDITION = [
-  ...CONDITION_INTRODUCERS,
-  '不更新', '不提交', '不写入', '不记入', '不保存', '不归档', '不落盘', '不改状态', '不标记'
-];
 const QA = /问答|只读|解释|咨询|审计|评审/;
 const WORK_NOUN = ['工单', '交付物', '任务', '状态', '记录'];
 const PICK_VERB = ['挑', '领', '选', '取'];
@@ -670,32 +671,38 @@ Runs a lightweight harness benchmark:
      is the only check that proves the bundled scripts work end-to-end rather than being present.
   2. Scores the current target harness.
   3. Checks eval coverage in evals/evals.json.
-  4. Checks the SKILL.md size budget (${SKILL_MD_MAX_BYTES} bytes = ${SKILL_MD_GROWTH}x the ${SKILL_MD_BASELINE_BYTES}-byte baseline).
+  4. Checks the SKILL.md size budget (${SKILL_MD_MAX_BYTES} bytes = ${SKILL_MD_GROWTH}x the ${SKILL_MD_BASELINE_BYTES}-byte baseline). [budget]
   5. Checks the generated AGENTS.md budget against an EXTERNAL anchor: the default render must stay
      inside byte, line and working-rule caps derived from the upstream reference template, not from
      whatever this template happens to render at. A cap whose baseline is the status quo can only
-     ratify the status quo.
+     ratify the status quo. [agentsBudget]
   6. Checks the generated AGENTS.md for restated, discoverable content — directory trees, stack
-     descriptions — and proves the detector has teeth against a seeded violation.
-  7. Checks the scope brake: the generated instruction file must state that the engineering workflow
-     belongs to the engineering skills, and must carry none of the doctrine this skill used to ship
-     (governance modes, landing points, ADR/CONTEXT routing, tracking policy, housekeeping duties).
-     Seeded on both sides, because an assertion that only forbids is satisfied by an empty file.
+     descriptions — and proves the detector has teeth against a seeded violation. [agentsDiscover]
+  7. Checks that the generated artifacts carry none of this skill's retired machinery: the forbidden
+     list is asserted term by term, each proven load-bearing by dropping it in turn, because a term
+     table that no gate reads is a claim with no carrier. The same group proves the rendered file
+     names NO external system at all, which is checked by seeding a representative name and
+     requiring the predicate to catch it — not by keeping a list of names, because a list of
+     external names is exactly what rots when the ecosystem renames. [artifactPurity]
   8. Checks --dry-run: it must change nothing, plan real artifacts rather than recite a template
-     list, and agree with the write that follows it.
+     list, and agree with the write that follows it. [dryRun]
   9. Checks the skill's own shipped files: no command it prints may use a script path that only
      resolves from the skill directory, and no shipped text may point at a bare skills/<name>/
      prefix. The first names an invocation the agent cannot run, the second a file it cannot open,
-     both because its cwd is the target repo rather than the skills directory.
+     both because its cwd is the target repo rather than the skills directory. [selfRefs]
  10. Checks command references: a documented command that no longer resolves — a script renamed in
      package.json, a helper deleted — is caught rather than trusted forever. Seeded in both
      directions: a dangling reference must fail the audit, while the generator's own has_script
      guard must NOT, because flagging it would fail the output this skill itself renders. What has no
      static resolver (pytest, cargo test) is listed by name, since a check that silently skips what
-     it cannot verify reads as full coverage while delivering less.
+     it cannot verify reads as full coverage while delivering less. [references]
  11. Checks the bottleneck headline: a tie must name every tied subsystem, a unique minimum must
-     name one, and a complete harness must report none.
- 12. Checks the blank-project gate: the placeholder verification step must exit non-zero, a real
+     name one, and a complete harness must report none. [bottleneckTies]
+ 12. Checks the scorer against a harness it did not write: a foreign repository with no gate must
+     fail the two gate checks, and that same repository with a gate must pass them, so the case
+     cannot be closed by scoring every harness lower. The fixture is written out literally, because
+     one derived from the needles would move with them and prove nothing about which check fired. [foreignAudit]
+ 13. Checks the blank-project gate: the placeholder verification step must exit non-zero, a real
      command must still run, and — asserted through the real generator, not a hand-written string —
      a manifest that defines no check/typecheck/lint/test/build also refuses instead of exiting 0
      having verified nothing. A third shape is armed beside them, because the first two both route
@@ -704,57 +711,61 @@ Runs a lightweight harness benchmark:
      moment a check really runs. The same invariant has a second producer, the hand-copy fallback
      templates/init.sh, which the generator probes cannot reach: every refusal it prints must be
      armed with a non-zero exit, both refusals must still be present, and a success tail must
-     remain. A gate that cannot fail is not a gate.
- 13. Checks the plain-description slot: omitting --blueprint must leave a visible pending marker
-     rather than stack-derived text, and a supplied description must reach AGENTS.md verbatim.
- 14. Checks the instruction-file invariant: an existing CLAUDE.md must not get a second AGENTS.md
+     remain. A gate that cannot fail is not a gate. [blankGate]
+ 14. Checks the blueprint slot: omitting --blueprint must leave a visible pending marker
+     rather than stack-derived text, and a supplied description must reach AGENTS.md verbatim. [blueprint]
+ 15. Checks the instruction-file invariant: an existing CLAUDE.md must not get a second AGENTS.md
      beside it, and an existing instruction file must stay byte-identical while its missing
-     harness sections are still reported.
- 15. Checks the self-check's own coverage: every group in SELF_CHECK_GROUPS must have a bound check,
-     a place in the pass conjunction, a line in the shareable HTML report, and a line on the console
-     a human actually reads — four registration points, asserted as one set equality. A gate that
-     only ever prints is half a carrier; a gate that is only ever printed is the other half.
- 16. Checks the report contract: the renderer must honour the output path it is handed rather than
+     harness sections are still reported. [agentFile]
+ 16. Checks the self-check's own coverage: every group in SELF_CHECK_GROUPS must have a bound check,
+     a place in the pass conjunction, a line in the shareable HTML report, a line on the console a
+     human actually reads, and a bracketed key in THIS help — five registration points asserted as
+     one set equality. This is the one numbered check that is not a group: it IS the coverage arm,
+     which is why it carries no key.
+ 17. Checks the report contract: the renderer must honour the output path it is handed rather than
      reporting success at the default one, and the report a human reads must name the subsystem
      count the model actually has — seeded on both sides, since a detector that finds nothing is
-     indistinguishable from one that looks for nothing.
- 17. Checks the maintenance trigger: the generated instruction file must tell the agent to optimise
+     indistinguishable from one that looks for nothing. [reportContract]
+ 18. Checks the maintenance trigger: the generated instruction file must tell the agent to optimise
      the harness at wrap-up when the session's own output leaves it stale or thin — NOT when the
      harness files happen to have been touched, which is self-referential and can only see rot it
      already fixed. Seeded on four sides: each term is dropped in turn to prove it is load-bearing,
      the old diff-keyed sentence must be rejected, that sentence wearing the new vocabulary must be
      rejected too, and a shortened forbidden list must be caught — without the last two, a render
-     that reintroduced the old condition while keeping the new words passed this gate.
- 18. Checks the skill's OWN design rules, which no other gate can see: every other group reads the
+     that reintroduced the old condition while keeping the new words passed this gate. [maintenance]
+ 19. Checks the skill's OWN design rules, which no other gate can see: every other group reads the
      artifact a target repo receives, and the only two mentions of SKILL.md in this file are a byte
      count and a path-shape scan. SKILL.md must still state the wrap-up criterion on the session's
      own output, must not key it on files having been touched, and may not carry the old condition
      wearing the new vocabulary. Seeded on four sides — each term dropped in turn, the pre-09-25 rule
      line rejected, the hybrid form rejected, and an incomplete rule refused by the very term it is
      missing — because deleting that rule outright used to leave every other gate green and make the
-     byte budget line greener still.
- 19. Checks the wrap-up procedure a maintainer actually reads: it must produce both of its outputs —
+     byte budget line greener still. [skillDesign]
+ 20. Checks the wrap-up procedure a maintainer actually reads: it must produce both of its outputs —
      the candidate changes, and the judgment items handed to the user rather than decided by the
      agent (a rule that is no longer necessary is not wrong, so no command fails and no audit catches
      it) — and it must report the NET change rather than only what was edited. Seeded on four sides:
      each term dropped in turn, a version refused by its own missing term, and a fixture that keeps
      every term while losing the place to put them. The judgment half is the part no tool can settle,
-     so the gate proves the handover is stated instead of pretending the tool can make the call.
- 20. Checks the task conditions both instruction files carry — advance only what the user authorized,
+     so the gate proves the handover is stated instead of pretending the tool can make the call. [wrapupOutput]
+ 21. Checks the task conditions the instruction file carries — advance only what the user authorized,
      pick a ticket or deliverable only inside an authorized delivery, questions and read-only reviews
      pick nothing and update no status, a baseline failure split into pre-existing versus introduced, a
      commit gated on the definition of done rather than on a check a project may legitimately have
      declared it cannot run, existing modifications and untracked files surviving any cleanup, a
      read-only task only reporting harness drift. Seeded in every direction the failure can hide in:
-     terms deleted requirement by requirement on BOTH tiers, forbidden phrases seeded back, every
-     pre-09-29 sentence refused.
- 21. Checks the non-engineering tier's record entry — the one location the generated file must not
-     create: reported with evidence and a blocker when missing, never assumed, persistence only on
-     request, definition of done and closeout held to the same rule.
+     terms deleted requirement by requirement, forbidden phrases seeded back, every retired sentence
+     refused. [taskContract]
  22. Checks that a full audit score is not an exit condition in the maintenance reference: the score
      row still routes to the actual misalignment check, and the retired row is refused — per guard,
-     and with the whole content-review table deleted too.
- 23. Produces a JSON report and optional HTML report.
+     and with the whole content-review table deleted too. [maintContract]
+ 23. Checks that this suite has left no orphan behind: every top-level declaration under scripts/
+     must be read somewhere in the tree, the flags the generator's own --help documents must be
+     flags it reads, and the bracketed keys in this help must equal SELF_CHECK_GROUPS in BOTH
+     directions. Deleting three groups left a forbidden-term table with zero call sites while the
+     README still called it "proven not blind"; nothing failed, and the only symptom was a judge
+     seeding the retired phrases and every gate staying green. [noDeadDecls]
+ 24. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -763,6 +774,31 @@ This is a structural benchmark, not an LLM judge. Use it before/after real agent
 const target = path.resolve(args.target || args._[0] || process.cwd());
 const output = path.resolve(args.output || path.join(target, 'harness-benchmark.json'));
 const evalPath = path.resolve(args.evals || path.join(skillRoot, 'evals', 'evals.json'));
+
+// Declared HERE, not beside the group that reads them: `runSelfCheck()` is invoked further down this
+// file, so a const below that point is still in its temporal dead zone when the artifact-purity
+// group reads it. This file has paid for that mistake four times; the fifth arrived the same way,
+// with a ReferenceError whose message names a helper rather than a line number, so it reads like a
+// missing feature instead of a declaration that is simply too late.
+const EXTERNAL_SYSTEM_SEEDS = ['to-tickets', 'mattpocock', 'superpowers', 'setup-matt-pocock-skills'];
+const externalSystemsIn = (text) => EXTERNAL_SYSTEM_SEEDS.filter((name) => text.includes(name));
+
+// One phrase per forbidden entry, so the per-entry arm seeds each pattern through text that belongs
+// to that pattern rather than through a shared blob that several patterns would also match. Also
+// hoisted for the same reason.
+function seedPhraseFor(name) {
+  const seeds = {
+    'in-repo state registry': 'feature_list.json',
+    'in-repo progress log': 'progress.md',
+    'landing-point doctrine': '产物落点由本技能指定',
+    'tracking-policy section': '产物追踪策略',
+    'controlled release': '受控放行',
+    'governance modes': '两种模式',
+    'extracted agent-doc layer': 'tracking-policy.md',
+    'installation check': '未安装时提示安装'
+  };
+  return seeds[name] ?? name;
+}
 
 const targetFiles = await loadHarnessFiles(target);
 const harnessResult = scoreHarness(targetFiles, { references: await collectCommandReferences(target, targetFiles) });
@@ -831,6 +867,10 @@ function consoleSelfCheckLines(selfCheck) {
     const { pass, offenders = [], selfRestraintStated, selfRestraintTeeth, seededCaught, error } = selfCheck.agentsDiscover;
     lines.push(`  AGENTS.md discoverability: ${pass ? 'PASS' : 'FAIL'} — default render free of restated content: ${offenders.length === 0 ? 'ok' : `NO (${offenders.join(', ')})`}; self-restraint rule stated: ${selfRestraintStated ? 'ok' : 'NO'}; proven load-bearing: ${selfRestraintTeeth ? 'ok' : 'BLIND'}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.artifactPurity) {
+    const { pass, leaked = [], named = [], perEntryTeeth, seeded = 0, total = 0, externalTeeth, error } = selfCheck.artifactPurity;
+    lines.push(`  Artifact purity: ${pass ? 'PASS' : 'FAIL'} — generated artifacts carry no retired machinery: ${leaked.length === 0 ? 'ok' : `LEAKED (${leaked.join(', ')})`}; forbidden patterns caught by the seeded violation: ${seeded}/${total}; per-entry teeth: ${perEntryTeeth ? 'ok' : 'BLIND'}; no external system named: ${named.length === 0 ? 'ok' : `NAMED (${named.join(', ')})`}; external teeth: ${externalTeeth ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
+  }
   if (selfCheck.maintenance) {
     const { pass, stated, missing = [], leaked = [], teeth, oldFormRejected, hybridRejected, forbiddenWitness, error } = selfCheck.maintenance;
     lines.push(`  Maintenance trigger: ${pass ? 'PASS' : 'FAIL'} — wrap-up step keys on the session's own output leaving the harness stale, not on the harness files having been touched: ${stated ? 'ok' : `MISSING (${missing.join(', ') || 'section not found'})`}; retired diff-keyed phrasing: ${leaked.length === 0 ? 'absent' : `LEAKED (${leaked.join(', ')})`}; per-term detector: ${teeth ? 'ok' : 'BLIND'}; diff-keyed sentence rejected: ${oldFormRejected ? 'ok' : 'ACCEPTED'}; hybrid form rejected: ${hybridRejected ? 'ok' : 'ACCEPTED'}; forbidden-list shrink caught: ${forbiddenWitness ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
@@ -887,6 +927,10 @@ function consoleSelfCheckLines(selfCheck) {
     const { pass, missing = [], teeth, tableRemovedRefused, oldRowRejected, error } = selfCheck.maintContract;
     lines.push(`  Maintenance contract: ${pass ? 'PASS' : 'FAIL'} — a full audit score still routes to the actual misalignment check instead of ending the review, missing: ${missing.join(', ') || 'none'}; per-guard teeth: ${teeth ? 'ok' : 'BLIND'}; whole content-review table removed: ${tableRemovedRefused ? 'ok' : 'ACCEPTED'}; retired short-circuit row refused: ${oldRowRejected ? 'ok' : 'ACCEPTED'}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.noDeadDecls) {
+    const { pass, dead = [], ghostKeys = [], missingKeys = [], duplicateKeys = [], unreadFlags = [], declaredCount, helpEntries, teethDeclarations, teethHelp, teethFlags, error } = selfCheck.noDeadDecls;
+    lines.push(`  Orphan declarations: ${pass ? 'PASS' : 'FAIL'} — ${declaredCount} top-level declarations under scripts/, all read somewhere in the tree: ${dead.length === 0 ? 'ok' : `${dead.length} UNREAD (${dead.join(', ')})`}; ${helpEntries} numbered --help entries vs ${SELF_CHECK_GROUPS.length} group keys, equal in both directions: ${ghostKeys.length === 0 && missingKeys.length === 0 && duplicateKeys.length === 0 ? 'ok' : `NO (ghost: ${ghostKeys.join(', ') || 'none'}; missing entry: ${missingKeys.join(', ') || 'none'}; twice: ${duplicateKeys.join(', ') || 'none'})`}; documented-but-unread generator flags: ${unreadFlags.length === 0 ? 'none' : unreadFlags.join(', ')}; detector teeth: declarations ${teethDeclarations ? 'ok' : 'BLIND'}, help ${teethHelp ? 'ok' : 'BLIND'}, flags ${teethFlags ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
+  }
   if (selfCheck.reportCoverage) {
     const { pass, unbound = [], missingLines = [], orphanLines = [], missingConsole = [] } = selfCheck.reportCoverage;
     lines.push(`  Report coverage: ${pass ? 'PASS' : 'FAIL'} — every self-check group is bound, gated, reported and shown on the console: ${pass ? 'ok' : `NO (unbound: ${unbound.join(', ') || 'none'}; missing report line: ${missingLines.join(', ') || 'none'}; orphan line: ${orphanLines.join(', ') || 'none'}; missing console line: ${missingConsole.join(', ') || 'none'})`}`);
@@ -917,6 +961,7 @@ async function runSelfCheck() {
       budget: () => checkSkillBudget(),
       agentsBudget: () => checkAgentFileBudget(),
       agentsDiscover: () => checkAgentFileDiscoverability(),
+      artifactPurity: () => checkArtifactPurity(),
       maintenance: () => checkMaintenanceTrigger(),
       skillDesign: () => checkSkillDesignRule(),
       wrapupOutput: () => checkWrapupOutputs(),
@@ -930,7 +975,8 @@ async function runSelfCheck() {
       agentFile: () => checkAgentFileInvariant(),
       reportContract: () => checkReportContract(),
       taskContract: async () => (await evaluateContracts()).taskContract,
-      maintContract: () => checkMaintContract()
+      maintContract: () => checkMaintContract(),
+      noDeadDecls: () => checkNoDeadDeclarations()
     };
     const groups = {};
     for (const key of SELF_CHECK_GROUPS) groups[key] = await groupChecks[key]();
@@ -1101,6 +1147,220 @@ function maintenanceWithout(text, term) {
   const section = maintenanceSection(text);
   return section ? text.replace(section, section.split(term).join('')) : text;
 }
+
+// The artifact must come out clean, and "clean" has two halves that both need a carrier.
+//
+// This group exists because the previous owner of these two claims was deleted with the tier it
+// belonged to, and deleting a check function without deleting what it read leaves the assertion
+// behind with nothing behind IT. Measured: `FORBIDDEN_IN_AGENTS_MD` had zero call sites and
+// `SEEDED_VIOLATION` had zero call sites, the README still stated the forbidden list "proves the
+// detector is not blind", and seeding `feature_list.json`, 产物追踪策略, 受控放行 and 提示安装 into
+// the template still produced Self-check PASS. So both halves are re-attached here, and the seeded
+// arm is what tells the two apart: a detector that finds nothing because the artifact is clean is
+// indistinguishable from one that looks for nothing.
+//
+// The vendor half has no pattern to match, by design — there is no list of names any more, because a
+// list is exactly what rots when the upstream renames. What is left is checkable: the rendered file
+// must not name ANY third-party system, which is asserted by seeding a representative name and
+// requiring the predicate to catch it. That way a future name cannot slip in unannounced, while the
+// predicate itself needs no maintenance when the ecosystem changes.
+// A declaration nobody reads is an assertion with no carrier, and it is the failure mode this file
+// produced most recently: deleting three self-check groups left `FORBIDDEN_IN_AGENTS_MD` and
+// `SEEDED_VIOLATION` with zero call sites, while the README still stated the forbidden list was
+// "proven not blind". Nothing failed, because a claim with no reader cannot fail — and the symptom
+// only showed up when a judge seeded the forbidden phrases into the template and the self-check
+// stayed green.
+//
+// So the rule is mechanical, in three halves. Every top-level declaration under scripts/ must be
+// read somewhere else in the tree; every flag the generator's --help documents must be a flag it
+// reads; and the keys annotated in this file's --help must equal SELF_CHECK_GROUPS in both
+// directions. All three are read off the sources themselves rather than a hand-maintained list,
+// because a hand-kept list is the same thing that rotted in the first place.
+
+// Line comments are prose, and prose names the thing it describes — so a name that survives only in
+// a comment would read as "used" and turn the whole arm blind. `://` is excluded so a URL inside a
+// string is not mistaken for the start of a comment.
+//
+// Declared as hoisted functions, not const arrows, on purpose. `runSelfCheck()` is invoked from the
+// top-level flow above this point, so any const below it is still in its temporal dead zone when
+// this group runs. That file has paid for that mistake five times; making these declarations
+// immune removes the sixth chance instead of relocating it again.
+function stripLineComments(source) {
+  return source
+    .split('\n')
+    .map((line) => {
+      const at = line.search(/(?<!:)\/\//);
+      return at === -1 ? line : line.slice(0, at);
+    })
+    .join('\n');
+}
+
+// Every top-level name the tree declares. `export` counts on purpose: a helper a sibling file calls
+// is not dead. That is also why the counts below run over the whole tree rather than one file —
+// scoping them to a single file reported all sixteen exported helpers as orphans, which is an arm
+// measuring the wrong thing rather than an arm finding anything.
+function declaredNamesIn(source) {
+  const names = new Set();
+  for (const match of source.matchAll(/^(?:export\s+)?const\s+([A-Z][A-Z0-9_]*)\s*=/gm)) names.add(match[1]);
+  for (const match of source.matchAll(/^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)/gm)) names.add(match[1]);
+  return [...names];
+}
+
+// How many times a name appears, counted as whole words so `TASK_CONTRACT` does not match
+// `TASK_CONTRACT_OLD` and read as used. Fewer than two means: declared once, read nowhere.
+function occurrencesOf(source, name) {
+  const re = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g');
+  return (source.match(re) || []).length;
+}
+
+// The --help body, read from the file rather than by running --help: a help entry naming a deleted
+// group and a group with no help entry are then the same kind of mismatch seen from two sides.
+//
+// Each entry is read as the WHOLE numbered block, not its first line: the key closes the last line
+// of the paragraph, because that is where the sentence ends, and an earlier version of this parsed
+// only the opening line and therefore matched exactly one key out of nineteen.
+//
+// The bracketed key is what makes the help machine-checkable — the sentence is prose a human reads,
+// the trailing `[key]` is the part a set comparison can hold still. An entry with no key is a step
+// rather than a group, which is allowed: the equality runs group -> key, not entry -> key.
+function helpEntriesIn(source) {
+  const start = source.indexOf('if (args.help)');
+  if (start === -1) return [];
+  const body = source.slice(start, source.indexOf('process.exit(0);', start));
+  const heads = [...body.matchAll(/^[ \t]*(\d+)\.[ \t]+[A-Z][^\n]*/gm)];
+  return heads.map((m, i) => {
+    const block = body.slice(m.index, heads[i + 1] ? heads[i + 1].index : body.length);
+    return { number: Number(m[1]), key: block.match(/\[([a-zA-Z][a-zA-Z0-9]*)\]\s*$/)?.[1] ?? null };
+  });
+}
+
+// Every --flag mentioned anywhere in a script's --help body, as the bare flag name.
+function helpFlagsIn(source) {
+  const start = source.indexOf('if (args.help)');
+  if (start === -1) return [];
+  const body = source.slice(start, source.indexOf('process.exit(0);', start));
+  return [...new Set([...body.matchAll(/--([a-z][a-z-]*)/g)].map((m) => m[1]))];
+}
+
+// parseArgs turns --dry-run into args.dryRun, so the reading of a documented flag is a property of
+// that one transformation. Checking it here means a flag can stay documented after the code that
+// honoured it is deleted, which is the same shape as a check with no call site: a reader is told
+// about a switch that no longer does anything.
+function readsFlag(code, flag) {
+  const camel = flag.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+  return new RegExp(`args\\.${camel}\\b`).test(code);
+}
+
+function checkNoDeadDeclarations() {
+  try {
+    const own = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    const generator = readFileSync(path.join(scriptDir, 'create-harness.mjs'), 'utf8');
+    const utils = readFileSync(path.join(scriptDir, 'lib', 'harness-utils.mjs'), 'utf8');
+    const sources = [own, generator, utils];
+
+    // Half 1: a declaration with no reader.
+    const corpus = sources.map(stripLineComments).join('\n');
+    const declared = [...new Set(sources.flatMap(declaredNamesIn))];
+    const dead = declared.filter((name) => occurrencesOf(corpus, name) < 2);
+
+    // Half 2: this --help against the group list, in both directions.
+    const groups = new Set(SELF_CHECK_GROUPS);
+    const help = helpEntriesIn(own);
+    const annotated = help.filter((entry) => entry.key !== null).map((entry) => entry.key);
+    const ghostKeys = [...new Set(annotated)].filter((key) => !groups.has(key));
+    const missingKeys = [...groups].filter((key) => !annotated.includes(key));
+    const duplicateKeys = [...new Set(annotated.filter((key, i) => annotated.indexOf(key) !== i))];
+
+    // Half 3: the generator's documented flags against the flags it reads.
+    const generatorCode = stripLineComments(generator);
+    const unreadFlags = helpFlagsIn(generator).filter((flag) => !readsFlag(generatorCode, flag));
+
+    // Teeth, one planted orphan per half. A detector that finds nothing because the tree is clean
+    // is indistinguishable from one that looks for nothing, which is the same reason the other
+    // eighteen groups each carry a seeded side. The planted pair has to be shaped so that exactly
+    // one of them is unread — an earlier sample read the export side as a second orphan and the
+    // arm reported its own fixture back at itself.
+    const seedSource = 'const SEEDED_ORPHAN = 1;\nconst SEEDED_KEPT = 1;\nconsole.log(SEEDED_KEPT);\n';
+    const seedCorpus = stripLineComments(seedSource);
+    const seededDead = declaredNamesIn(seedSource).filter((n) => occurrencesOf(seedCorpus, n) < 2);
+    const teethDeclarations = seededDead.length === 1 && seededDead[0] === 'SEEDED_ORPHAN';
+    const teethHelp = helpEntriesIn(`if (args.help) {\n  1. Real. [budget]\n  2. Ghost. [retiredGroup]\n  process.exit(0);`)
+      .some((entry) => entry.key === 'retiredGroup');
+    const teethFlags = readsFlag('const args = {};\n', 'ghost-flag') === false
+      && readsFlag('const args = {};\nconsole.log(args.ghostFlag);\n', 'ghost-flag') === true;
+
+    return {
+      pass: dead.length === 0 && ghostKeys.length === 0 && missingKeys.length === 0
+        && duplicateKeys.length === 0 && unreadFlags.length === 0
+        && teethDeclarations && teethHelp && teethFlags,
+      dead,
+      ghostKeys,
+      missingKeys,
+      duplicateKeys,
+      unreadFlags,
+      declaredCount: declared.length,
+      helpEntries: help.length,
+      teethDeclarations,
+      teethHelp,
+      teethFlags
+    };
+  } catch (error) {
+    return { pass: false, dead: [], ghostKeys: [], missingKeys: [], duplicateKeys: [], unreadFlags: [], error: error.message };
+  }
+}
+
+async function checkArtifactPurity() {
+  let dir;
+  try {
+    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-purity-'));
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
+    const agents = await readText(path.join(dir, 'AGENTS.md'));
+    const init = await readText(path.join(dir, 'init.sh'));
+    const rendered = `${agents}\n${init}`;
+
+    // Half one: this skill's own retired machinery. These names are forbidden because they were its
+    // own landing points and doctrine, not because they belong to anyone else.
+    const leaked = FORBIDDEN_IN_AGENTS_MD.filter(({ pattern }) => pattern.test(rendered)).map(({ name }) => name);
+    // Half two: no external system named. The predicate is the same seed list, so a violation and a
+    // check that cannot see one are the same code path — which is what makes the seeded arm below a
+    // proof of teeth rather than a second copy of the pattern list.
+    const named = externalSystemsIn(rendered);
+
+    // Teeth, per forbidden entry: seeding one term must make exactly that term report. A single blob
+    // would only prove the predicates read a string; per-entry proves each pattern is load-bearing,
+    // so shrinking the list is caught rather than quietly testing fewer things.
+    const perEntryTeeth = FORBIDDEN_IN_AGENTS_MD.every(({ name, pattern }) => {
+      const [term] = name.split(' ');
+      void term;
+      return !pattern.test(rendered) && pattern.test(`${rendered} ${seedPhraseFor(name)}`);
+    });
+    const seeded = FORBIDDEN_IN_AGENTS_MD.filter(({ pattern }) => pattern.test(`${rendered}${SEEDED_VIOLATION}`));
+    const seededAll = seeded.length === FORBIDDEN_IN_AGENTS_MD.length;
+
+    // Same two arms for the vendor half: the real render is clean, and a seeded name is caught.
+    const externalTeeth = EXTERNAL_SYSTEM_SEEDS.every((name) => externalSystemsIn(rendered).length === 0
+      && externalSystemsIn(`${rendered}\n${name}`).length === 1);
+
+    return {
+      pass: leaked.length === 0 && named.length === 0 && perEntryTeeth && seededAll && externalTeeth,
+      leaked,
+      named,
+      perEntryTeeth,
+      seeded: seeded.length,
+      total: FORBIDDEN_IN_AGENTS_MD.length,
+      externalTeeth
+    };
+  } catch (error) {
+    return { pass: false, leaked: [], named: [], perEntryTeeth: false, seeded: 0, total: 0, externalTeeth: false, error: error.message };
+  } finally {
+    if (dir) await rm(dir, { recursive: true, force: true });
+  }
+}
+
+// The predicate and its seed list are declared with the group above rather than beside the rest of
+// the suite's constants, for the temporal-dead-zone reason this file records four times already:
+// `runSelfCheck()` runs before this file finishes evaluating, so a const below its first use is a
+// ReferenceError that reads like a missing feature rather than an uninitialised binding.
 
 async function checkMaintenanceTrigger() {
   let dir;
@@ -1511,9 +1771,9 @@ function scoreEvals(evalsJson) {
   const familyEntries = [
     ['Covers minimal harness creation', /最小化/],
     // The state/handoff family used to be covered by a case asserting the NAMED owners and their
-// artifacts. It now asserts the replacement: the render names no external system, and the one
-// thing it does require — evidence going somewhere that exists — is checkable without a vendor.
-['Covers delegated state and handoff', /证据落点/],
+    // artifacts. It now asserts the replacement: the render names no external system, and the one
+    // thing it does require — evidence going somewhere that exists — is checkable without a vendor.
+    ['Covers delegated state and handoff', /证据落点/],
     ['Covers harness assessment', /评估/],
     ['Covers verification workflow', /验证工作流/],
     ['Covers memory taxonomy', /记忆/],
@@ -1526,7 +1786,7 @@ function scoreEvals(evalsJson) {
     ['Covers the instruction-file invariant', /指令文件不变量/],
     ['Covers instruction-file size and discoverability', /不可发现/],
     ['Covers the gate that refuses when nothing can run', /无可跑脚本/],
-    ['Covers the scope brake against doing the engineering workflow', /范围边界/],
+    ['Covers the scope boundary against doing the engineering workflow', /范围边界/],
     ['Covers the post-handoff boundary', /越界/],
     ['Covers session wrap-up', /收尾/],
     // Added with the update task on the user's ruling: maintenance is a user-invoked entry with a
@@ -1555,7 +1815,7 @@ function scoreEvals(evalsJson) {
     // verification gate still honest and the no-verification waiver still explicit?
     // letting "no owner" quietly become "no gates", and whether it hands back a waiver the user
     // never asked for.
-    ['Covers the plain tier for non-engineering working directories', /文档目录同样有 harness/]
+    ['Covers a documentation directory getting the same harness', /文档目录同样有 harness/]
   ];
   for (const [message, pattern] of familyEntries) {
     checks.push({ pass: cases.some((item) => pattern.test(item.name)), message });

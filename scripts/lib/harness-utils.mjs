@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { access, chmod, copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,10 +21,6 @@ export const SUBSYSTEMS = ['instructions', 'verification', 'scope'];
 // Printed by the generated init.sh when a project explicitly declares it has nothing to
 // verify. It is a disclosure, never a pass: the script must not print the completion banner.
 export const NO_VERIFICATION_MARKER = 'NO VERIFICATION DECLARED';
-
-export function termsAbsentFrom(text, terms) {
-  return terms.filter((term) => !String(text).includes(term));
-}
 
 export function parseArgs(argv) {
   const args = { _: [] };
@@ -354,13 +350,17 @@ ${nextSteps.map((line) => `echo "${line}"`).join('\n')}
 `;
 }
 
-// A plain project that declares it has nothing to verify still gets a startup script: the
+// A project that declares it has nothing to verify still gets a startup script: the
 // instruction file tells the agent to run ./init.sh, so the file has to exist and has to be honest.
 // What it must never do is report a success it did not earn. The completion banner the other
 // branches print is deliberately absent here, the disclosure leads, and the exit-0 answers "is the
-// startup path walkable?" — never "was anything verified?". The declaration is reachable only
-// through an explicit flag AND the plain tier, so a repository that does have a baseline cannot
-// collect it as a waiver; there, the placeholder branch still exits 1 until a real check replaces it.
+// startup path walkable?" — never "was anything verified?".
+//
+// Who may reach this branch is decided by the GENERATOR, not here: it refuses the flag outright when
+// the project already has a runnable check, so a repository with a baseline cannot collect it. That
+// half used to be documented as "reachable only through the plain tier", a tier that no longer exists —
+// the sentence outlived its mechanism and described a guard that was not running. Here, every
+// invocation means the generator already established there is genuinely nothing to run.
 function noVerificationScript() {
   const body = [
     'echo "=== Harness Initialization ==="',
@@ -396,6 +396,20 @@ const SCRIPTLESS_PLACEHOLDER = 'echo "package.json defines no check, typecheck, 
 const SCRIPTLESS_PLACEHOLDER_VERIFICATION = /defines no check, typecheck, lint, test or build script yet/;
 const SCRIPT_STEP = /^(?:npm|pnpm|yarn|bun) (?:run )?([\w:.-]+)$/;
 const NON_SCRIPT_ARGS = new Set(['install', 'ci', 'i', 'exec', 'dlx', 'create']);
+
+// "This project can run a real check" — the question the no-verification waiver turns on.
+//
+// Three shapes answer no, and they answer it for different reasons: no manifest at all, a manifest
+// that defines nothing this generator knows how to run, and the dependency-install step that leads
+// both of those. The install line is the subtle one: it is a real command that verifies nothing, so
+// a manifest with no scripts still returns a non-empty list, and counting entries would have refused
+// exactly the case the waiver exists for. Exported so the generator's refusal reads the same shapes
+// the gate itself renders, instead of restating them and drifting.
+export function isPlaceholderVerification(command) {
+  if (PLACEHOLDER_VERIFICATION.test(command) || SCRIPTLESS_PLACEHOLDER_VERIFICATION.test(command)) return true;
+  const name = String(command).trim().split(/\s+/)[0];
+  return NON_SCRIPT_ARGS.has(name) || /^(?:npm|pnpm|yarn|bun) (?:install|ci|i)$/.test(String(command).trim());
+}
 
 export function renderVerificationStep(command) {
   // An empty project has nothing to verify yet, so the generator can only leave a placeholder.
@@ -911,13 +925,4 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
-}
-
-export async function copyFileSafe(source, target, { force = false } = {}) {
-  if (!force && await exists(target)) {
-    return { path: target, status: 'skipped', reason: 'exists' };
-  }
-  await mkdir(path.dirname(target), { recursive: true });
-  await copyFile(source, target);
-  return { path: target, status: 'written' };
 }

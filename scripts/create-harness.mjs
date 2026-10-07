@@ -9,6 +9,7 @@ import {
   diffSections,
   exists,
   initScriptFromCommands,
+  isPlaceholderVerification,
   parseArgs,
   readText,
   replaceBlueprintSlot,
@@ -35,7 +36,7 @@ because a harness that leaves that open is how one piece of work ends up recorde
 
 Scope boundary: this skill builds and audits the harness FILES. The engineering workflow —
 requirement alignment, specs, breakdown, implementation, testing, review, handoff — belongs to
-the named owner above, and this script neither performs nor scaffolds any of it: no
+whatever the project already runs, and this script neither performs nor scaffolds any of it: no
 feature entries are invented, no decisions are recorded, no tickets are filed, and the AGENTS.md
 it writes says so explicitly. The harness ships artifacts that make an agent reliable; it does not
 decide what the project should build.
@@ -61,12 +62,13 @@ An existing AGENTS.md/CLAUDE.md is never rewritten (skip, or --force) — instea
 sections it lacks are reported so the agent can merge them by hand, keeping third-party blocks
 such as a "## Agent skills" section another skill owns.
 
---no-verification lets a project declare that it has nothing to run. It is refused on its own
-(exit non-zero, nothing created), because an absent gate is a gate that cannot fail. When granted,
-the generated init.sh prints a disclosure instead of the completion banner and never claims anything
-was verified, and the same declaration is written into the instruction file so a reader sees it
-without opening the script. Leaving the flag out keeps the ordinary behaviour: init.sh exits 1 until
-a real check replaces the placeholder.
+--no-verification lets a project with NOTHING TO RUN declare that fact. It is REFUSED (exit non-zero,
+nothing created) wherever the project already has a runnable check — a gate that cannot fail is not a
+gate, and a repository with a test suite is not short of one. When granted, the generated init.sh
+prints a disclosure instead of the completion banner and never claims anything was verified, and the
+same declaration is written into the instruction file so a reader sees it without opening the script.
+Leaving the flag out keeps the ordinary behaviour: init.sh exits 1 until a real check replaces the
+placeholder.
 
 --commands takes a comma-separated list, one check per entry: --commands "npm test,npm run lint".
 A comma inside a command has to be quoted, or it would separate rather than belong: --commands
@@ -138,11 +140,35 @@ function splitCommandList(raw) {
   return { commands: parts.map((part) => part.trim()).filter(Boolean) };
 }
 
+const availableCommands = verificationCommands(project, args.packageManager);
+// The waiver asks the question the empty command list used to answer for it. Short-circuiting to
+// `[]` meant the project was never asked what it could run, so a repository with a real test suite
+// could collect a declaration that it has nothing to run — and the audit then gave that harness 93/100.
+// Measured before this check: a repo defining both `test` and `lint` exited 0 with the waiver in both
+// artifacts. An absent gate is a gate that cannot fail, so the declaration is only honest where there
+// is genuinely nothing to run; everywhere else it is a way of turning the harness off while keeping
+// the appearance of one.
+//
+// "Genuinely nothing" is read from the detected commands with the placeholders removed, NOT from
+// their count: a project with no manifest, or one whose manifest defines no check the generator
+// knows how to run, still gets a non-empty list back — the placeholder that will fail closed until
+// someone replaces it. Counting entries would have refused exactly the two cases the waiver exists
+// for, which is the opposite of the intended rule.
+const realCommands = availableCommands.filter((command) => !isPlaceholderVerification(command));
+if (noVerification && realCommands.length > 0) {
+  console.error('REFUSED: --no-verification, but this project already has checks it can run:');
+  for (const command of realCommands) console.error(`  - ${command}`);
+  console.error('An absent gate is a gate that cannot fail, and this repository is not short of one.');
+  console.error('Drop the flag, or pass --commands with the checks this project actually uses.');
+  console.error('Nothing was created.');
+  process.exit(1);
+}
+
 const commandSplit = noVerification
   ? { commands: [] }
   : args.commands
     ? splitCommandList(String(args.commands))
-    : { commands: verificationCommands(project, args.packageManager) };
+    : { commands: availableCommands };
 if (commandSplit.error) {
   console.error(`REFUSED: ${commandSplit.error}.`);
   console.error('--commands separates commands with commas, so a comma inside a command must be');
