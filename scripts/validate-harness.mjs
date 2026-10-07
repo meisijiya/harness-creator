@@ -19,9 +19,10 @@ if (args.help) {
 Scores a project harness across three subsystems:
   instructions, verification, scope
 
-State and lifecycle are not scored: they are delegated to the engineering skills
-(to-tickets for state and blocking edges, handoff for session handoff), so grading
-them here would mark a correctly-delegated repo as broken.
+State and lifecycle are not scored here. This script grades the harness FILES — the instruction
+file and the verification entrypoint — and how a project records progress, orders work or hands a
+session over is that project's own decision, made with whatever it already uses. Grading those
+would mark a correctly-scoped repo as broken.
 
 Exit code is 0 when the harness scores at least --min-score (default 70).`);
   process.exit(0);

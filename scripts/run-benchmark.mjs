@@ -162,7 +162,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['budget', (group) => ` SKILL.md sits at ${group.size}/${group.max} bytes (${group.pass ? 'within' : 'OVER'} budget).`],
   ['agentsBudget', (group) => ` The generated AGENTS.md stays inside its external byte, line and working-rule budgets (${group.pass ? 'verified' : 'FAILED'}).`],
   ['agentsDiscover', (group) => ` The instruction file does not restate what the agent can read for itself, and the detector is proven to have teeth by a seeded violation (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['artifactPurity', (group) => ` The generated artifacts carry none of this skill's retired machinery (${group.total} forbidden patterns, ${group.seeded} caught by the seeded violation) and name no external system at all (${group.named.length ? `NAMED ${group.named.join(', ')}` : 'none'}); both detectors are proven per-entry rather than by one blob (${group.pass ? 'verified' : `leaked ${(group.leaked || []).join(', ') || 'none'}; per-entry teeth ${group.perEntryTeeth ? 'ok' : 'BLIND'}; external teeth ${group.externalTeeth ? 'ok' : 'BLIND'}`}).`],
+  ['artifactPurity', (group) => ` The generated artifacts carry none of this skill's retired machinery (${group.total} forbidden patterns, ${group.seeded} caught by the seeded violation) and name no external system at all (${group.named.length ? `NAMED ${group.named.join(', ')}` : 'none'}); both detectors are proven per-entry rather than by one blob (${group.pass ? 'verified' : `leaked ${(group.leaked || []).join(', ') || 'none'}; per-entry teeth ${group.perEntryTeeth ? 'ok' : 'BLIND'}; external teeth ${group.externalTeeth ? 'ok' : 'BLIND'}; named in this skill's own --help ${(group.namedInHelp || []).join(', ') || 'none'}; every --help body located ${group.helpBodiesLocated ? 'yes' : 'NO'}`}).`],
   ['maintenance', (group) => ` Harness maintenance has a moment to happen: the generated instruction file tells the agent to optimise the harness at wrap-up when the session's own output leaves it stale or thin, rather than when the harness files happen to have been touched, and the detector is proven to have teeth per term, against the retired diff-keyed sentence, against that sentence wearing the new vocabulary, and against a shortened forbidden list (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; retired phrasing ${(group.leaked || []).length ? `LEAKED (${group.leaked.join(', ')})` : 'absent'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old-form rejection ${group.oldFormRejected ? 'honoured' : 'ACCEPTED'}; hybrid form ${group.hybridRejected ? 'rejected' : 'ACCEPTED'}; forbidden-list shrink witness ${group.forbiddenWitness ? 'has teeth' : 'BLIND'}`}).`],
   ['skillDesign', (group) => ` The skill's own design rules are machine-checked rather than trusted to prose: SKILL.md's design section states the wrap-up criterion on the session's own output, and the detector is proven to have teeth per term, against the pre-09-25 rule line, against the old condition wearing the new vocabulary, and against a shortened requirement list (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; diff key ${(group.leaked || []).length ? `LEAKED (${group.leaked.join(', ')})` : 'absent'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old rule line ${group.oldFormRejected ? 'rejected' : 'ACCEPTED'}; hybrid form ${group.hybridRejected ? 'rejected' : 'ACCEPTED'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}`}).`],
   ['wrapupOutput', (group) => ` The wrap-up procedure a maintainer actually reads carries both of its outputs: the candidate changes, and the judgment items that are handed to the user instead of being decided — the part that stops a fresh session from treating already-dead rules as live — plus a net-change report, which is what keeps blind increment from hiding in wording (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; own section ${group.heading ? 'present' : 'ABSENT'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; heading requirement ${group.headingArm ? 'has teeth' : 'BLIND'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}`}).`],
@@ -868,8 +868,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  AGENTS.md discoverability: ${pass ? 'PASS' : 'FAIL'} — default render free of restated content: ${offenders.length === 0 ? 'ok' : `NO (${offenders.join(', ')})`}; self-restraint rule stated: ${selfRestraintStated ? 'ok' : 'NO'}; proven load-bearing: ${selfRestraintTeeth ? 'ok' : 'BLIND'}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.artifactPurity) {
-    const { pass, leaked = [], named = [], perEntryTeeth, seeded = 0, total = 0, externalTeeth, error } = selfCheck.artifactPurity;
-    lines.push(`  Artifact purity: ${pass ? 'PASS' : 'FAIL'} — generated artifacts carry no retired machinery: ${leaked.length === 0 ? 'ok' : `LEAKED (${leaked.join(', ')})`}; forbidden patterns caught by the seeded violation: ${seeded}/${total}; per-entry teeth: ${perEntryTeeth ? 'ok' : 'BLIND'}; no external system named: ${named.length === 0 ? 'ok' : `NAMED (${named.join(', ')})`}; external teeth: ${externalTeeth ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
+    const { pass, leaked = [], named = [], perEntryTeeth, seeded = 0, total = 0, externalTeeth, namedInHelp = [], helpBodiesLocated, error } = selfCheck.artifactPurity;
+    lines.push(`  Artifact purity: ${pass ? 'PASS' : 'FAIL'} — generated artifacts carry no retired machinery: ${leaked.length === 0 ? 'ok' : `LEAKED (${leaked.join(', ')})`}; forbidden patterns caught by the seeded violation: ${seeded}/${total}; per-entry teeth: ${perEntryTeeth ? 'ok' : 'BLIND'}; no external system named: ${named.length === 0 ? 'ok' : `NAMED (${named.join(', ')})`}; external teeth: ${externalTeeth ? 'ok' : 'BLIND'}; this skill's own --help names none: ${namedInHelp.length === 0 ? 'ok' : `NAMED (${namedInHelp.join(', ')})`}; every --help body located: ${helpBodiesLocated ? 'yes' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.maintenance) {
     const { pass, stated, missing = [], leaked = [], teeth, oldFormRejected, hybridRejected, forbiddenWitness, error } = selfCheck.maintenance;
@@ -1341,17 +1341,39 @@ async function checkArtifactPurity() {
     const externalTeeth = EXTERNAL_SYSTEM_SEEDS.every((name) => externalSystemsIn(rendered).length === 0
       && externalSystemsIn(`${rendered}\n${name}`).length === 1);
 
+    // Half three: this skill's OWN --help bodies. The generated artifacts were the stated
+    // requirement, but the refactor's actual failure mode was a help text still telling a reader to
+    // go use a named third-party tool. A manual sweep walked straight past it, because it sits in a
+    // template literal and reads like a comment — so nothing else here can see it either: this group
+    // reads the GENERATED files, and the dead-declaration check reads keys and flags, not prose.
+    const helpSources = ['create-harness.mjs', 'run-benchmark.mjs', 'validate-harness.mjs'].map((file) => {
+      const source = readFileSync(path.join(scriptDir, file), 'utf8');
+      const start = source.indexOf('if (args.help)');
+      const end = source.indexOf('process.exit(0);', start);
+      return { file, body: start === -1 || end === -1 ? '' : source.slice(start, end) };
+    });
+    const namedInHelp = helpSources.flatMap(({ file, body }) => externalSystemsIn(body).map((name) => `${file}: ${name}`));
+    // An empty body would read as clean for the same reason a skipped check reads as coverage, so
+    // every one of the three has to actually have been located.
+    const helpBodiesLocated = helpSources.every(({ body }) => body.trim().length > 0);
+
     return {
-      pass: leaked.length === 0 && named.length === 0 && perEntryTeeth && seededAll && externalTeeth,
+      pass: leaked.length === 0 && named.length === 0 && perEntryTeeth && seededAll && externalTeeth
+        && namedInHelp.length === 0 && helpBodiesLocated,
       leaked,
       named,
       perEntryTeeth,
       seeded: seeded.length,
       total: FORBIDDEN_IN_AGENTS_MD.length,
-      externalTeeth
+      externalTeeth,
+      namedInHelp,
+      helpBodiesLocated
     };
   } catch (error) {
-    return { pass: false, leaked: [], named: [], perEntryTeeth: false, seeded: 0, total: 0, externalTeeth: false, error: error.message };
+    return {
+      pass: false, leaked: [], named: [], perEntryTeeth: false, seeded: 0, total: 0,
+      externalTeeth: false, namedInHelp: [], helpBodiesLocated: false, error: error.message
+    };
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
   }
