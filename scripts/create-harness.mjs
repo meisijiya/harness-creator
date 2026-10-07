@@ -10,7 +10,6 @@ import {
   exists,
   initScriptFromCommands,
   parseArgs,
-  PLAIN_TEMPLATE,
   readText,
   replaceBlueprintSlot,
   scriptCommand,
@@ -22,20 +21,17 @@ import {
 const args = parseArgs(process.argv.slice(2));
 
 if (args.help) {
-  console.log(`Usage: ${scriptCommand('create-harness.mjs')} [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--blueprint "WHAT THIS PROJECT IS"] [--commands "a,b"] [--no-engineering-owner] [--no-verification] [--force] [--dry-run]
+  console.log(`Usage: ${scriptCommand('create-harness.mjs')} [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--blueprint "WHAT THIS PROJECT IS"] [--commands "a,b"] [--no-verification] [--force] [--dry-run]
 
 Creates a minimal production harness — the three subsystems this skill owns, no more:
   AGENTS.md or CLAUDE.md (an existing CLAUDE.md is kept and preferred)
   init.sh — the verification gate that must pass before any feature is called done
 
-State and handoff are NOT produced here. They are delegated, and the AGENTS.md this writes names
-the delegation rather than describing a mechanism of its own. One named owner holds the engineering
-workflow: mattpocock's model-invocable skills, dispatched by that system on its own. to-tickets
-keeps state and blocking edges, handoff keeps session handoff, and both are named explicitly.
-/setup-matt-pocock-skills is the one-time prerequisite that configures the tracker. Beyond those
-two slots and the owner's name the render enumerates nothing — naming the stages is not this
-skill's job, and a second owner is deliberately absent. This script detects no mode, scaffolds no
-tracker, and ships no in-repo substitute for either capability.
+One template, one tier. This script detects no mode and infers nothing from the directory contents,
+and the rendered file names no external system: which tracker records progress, how requirements are
+broken down, and who reviews a change are all decisions this skill does not make and the generated
+file does not pretend to have made. What it does state is where a verified result gets written down,
+because a harness that leaves that open is how one piece of work ends up recorded in three places.
 
 Scope boundary: this skill builds and audits the harness FILES. The engineering workflow —
 requirement alignment, specs, breakdown, implementation, testing, review, handoff — belongs to
@@ -65,20 +61,12 @@ An existing AGENTS.md/CLAUDE.md is never rewritten (skip, or --force) — instea
 sections it lacks are reported so the agent can merge them by hand, keeping third-party blocks
 such as a "## Agent skills" section another skill owns.
 
---no-engineering-owner renders the PLAIN tier: a working directory with no engineering workflow to
-hand to anyone — a documentation set, a skill repository, a teaching outline. Same three subsystems,
-same two artifacts, but the instruction file names no owner, because there is nothing the engineering
-stages could be delegated to. It says instead that state stays with the project's own record, whose
-location this skill neither creates nor guesses. The tier is chosen by this flag alone and never
-inferred: "there is no package.json here" describes an empty engineering repo exactly as well.
-
---no-verification lets a PLAIN project declare that it has nothing to run. It is refused on its own
-(exit non-zero, nothing created), because a project with an engineering workflow always has a
-baseline, and an absent gate there is a gate that cannot fail. When granted, the generated init.sh
-prints a disclosure instead of the completion banner and never claims anything was verified, and the
-same declaration is written into the instruction file so a reader sees it without opening the script.
-Leaving the flag out keeps the ordinary behaviour on the plain tier: init.sh exits 1 until a real
-check replaces the placeholder.
+--no-verification lets a project declare that it has nothing to run. It is refused on its own
+(exit non-zero, nothing created), because an absent gate is a gate that cannot fail. When granted,
+the generated init.sh prints a disclosure instead of the completion banner and never claims anything
+was verified, and the same declaration is written into the instruction file so a reader sees it
+without opening the script. Leaving the flag out keeps the ordinary behaviour: init.sh exits 1 until
+a real check replaces the placeholder.
 
 --commands takes a comma-separated list, one check per entry: --commands "npm test,npm run lint".
 A comma inside a command has to be quoted, or it would separate rather than belong: --commands
@@ -90,20 +78,21 @@ another skill owns; it only lifts the skip on this skill's own artifacts.`);
   process.exit(0);
 }
 
-// The plain tier: a working directory with no engineering workflow to hand to anyone — a
-// documentation set, a skill repository, a teaching outline. It is an explicit flag and never
-// inferred, because this skill does not guess a project's shape from what the directory contains,
-// and "there is no package.json here" describes an empty engineering repo exactly as well.
-const plain = Boolean(args.noEngineeringOwner);
-// A plain project may declare that it has nothing to run. The declaration is refused on its own:
-// without the plain tier there is no such thing as "nothing to verify", so a repository that does
-// have a baseline can never collect it as a waiver. Checked before anything is created, so a
-// rejected invocation leaves the target byte-untouched.
+// A project may declare that it has nothing to run. The declaration is a disclosure rather than a
+// pass, and it is refused nowhere but accepted nowhere silently either: the generated init.sh must
+// say it verified nothing, and the instruction file must say the same, so the only way to collect
+// this is to state it in both places an agent looks.
 const noVerification = Boolean(args.noVerification);
-if (noVerification && !plain) {
-  console.error('REFUSED: --no-verification is only available together with --no-engineering-owner.');
-  console.error('A project with an engineering workflow always has a baseline to run, so an absent');
-  console.error('verification gate there is a gate that cannot fail. Nothing was created.');
+
+// `--no-engineering-owner` selected a second template that named no owner, on the reasoning that
+// a directory with nothing to delegate to should not claim one. Both templates named an external
+// system, so the honest form is neither of them: one template that names none. Accepting the flag
+// silently would render the default template and print a success line for a flag that changed
+// nothing — the exact shape of degradation this skill's own SKILL.md calls out.
+if (args.noEngineeringOwner !== undefined) {
+  console.error('REFUSED: --no-engineering-owner no longer exists.');
+  console.error('There is one template now, and it names no external system at all, so there is');
+  console.error('nothing left for the flag to select. Nothing was created.');
   process.exit(1);
 }
 
@@ -163,12 +152,10 @@ if (commandSplit.error) {
 }
 const commands = commandSplit.commands;
 
-// The tier decides which instruction file is rendered. Two templates rather than one with branches,
-// because the engineering render has to stay byte-identical to what it produced before the tier
-// existed — a separate file makes that a property of the construction rather than something a
-// conditional can quietly break. The cost is that the two templates can drift, which is why the
-// self-check asserts their shared skeleton is equal instead of trusting it.
-const templateName = plain ? PLAIN_TEMPLATE : 'agents.md';
+// One template, no branches. A second template had existed for a "plain" tier, chosen by a flag,
+// and the two files could drift while the self-check asserted they matched; both halves of that
+// arrangement are gone now, so the render has exactly one shape to keep correct.
+const templateName = 'agents.md';
 
 // Skipped under --dry-run: a preview must not change the filesystem, and creating the target
 // directory counts as a change. The existence probes above already tolerate a missing path.
@@ -192,12 +179,12 @@ const replacements = {
     ? '- （本项目显式声明：无验证命令）'
     : commands.map((command) => `- \`${command}\``).join('\n'),
   PRIMARY_VERIFICATION_COMMAND: './init.sh',
-  // Rendered at the end of the plain tier's marker line and empty on every other path, so the
-  // engineering render gains no byte from it. A waiver has to be visible in the artifact the agent
-  // reads, not only in the script it runs — an agent that reads AGENTS.md must be able to see that
-  // nothing is verified here without opening init.sh.
-  PLAIN_VERIFICATION_NOTE: noVerification
-    ? ' 本仓库同时声明：**无验证命令**（`./init.sh` 只作启动路径，不验证任何东西）。'
+  // A waiver has to be visible in the artifact the agent READS, not only in the script it runs: an
+  // agent that reads AGENTS.md must be able to see that nothing is verified here without opening
+  // init.sh. Rendered on its own line so the disclosure is a statement in the file rather than a
+  // trailing clause the reader can miss.
+  NO_VERIFICATION_NOTE: noVerification
+    ? '**本仓库显式声明：无验证命令**（`./init.sh` 只作启动路径，不验证任何东西）。'
     : ''
 };
 
@@ -224,14 +211,15 @@ const missingAgentSections = agentResult.status === 'skipped'
   ? diffSections(await readText(path.join(TEMPLATE_DIR, templateName)), await readText(agentPath))
   : [];
 
-// No state artifacts are written. State and handoff are delegated to the engineering skills, and
-// shipping a local registry beside a tracker is the double-write this skill exists to prevent:
-// whichever file the agent reads second contradicts the first. The AGENTS.md says where they live.
+// No state artifacts are written. Writing a second record beside whatever the project already uses
+// is the double-write this skill exists to prevent: whichever file the agent reads second
+// contradicts the first. The AGENTS.md says where a verified result goes; it does not create that
+// place.
 
 const initPath = path.join(target, 'init.sh');
 if (force || !await exists(initPath)) {
   if (!dryRun) {
-    await writeText(initPath, initScriptFromCommands(commands, { plain, noVerification }));
+    await writeText(initPath, initScriptFromCommands(commands, { noVerification }));
     await chmod(initPath, 0o755);
   }
   results.push({ path: initPath, status: 'written' });
@@ -247,7 +235,6 @@ if (dryRun) {
   console.log(`Created harness for ${target}`);
 }
 console.log(`Detected stack: ${project.stack}`);
-console.log(`Tier: ${plain ? 'plain (no engineering owner)' : 'engineering (owner delegated)'}`);
 console.log(`Verification commands:`);
 for (const command of commands) {
   console.log(`  - ${command}`);
@@ -288,17 +275,10 @@ if (missingAgentSections.length > 0) {
   console.log('  another language or wording.');
 }
 
-// The next step is the user's, not this skill's: the tracker has to be configured before the
-// delegated state capability exists at all, and that configuration belongs to the upstream skill.
+// The next step is the user's, not this skill's. This script places the two artifacts and says
+// where they came from; what the project does with them is decided in the repo, not here.
 console.log('');
-if (plain) {
-  console.log(`Next: read ${agentFile} for the startup path and the invariants. No engineering owner is named.`);
-  console.log('Use the project record only when its location is confirmed. Otherwise report evidence in the');
-  console.log('reply; ask for a location only when persistence is requested. No record system is created.');
-  console.log('It derives no entries, acceptance criteria or decisions on its own.');
-} else {
-  console.log('Next: only if the task needs a tracker and none is configured, run /setup-matt-pocock-skills; use to-tickets for');
-  console.log('state and blocking edges. The engineering workflow belongs to mattpocock as a whole, and that');
-  console.log('system dispatches its own stages. This skill derives no entries, acceptance criteria or');
-  console.log('decisions on its own, and ships no in-repo substitute for state or handoff.');
-}
+console.log(`Next: read ${agentFile} for the startup path and the invariants, and make ./init.sh run`);
+console.log('this project\'s real checks. Until it does, a green ./init.sh proves nothing.');
+console.log('This skill creates no tracker, no ticket list and no record file: it derives no entries,');
+console.log('no acceptance criteria and no decisions on its own.');

@@ -8,7 +8,6 @@ import { fileURLToPath } from 'node:url';
 import {
   bottleneckLabel,
   collectCommandReferences,
-  DELEGATION_OWNER_TERMS,
   exists,
   formatScoreReport,
   htmlReport,
@@ -17,7 +16,6 @@ import {
   NO_VERIFICATION_MARKER,
   parseArgs,
   pickBottlenecks,
-  PLAIN_DELEGATION_TERMS,
   readJson,
   readText,
   renderVerificationStep,
@@ -150,9 +148,9 @@ const DISCOVERABLE_CONTENT = [
 // a file the skill no longer writes is the same "check and template on the same side" defect one
 // level up: the gate would be asserting the existence of the thing that was removed.
 const SELF_CHECK_GROUPS = [
-  'budget', 'agentsBudget', 'agentsDiscover', 'scopeBrake', 'plainTier', 'maintenance', 'skillDesign',
+  'budget', 'agentsBudget', 'agentsDiscover', 'maintenance', 'skillDesign',
   'wrapupOutput', 'dryRun', 'selfRefs', 'references', 'bottleneckTies', 'foreignAudit', 'blankGate',
-  'blueprint', 'agentFile', 'reportContract', 'taskContract', 'plainRecord', 'maintContract'
+  'blueprint', 'agentFile', 'reportContract', 'taskContract', 'maintContract'
 ];
 
 // One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
@@ -163,8 +161,6 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['budget', (group) => ` SKILL.md sits at ${group.size}/${group.max} bytes (${group.pass ? 'within' : 'OVER'} budget).`],
   ['agentsBudget', (group) => ` The generated AGENTS.md stays inside its external byte, line and working-rule budgets (${group.pass ? 'verified' : 'FAILED'}).`],
   ['agentsDiscover', (group) => ` The instruction file does not restate what the agent can read for itself, and the detector is proven to have teeth by a seeded violation (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['scopeBrake', (group) => ` The generated instruction file names one delegated owner for the engineering workflow, keeps both of its slots and their setup prerequisite, and carries none of the removed doctrine (${group.pass ? 'verified' : `missing owner terms ${(group.missingOwners || []).join(', ') || 'none'}; owner detector ${group.ownerTeeth ? 'has teeth' : 'BLIND'}; brake ${group.brake ? 'present' : 'MISSING'}; leaked ${(group.leaked || []).join(', ') || 'none'}; doctrine detector ${group.seeded?.length ? 'has teeth' : 'BLIND'}`}).`],
-  ['plainTier', (group) => ` A working directory with no engineering workflow to hand to anyone gets the same three subsystems with no owner named, chosen by an explicit flag rather than inferred, while the tier that does have an owner still names every term; the waiver for having nothing to run is refused unless the plain tier was asked for, and when granted it discloses rather than reports a pass (${group.pass ? 'verified' : `plain render owner-free ${group.ownerFree ? 'yes' : 'NO'}; per-term detector ${group.plainTeeth ? 'has teeth' : 'BLIND'}; engineering still names its owner ${group.engNamed ? 'yes' : 'NO'}; engineering unmarked ${group.engUnmarked ? 'yes' : 'NO'}; waiver refused on its own ${group.refused ? 'yes' : 'NO'}; refusal wrote nothing ${group.refusalWroteNothing ? 'yes' : 'NO'}; disclosure present ${group.discloses ? 'yes' : 'NO'}; no completion banner ${group.neverClaims ? 'yes' : 'NO'}; undeclared still fails closed ${group.undeclaredHonest ? 'yes' : 'NO'}; owner lists agree ${group.listsAgree ? 'yes' : 'NO'}`}).`],
   ['maintenance', (group) => ` Harness maintenance has a moment to happen: the generated instruction file tells the agent to optimise the harness at wrap-up when the session's own output leaves it stale or thin, rather than when the harness files happen to have been touched, and the detector is proven to have teeth per term, against the retired diff-keyed sentence, against that sentence wearing the new vocabulary, and against a shortened forbidden list (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; retired phrasing ${(group.leaked || []).length ? `LEAKED (${group.leaked.join(', ')})` : 'absent'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old-form rejection ${group.oldFormRejected ? 'honoured' : 'ACCEPTED'}; hybrid form ${group.hybridRejected ? 'rejected' : 'ACCEPTED'}; forbidden-list shrink witness ${group.forbiddenWitness ? 'has teeth' : 'BLIND'}`}).`],
   ['skillDesign', (group) => ` The skill's own design rules are machine-checked rather than trusted to prose: SKILL.md's design section states the wrap-up criterion on the session's own output, and the detector is proven to have teeth per term, against the pre-09-25 rule line, against the old condition wearing the new vocabulary, and against a shortened requirement list (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; diff key ${(group.leaked || []).length ? `LEAKED (${group.leaked.join(', ')})` : 'absent'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old rule line ${group.oldFormRejected ? 'rejected' : 'ACCEPTED'}; hybrid form ${group.hybridRejected ? 'rejected' : 'ACCEPTED'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}`}).`],
   ['wrapupOutput', (group) => ` The wrap-up procedure a maintainer actually reads carries both of its outputs: the candidate changes, and the judgment items that are handed to the user instead of being decided — the part that stops a fresh session from treating already-dead rules as live — plus a net-change report, which is what keeps blind increment from hiding in wording (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; own section ${group.heading ? 'present' : 'ABSENT'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; heading requirement ${group.headingArm ? 'has teeth' : 'BLIND'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}`}).`],
@@ -177,8 +173,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['blueprint', (group) => ` The project-description slot stays a visible pending marker when the user has not stated one, while a blueprint change rewrites that slot only — the rest of the file survives byte for byte, and a shape this skill did not render is refused rather than guessed at (${group.pass ? 'verified' : `pending ${group.pendingMarked ? 'ok' : 'NO'}; no stack fill ${group.noInventedFill ? 'ok' : 'NO'}; verbatim ${group.verbatim ? 'ok' : 'NO'}; slot-only ${group.slotRewritten && group.restIntact ? 'ok' : 'NO'}; detector ${group.detectorHasTeeth ? 'has teeth' : 'BLIND'}; refusal ${group.refusalHonoured && group.refusedUntouched ? 'ok' : 'NO'}`}).`],
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`],
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`],
-  ['taskContract', (group) => ` Both instruction files scope work to what the user authorized: explicit authorization to advance, picking and status updates only while an authorized deliverable is being executed, a baseline failure split into pre-existing versus introduced, a commit gated on the definition of done rather than on a passing check, existing modifications and untracked files protected from any cleanup, and a read-only task that only reports harness drift (${group.pass ? 'verified' : `engineering missing ${(group.missing?.engineering || []).join(', ') || 'none'}; plain missing ${(group.missing?.plain || []).join(', ') || 'none'}; per-requirement teeth ${group.teeth ? 'ok' : 'BLIND'}; forbidden-list witness ${group.forbidWitness ? 'ok' : 'BLIND'}; old forms ${group.oldFormsRejected ? 'refused' : 'ACCEPTED'}`}).`],
-  ['plainRecord', (group) => ` The non-engineering tier routes its record through a project-owned entry confirmed to exist: a missing entry is reported with its evidence and a blocker in the reply, no path is assumed or created, persistence waits for a user request, and the definition of done and the closeout follow that one rule — so a legitimate declaration of nothing to run is disclosed, not counted as a passing check (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-requirement teeth ${group.teeth ? 'ok' : 'BLIND'}; forbidden-list witness ${group.forbidWitness ? 'ok' : 'BLIND'}; old forms ${group.oldFormsRejected ? 'refused' : 'ACCEPTED'}`}).`],
+  ['taskContract', (group) => ` The instruction file scopes work to what the user authorized: explicit authorization to advance, picking and status updates only while an authorized deliverable is being executed, a baseline failure split into pre-existing versus introduced, a commit gated on the definition of done rather than on a passing check, existing modifications and untracked files protected from any cleanup, and a read-only task that only reports harness drift (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-requirement teeth ${group.teeth ? 'ok' : 'BLIND'}; forbidden-list witness ${group.forbidWitness ? 'ok' : 'BLIND'}; old forms ${group.oldFormsRejected ? 'refused' : 'ACCEPTED'}`}).`],
   ['maintContract', (group) => ` A full audit score is not an exit condition in the maintenance reference: the score row still routes to the actual misalignment check, keeps the anti-gaming clause, and the shared content-review table states the read-only, baseline-scope, commit-authorization, existing-work and full-score rules — proven per guard, with the whole table deleted, and by the retired short-circuit row (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-guard teeth ${group.teeth ? 'ok' : 'BLIND'}; whole table removed ${group.tableRemovedRefused ? 'refused' : 'ACCEPTED'}; retired row ${group.oldRowRejected ? 'refused' : 'ACCEPTED'}`}).`]
 ]);
 
@@ -208,6 +203,11 @@ const SELF_CHECK_REPORT_LINES = new Map([
 // agent-doc booklets. Those are the parts that assigned work; the neighbours' file names never
 // were. Same two-sided shape otherwise: a required statement AND a forbidden one, plus a seed that
 // trips every pattern, because "found nothing" is worth nothing from a blind scanner.
+//
+// Nothing here names a product or a vendor. An earlier list carried a forbidden skill name and an
+// "is the owner installed" pattern, both inherited from a version where the render had to name an
+// owner; with no owner named there is nothing to forbid by name, and the remaining entries are
+// about this skill's own removed machinery rather than about anyone else's.
 const FORBIDDEN_IN_AGENTS_MD = [
   { name: 'in-repo state registry', pattern: /feature[-_]list\.json/ },
   { name: 'in-repo progress log', pattern: /progress\.md/ },
@@ -216,47 +216,15 @@ const FORBIDDEN_IN_AGENTS_MD = [
   { name: 'controlled release', pattern: /受控放行/ },
   { name: 'governance modes', pattern: /两种模式|--mode\b/ },
   { name: 'extracted agent-doc layer', pattern: /tracking-policy\.md|escalation\.md/ },
-  // Added 09-28, with the user's ruling that the engineering workflow belongs to one system. This is
-  // the other half of the single-owner claim the audit makes over in harness-utils.mjs: that check
-  // REQUIRES `mattpocock` to be named, this one requires the removed owner NOT to be. Either alone is
-  // satisfied by a degenerate file, and a render that quietly re-adds the branch satisfies the
-  // required half perfectly while being exactly the regression this gate exists to catch.
-  { name: 'removed second owner', pattern: /superpowers/ },
-  // The installation check stays forbidden now that the routing key is gone. What is forbidden is an
-  // INSTALLATION check: telling the agent to test whether another skill is installed, or to point the
-  // user at installing one (the shape this pattern was added for on 09-23). It was narrowed on 09-24
-  // because a RUNTIME presence read was legitimate while two owners were being routed between; that
-  // read left with the second owner, so what remains is the standing rule the pattern always
-  // described. It must stay narrow — the correct render says "承接方默认已安装，本技能不检查、不安装"
-  // (a negation), so matching a bare 已安装 would make the gate reject its own correct output.
-  { name: 'owner-installation check', pattern: /承接方.{0,10}(未安装|是否已安装)|提示安装|检查.{0,4}是否已安装/ }
+  // Telling the agent to check whether some other skill is installed, or pointing the user at
+  // installing one, is the shape this gate has always refused: availability is the user's and the
+  // environment's business, and a generated instruction file that raises it costs a question on
+  // every single session to answer a question nobody asked.
+  { name: 'installation check', pattern: /未安装时提示安装|提示安装|检查.{0,4}是否已安装/ }
 ];
 const SEEDED_VIOLATION = '\n状态写入 feature_list.json 与 progress.md；产物追踪策略；'
   + '五落点；受控放行；两种模式；分册 tracking-policy.md 与 escalation.md；'
-  + '承接方未安装时提示安装；工程阶段归 superpowers。';
-
-// The positive half of the boundary. The render no longer routes between two owners on a runtime
-// condition; it names one, and these are the terms that make that naming legible to an agent standing
-// in a target repo. Each is load-bearing on its own: drop the owner's name and the agent has no idea
-// whose system to reach for; drop either slot and one of the two capabilities the delegation exists
-// for has no home; drop the prerequisite and a fresh checkout points at a capability it cannot reach.
-//
-// The negative proof is per-term instead of one seeded blob. A blob proves the predicate reads the
-// string; deleting exactly one term at a time and requiring the predicate to name exactly that term
-// proves it is sensitive to each of them independently, so a render that kept "mattpocock" while
-// losing a slot cannot pass on the strength of its survivors.
-//
-// Declared here, ahead of the runSelfCheck() call site, for the temporal-dead-zone reason this file
-// has already paid for twice.
-//
-// Was ROUTING_TERMS with five terms until 09-28. The three-condition routing (present / absent /
-// undecidable) and its arbitration key left with the second owner: with one owner there is no
-// condition to branch on, so `superpowers`, `引导词`, `不在场` and `判不出` were removed rather than
-// re-pointed — and each is now FORBIDDEN in the render instead (FORBIDDEN_IN_AGENTS_MD above), so the
-// removal has a two-sided carrier rather than just an absence. What replaced them is the set of names
-// the single owner's sentence cannot be written without.
-const OWNER_TERMS = ['mattpocock', 'to-tickets', 'handoff', 'setup-matt-pocock-skills'];
-const missingOwnerTerms = (text) => OWNER_TERMS.filter((term) => !text.includes(term));
+  + '未安装时提示安装。';
 
 // The maintenance trigger's semantics — and why the first version of this gate was not enough.
 //
@@ -312,6 +280,13 @@ const MAINTENANCE_FORBIDDEN_FORMS = [
 // feature rather than an uninitialised binding.
 const maintenanceSection = (text) =>
   text.split(/^##\s+/m).slice(1).find((part) => part.startsWith('会话结束')) || '';
+
+function maintenanceTriggerStated(text) {
+  const section = maintenanceSection(text);
+  const missing = MAINTENANCE_TERMS.filter((term) => !section.includes(term));
+  const leaked = MAINTENANCE_FORBIDDEN.filter((phrase) => section.includes(phrase));
+  return { stated: missing.length === 0 && leaked.length === 0, missing, leaked };
+}
 
 // Every design rule in SKILL.md was unguarded prose until this gate. The suite reads the artifact a
 // target repo receives, and SKILL.md is mentioned in this file exactly twice: a byte count
@@ -433,8 +408,6 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['budget', 'SKILL.md budget'],
   ['agentsBudget', 'AGENTS.md budget'],
   ['agentsDiscover', 'AGENTS.md discoverability'],
-  ['scopeBrake', 'Scope brake'],
-  ['plainTier', 'Plain tier'],
   ['maintenance', 'Maintenance trigger'],
   ['skillDesign', 'SKILL.md design rule'],
   ['wrapupOutput', 'Wrap-up outputs'],
@@ -448,7 +421,6 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['agentFile', 'Agent-file invariant'],
   ['reportContract', 'Report contract'],
   ['taskContract', 'Task authorization'],
-  ['plainRecord', 'Plain record entry'],
   ['maintContract', 'Maintenance contract']
 ]);
 
@@ -467,17 +439,6 @@ const CONSOLE_GROUP_LABELS = new Map([
 // 更新其状态" passes while an unconditional "更新其状态" beside it fails.
 const SELF_REFERENCE_TERM = '本技能';
 const selfRefLeaks = (text) => (text.includes(SELF_REFERENCE_TERM) ? [SELF_REFERENCE_TERM] : []);
-// Alternatives for the no-substitute half of the brake, and deliberately NOT the retired 不代做 /
-// 不代建: those name whoever wrote the line, and 不代建 is the plain tier's own term, so accepting
-// either here would let the engineering brake be satisfied by the wording this check retires.
-const BRAKE_NO_SUBSTITUTE = ['不另建替代品', '不另建替代', '不另建', '不建替代品', '不自建'];
-// Verbatim from `templates/agents.md` before 09-29: the negation alone satisfies neither half.
-const SCOPE_BRAKE_OLD_FORM = '本文件**不定义**状态与交接产物，也不承接工程流程——两者由已安装的工程 skill 承接，本技能**不代做**。';
-// The brake is one LINE routing and refusing a substitute together; the heading alone ("承接方是工程
-// skill") would satisfy a file-wide test that never said where the work goes.
-const brakeLineIn = (text) => linesOf(text).find((line) => /工程/.test(line)
-  && /路由|承接/.test(line)
-  && BRAKE_NO_SUBSTITUTE.some((term) => line.includes(term))) || '';
 
 const AUTHORIZATION_RULE = ['显式授权', '明确要求', '显式要求', '明确授权', '只推进'];
 const PICK_AUTHORIZATION = ['授权', '明确要求', '显式要求', '用户要求', '经用户'];
@@ -568,41 +529,6 @@ const TASK_OLD_FORMS = [
   ['no clean-state framing', `- **${CLEAN_STATE_OLD}**：下次会话必须能立即运行 \`./init.sh\``]
 ];
 
-// The plain tier's record entry is the one place the generated file must name a location it did not
-// create. Before 09-29 it pointed at "the project's own record location" as though that place existed,
-// and the two ways out are both bad: assume a directory and create one — the double-write this skill
-// exists to prevent — or drop the evidence. So the entry has to be a project-owned place confirmed to
-// exist, and everything downstream follows the same rule, definition of done included.
-const RECORD_ENTRY_RULE = ['记录入口', '记录位置规则'];
-const PLAIN_RECORD_CONTRACT = [
-  { name: 'a missing record entry is reported with evidence', kind: 'line', anchor: /未配置|没有配置|尚未配置|入口未|未确定/, groups: [['报告', '如实', '说明', '告知'], ['阻塞']] },
-  { name: 'no record path is assumed or built', kind: 'line', anchor: /记录|位置/, groups: [['不代建', '不假定', '不假设', '不猜', '不新建', '不创建', '不造']] },
-  { name: 'persistence waits for a user request', kind: 'line', anchor: /记录|位置/, groups: [['用户要求', '用户指定', '用户确认', '用户明确'], ['持久化', '确认', '指定']] },
-  { name: 'definition of done shares the record-entry rule', kind: 'line', section: '完成定义', anchor: /证据|记录/, groups: [RECORD_ENTRY_RULE] },
-  { name: 'closeout shares the record-entry rule', kind: 'line', section: '会话结束', anchor: /证据|记录|交付物/, groups: [RECORD_ENTRY_RULE] },
-  // Anchored on the verb that PERSISTS evidence, not on the word 证据: "未配置时，在回复中报告证据
-  // 与阻塞" is the disclosure this tier must make when no entry exists, it is already policed by the
-  // requirement above, and asking it for a condition it does not need would push toward widening the
-  // keyword fallback until anything passes — which is how a gate stops meaning anything. Narrowing to
-  // the write is the opposite move: it asks a question only the writing clauses can answer.
-  { name: 'evidence is conditional or routed through the entry rule', kind: 'everyClauseAny', anchor: /写入|记入|记在|记录到|更新|保存|归档|落盘/, groups: [CONDITION, RECORD_ENTRY_RULE] },
-  // A declaration that nothing can be run is not a passing check; the definition of done has to say so
-  // in its own words or the commit gate above — gated on 完成定义 — resolves to a check nobody ran.
-  { name: 'the waived definition of done discloses instead of claiming a pass', kind: 'line', section: '完成定义', anchor: /检查|验证/, groups: [['显式无验证命令', '无验证命令'], ['披露', '如实']] },
-  { name: 'no unconditional record writes', kind: 'forbid', literals: ['记入项目自己的记录位置', '在项目自己的记录中更新本会话推进的交付物与证据', '证据已记录在项目自己的记录位置'] }
-];
-const PLAIN_RECORD_OLD_FORMS = [
-  ['definition of done shares the record-entry rule', '- [ ] 证据已记录在项目自己的记录位置'],
-  ['closeout shares the record-entry rule', '1. 在项目自己的记录中更新本会话推进的交付物与证据'],
-  ['evidence is conditional or routed through the entry rule', '完成证据（命令与结果摘要）记入项目自己的记录位置'],
-  // The legal entry-routed write beside an unrouted one: the first clause is exactly right, which is
-  // why this pair is the only honest witness for an any-of-across-groups rule.
-  ['evidence is conditional or routed through the entry rule', '证据按记录入口规则写入已有记录或回复；完成证据记入任意记录'],
-  ['a missing record entry is reported with evidence', '状态与进度由**项目自有**的记录维护，位置由用户指定'],
-  ['the waived definition of done discloses instead of claiming a pass', '- [ ] 项目定义的检查确实运行过（`./init.sh`：lint、链接检查、schema 校验等）'],
-  ['no unconditional record writes', '完成证据（命令与结果摘要）记入项目自己的记录位置']
-];
-
 // The maintenance reference's exception table used to read "审计已满分 | 报「无候选瓶颈」，不改",
 // making a structural score an exit condition — harness rot is invisible to scoring (the file's own
 // line 3 says so), so a full score is exactly when the content still has to be read. The row now
@@ -670,42 +596,31 @@ function runContract(text, contract, oldForms) {
   return { pass: missing.length === 0 && teeth && forbidWitness && oldFormsRejected, missing, teeth, forbidWitness, oldFormsRejected };
 }
 
-// Both tiers rendered once per self-check and both tier contracts evaluated from that one scaffold:
-// three groups reading the same two directories would spawn the generator three times over. Cached,
-// because runSelfCheck() binds them as three separate groups and they are independent checks on one
-// artifact pair. The reference group reads no directory and stays outside the cache.
+// One scaffold, rendered once per self-check, with the contract group evaluated from it. Cached,
+// because runSelfCheck() binds it alongside groups that read a reference file instead, and spawning
+// the generator once per group would cost a temp directory per read of the same artifact.
 let contractCache = null;
 async function evaluateContracts() {
   if (contractCache) return contractCache;
   const dirs = [];
   try {
     const create = path.join(scriptDir, 'create-harness.mjs');
-    const eng = await mkdtemp(path.join(os.tmpdir(), 'harness-contract-eng-'));
-    const plain = await mkdtemp(path.join(os.tmpdir(), 'harness-contract-plain-'));
-    dirs.push(eng, plain);
-    await execFileAsync('node', [create, '--target', eng]);
-    await execFileAsync('node', [create, '--target', plain, '--no-engineering-owner', '--commands', 'echo baseline-ok']);
-    const tiers = {
-      engineering: await readText(path.join(eng, 'AGENTS.md')),
-      plain: await readText(path.join(plain, 'AGENTS.md'))
-    };
-    const per = Object.fromEntries(Object.entries(tiers)
-      .map(([name, text]) => [name, runContract(text, TASK_CONTRACT, TASK_OLD_FORMS)]));
-    const every = (key) => Object.values(per).every((result) => result[key]);
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'harness-contract-'));
+    dirs.push(dir);
+    await execFileAsync('node', [create, '--target', dir]);
+    const result = runContract(await readText(path.join(dir, 'AGENTS.md')), TASK_CONTRACT, TASK_OLD_FORMS);
     contractCache = {
       taskContract: {
-        pass: every('pass'),
-        missing: Object.fromEntries(Object.entries(per).map(([name, result]) => [name, result.missing])),
-        teeth: every('teeth'),
-        forbidWitness: every('forbidWitness'),
-        oldFormsRejected: every('oldFormsRejected')
-      },
-      plainRecord: runContract(tiers.plain, PLAIN_RECORD_CONTRACT, PLAIN_RECORD_OLD_FORMS)
+        pass: result.pass,
+        missing: result.missing,
+        teeth: result.teeth,
+        forbidWitness: result.forbidWitness,
+        oldFormsRejected: result.oldFormsRejected
+      }
     };
   } catch (error) {
     // Reported per group rather than thrown, so one broken scaffold does not hide the other groups.
-    const failed = (missing) => ({ pass: false, missing, teeth: false, forbidWitness: false, oldFormsRejected: false, error: error.message });
-    contractCache = { taskContract: failed({}), plainRecord: failed([]) };
+    contractCache = { taskContract: { pass: false, missing: {}, teeth: false, forbidWitness: false, oldFormsRejected: false, error: error.message } };
   } finally {
     for (const dir of dirs) await rm(dir, { recursive: true, force: true });
   }
@@ -916,14 +831,6 @@ function consoleSelfCheckLines(selfCheck) {
     const { pass, offenders = [], selfRestraintStated, selfRestraintTeeth, seededCaught, error } = selfCheck.agentsDiscover;
     lines.push(`  AGENTS.md discoverability: ${pass ? 'PASS' : 'FAIL'} — default render free of restated content: ${offenders.length === 0 ? 'ok' : `NO (${offenders.join(', ')})`}; self-restraint rule stated: ${selfRestraintStated ? 'ok' : 'NO'}; proven load-bearing: ${selfRestraintTeeth ? 'ok' : 'BLIND'}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
-  if (selfCheck.scopeBrake) {
-    const { pass, brake, brakeTeeth, oldBrakeRejected, selfRefFree, selfRefTeeth, owners, missingOwners = [], ownerTeeth, leaked = [], seeded = [], error } = selfCheck.scopeBrake;
-    lines.push(`  Scope brake: ${pass ? 'PASS' : 'FAIL'} — the generated AGENTS.md routes the engineering workflow and builds no substitute for it: ${brake ? 'ok' : 'NO'}; detector has teeth: ${brakeTeeth ? 'ok' : 'BLIND'}; the retired negation alone is refused: ${oldBrakeRejected ? 'ok' : 'ACCEPTED'}; it does not speak as the author: ${selfRefFree ? 'ok' : 'LEAKED 本技能'} ${selfRefTeeth ? 'ok' : 'BLIND'}; one named owner carrying both slots and the setup prerequisite: ${owners ? 'ok' : `MISSING (${missingOwners.join(', ')})`}; owner detector has teeth: ${ownerTeeth ? 'ok' : 'BLIND'}; doctrine carried over from the removed scope: ${leaked.length === 0 ? 'none' : `LEAKED (${leaked.join(', ')})`}; detector catches a seeded violation: ${seeded.length === FORBIDDEN_IN_AGENTS_MD.length ? 'ok' : `BLIND (${seeded.length}/${FORBIDDEN_IN_AGENTS_MD.length} patterns)`}${error ? ` — ${error}` : ''}`);
-  }
-  if (selfCheck.plainTier) {
-    const { pass, ownerFree, plainTeeth, engNamed, engUnmarked, refused, refusalWroteNothing, discloses, neverClaims, undeclaredHonest, listsAgree, selfRefFree, selfRefTeeth, missingOwners = [], error } = selfCheck.plainTier;
-    lines.push(`  Plain tier: ${pass ? 'PASS' : 'FAIL'} — a working directory with no engineering workflow gets the same three subsystems with no owner named: ${ownerFree ? 'ok' : 'NO'}; per-term owner detector: ${plainTeeth ? 'ok' : 'BLIND'}; engineering still names every owner: ${engNamed ? 'ok' : `MISSING (${missingOwners.join(', ')})`}; engineering carries no plain marker: ${engUnmarked ? 'ok' : 'NO'}; a declared absence of verification is refused on its own: ${refused ? 'ok' : 'ACCEPTED'}; and the refusal creates nothing: ${refusalWroteNothing ? 'ok' : 'NO'}; the granted waiver discloses: ${discloses ? 'ok' : 'NO'}; and never prints the completion banner: ${neverClaims ? 'ok' : 'NO'}; the same tier without the declaration still fails closed: ${undeclaredHonest ? 'ok' : 'NO'}; the two owner lists agree: ${listsAgree ? 'ok' : 'DIVERGED'}; the plain render does not speak as the author: ${selfRefFree ? 'ok' : 'LEAKED 本技能'} ${selfRefTeeth ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
-  }
   if (selfCheck.maintenance) {
     const { pass, stated, missing = [], leaked = [], teeth, oldFormRejected, hybridRejected, forbiddenWitness, error } = selfCheck.maintenance;
     lines.push(`  Maintenance trigger: ${pass ? 'PASS' : 'FAIL'} — wrap-up step keys on the session's own output leaving the harness stale, not on the harness files having been touched: ${stated ? 'ok' : `MISSING (${missing.join(', ') || 'section not found'})`}; retired diff-keyed phrasing: ${leaked.length === 0 ? 'absent' : `LEAKED (${leaked.join(', ')})`}; per-term detector: ${teeth ? 'ok' : 'BLIND'}; diff-keyed sentence rejected: ${oldFormRejected ? 'ok' : 'ACCEPTED'}; hybrid form rejected: ${hybridRejected ? 'ok' : 'ACCEPTED'}; forbidden-list shrink caught: ${forbiddenWitness ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
@@ -974,11 +881,7 @@ function consoleSelfCheckLines(selfCheck) {
   }
   if (selfCheck.taskContract) {
     const { pass, missing = {}, teeth, forbidWitness, oldFormsRejected, error } = selfCheck.taskContract;
-    lines.push(`  Task authorization: ${pass ? 'PASS' : 'FAIL'} — both tiers scope work to what the user authorized, missing: engineering ${(missing.engineering || []).join(', ') || 'none'}; plain ${(missing.plain || []).join(', ') || 'none'}; per-requirement teeth: ${teeth ? 'ok' : 'BLIND'}; forbidden-list witness: ${forbidWitness ? 'ok' : 'BLIND'}; pre-09-29 sentences refused: ${oldFormsRejected ? 'ok' : 'ACCEPTED'}${error ? ` — ${error}` : ''}`);
-  }
-  if (selfCheck.plainRecord) {
-    const { pass, missing = [], teeth, forbidWitness, oldFormsRejected, error } = selfCheck.plainRecord;
-    lines.push(`  Plain record entry: ${pass ? 'PASS' : 'FAIL'} — the record routes through a confirmed project-owned entry that the definition of done and the closeout share, missing: ${missing.join(', ') || 'none'}; per-requirement teeth: ${teeth ? 'ok' : 'BLIND'}; forbidden-list witness: ${forbidWitness ? 'ok' : 'BLIND'}; pre-09-29 sentences refused: ${oldFormsRejected ? 'ok' : 'ACCEPTED'}${error ? ` — ${error}` : ''}`);
+    lines.push(`  Task authorization: ${pass ? 'PASS' : 'FAIL'} — the generated file scopes work to what the user authorized, missing: ${(missing || []).join(', ') || 'none'}; per-requirement teeth: ${teeth ? 'ok' : 'BLIND'}; forbidden-list witness: ${forbidWitness ? 'ok' : 'BLIND'}; pre-09-29 sentences refused: ${oldFormsRejected ? 'ok' : 'ACCEPTED'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.maintContract) {
     const { pass, missing = [], teeth, tableRemovedRefused, oldRowRejected, error } = selfCheck.maintContract;
@@ -1014,8 +917,6 @@ async function runSelfCheck() {
       budget: () => checkSkillBudget(),
       agentsBudget: () => checkAgentFileBudget(),
       agentsDiscover: () => checkAgentFileDiscoverability(),
-      scopeBrake: () => checkScopeBoundary(),
-      plainTier: () => checkPlainTier(),
       maintenance: () => checkMaintenanceTrigger(),
       skillDesign: () => checkSkillDesignRule(),
       wrapupOutput: () => checkWrapupOutputs(),
@@ -1029,7 +930,6 @@ async function runSelfCheck() {
       agentFile: () => checkAgentFileInvariant(),
       reportContract: () => checkReportContract(),
       taskContract: async () => (await evaluateContracts()).taskContract,
-      plainRecord: async () => (await evaluateContracts()).plainRecord,
       maintContract: () => checkMaintContract()
     };
     const groups = {};
@@ -1193,195 +1093,6 @@ async function checkAgentFileDiscoverability() {
     if (dir) await rm(dir, { recursive: true, force: true });
   }
 }
-
-async function checkScopeBoundary() {
-  let dir;
-  try {
-    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-scope-'));
-    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
-    const text = await readText(path.join(dir, 'AGENTS.md'));
-    // The brake: the file must ROUTE the engineering workflow to the named owner and state that no
-    // substitute artifact is built. Re-keyed 09-29 from the bare negation ("工程 skill" + "不代做"),
-    // which named a subject the reader of the rendered file cannot resolve and was satisfied by a
-    // file that routed nothing at all. The forbidden half is unchanged (FORBIDDEN_IN_AGENTS_MD).
-    const brake = brakeLineIn(text) !== '';
-    // A re-keyed predicate nobody has watched fail is a predicate nobody has watched: deleting every
-    // alternative the brake reads must make it fail, and the retired sentence must be refused alone.
-    const brakeTeeth = brakeLineIn(BRAKE_NO_SUBSTITUTE.reduce((acc, term) => acc.split(term).join(''), text)) === '';
-    const oldBrakeRejected = brakeLineIn(SCOPE_BRAKE_OLD_FORM) === '';
-    // Neither tier may speak as the author: "本技能" in a file a project agent reads names a
-    // subject the reader cannot resolve, and it is what the 09-29 rewrite removed from both renders.
-    const selfRefFree = selfRefLeaks(text).length === 0;
-    const selfRefTeeth = selfRefLeaks(`${text}\n本技能**不代做**。`).length === 1;
-    // The positive half, its own label: the single owner's name, both fixed slots, and the setup
-    // prerequisite that makes them reachable. A render that carries the boundary sentence but drops a
-    // slot fails on this point specifically instead of on the brake as a whole.
-    const missingOwners = missingOwnerTerms(text);
-    const owners = missingOwners.length === 0;
-    // Teeth, one term at a time. Deleting a term and requiring the predicate to report exactly that
-    // term proves the check is sensitive to each term on its own; a single seeded blob would only
-    // prove it reads the string.
-    const ownerTeeth = OWNER_TERMS.every((term) => {
-      const reported = missingOwnerTerms(text.split(term).join('\u0000'));
-      return reported.length === 1 && reported[0] === term;
-    });
-    const leaked = FORBIDDEN_IN_AGENTS_MD.filter(({ pattern }) => pattern.test(text)).map(({ name }) => name);
-    const seeded = FORBIDDEN_IN_AGENTS_MD
-      .filter(({ pattern }) => pattern.test(`${text}${SEEDED_VIOLATION}`))
-      .map(({ name }) => name);
-    return {
-      pass: brake && brakeTeeth && oldBrakeRejected && selfRefFree && selfRefTeeth && owners
-        && ownerTeeth && leaked.length === 0 && seeded.length === FORBIDDEN_IN_AGENTS_MD.length,
-      brake,
-      brakeTeeth,
-      oldBrakeRejected,
-      selfRefFree,
-      selfRefTeeth,
-      owners,
-      missingOwners,
-      ownerTeeth,
-      leaked,
-      seeded
-    };
-  } catch (error) {
-    return { pass: false, brake: false, brakeTeeth: false, oldBrakeRejected: false, selfRefFree: false, selfRefTeeth: false, owners: false, missingOwners: [], ownerTeeth: false, leaked: [], seeded: [], error: error.message };
-  } finally {
-    if (dir) await rm(dir, { recursive: true, force: true });
-  }
-}
-
-// The shipped render used to have exactly one shape, and it named one owner. A working directory
-// with no engineering workflow to hand to anyone — a documentation set, a skill repository, a
-// teaching outline — therefore could not use this skill at all: the render named an owner it did not
-// have, and the audit then scored it down for saying so. The plain tier is the same three subsystems
-// with no owner named, chosen by an explicit flag rather than inferred from the directory.
-//
-// This group is what keeps the two tiers from collapsing into each other, and both directions are
-// asserted because either one alone is satisfied by a degenerate file: engineering must NAME the
-// owner, plain must NOT. A single arm would be satisfied by "remove the delegation everywhere".
-//
-// The waiver is the other half, and it is the shape this suite exists to distrust — a gate that
-// cannot fail. It is therefore read in both directions: refused outright without the plain tier, so
-// a repository that does have a baseline cannot collect it, and never a pass when it is granted, so
-// the generated gate says plainly that nothing was verified instead of printing the banner. Asserted
-// on the generated text rather than by running it: this suite is pure Node and executes no shell,
-// and making it require bash would fail wholesale on hosts that lack it — a gate that refuses
-// everything verifies nothing.
-async function checkPlainTier() {
-  let plainDir;
-  let engDir;
-  let blankDir;
-  let waivedDir;
-  let refuseParent;
-  try {
-    const create = path.join(scriptDir, 'create-harness.mjs');
-    plainDir = await mkdtemp(path.join(os.tmpdir(), 'harness-plain-'));
-    engDir = await mkdtemp(path.join(os.tmpdir(), 'harness-plain-eng-'));
-    await execFileAsync('node', [create, '--target', plainDir, '--no-engineering-owner', '--commands', 'echo baseline-ok']);
-    await execFileAsync('node', [create, '--target', engDir]);
-    const plain = await readText(path.join(plainDir, 'AGENTS.md'));
-    const plainInit = await readText(path.join(plainDir, 'init.sh'));
-    const eng = await readText(path.join(engDir, 'AGENTS.md'));
-
-    // One predicate per question, so the render and its audit cannot drift into two rules that only
-    // happen to agree today. The marker is asked for by its own words rather than through the
-    // constant that writes it: a silent change to that constant then shows up here instead of
-    // re-pointing this check at whatever the render now emits.
-    const plainLeaks = (text) => OWNER_TERMS.filter((term) => text.includes(term));
-    const claimed = /档位：非工程/.test(plain) && PLAIN_DELEGATION_TERMS.every((term) => plain.includes(term));
-    const ownerFree = plainLeaks(plain).length === 0 && plainLeaks(plainInit).length === 0 && claimed;
-    // Teeth, one term at a time, the way the scope brake proves its owner detector: seeding a name
-    // must make exactly that name report. One seeded blob would only prove the string reads.
-    const plainTeeth = OWNER_TERMS.every((term) => {
-      const reported = plainLeaks(`${plain}\n${term}`);
-      return reported.length === 1 && reported[0] === term;
-    });
-    // The other tier, so "drop the delegation everywhere" cannot satisfy the arm above. Engineering
-    // still names every term, and must not carry the marker that would quietly reclassify it.
-    const engNamed = missingOwnerTerms(eng).length === 0;
-    const engUnmarked = !/档位：非工程/.test(eng);
-    // Refused on its own, before anything is created: a project with an engineering workflow always
-    // has a baseline to run. A refusal that still left a directory behind would be cosmetic, so the
-    // absence of the target is asserted as part of the refusal rather than assumed from the exit code.
-    refuseParent = await mkdtemp(path.join(os.tmpdir(), 'harness-plain-refuse-'));
-    const refuseTarget = path.join(refuseParent, 'target');
-    let refused = false;
-    try {
-      await execFileAsync('node', [create, '--target', refuseTarget, '--no-verification']);
-    } catch {
-      refused = true;
-    }
-    const refusalWroteNothing = !(await exists(refuseTarget));
-    // Granted, the two halves are separate claims and both are asserted: the disclosure is present,
-    // AND the completion banner is absent. A script that printed both would satisfy the first alone.
-    waivedDir = await mkdtemp(path.join(os.tmpdir(), 'harness-plain-waived-'));
-    await execFileAsync('node', [create, '--target', waivedDir, '--no-engineering-owner', '--no-verification']);
-    const waivedInit = await readText(path.join(waivedDir, 'init.sh'));
-    const waivedAgents = await readText(path.join(waivedDir, 'AGENTS.md'));
-    const discloses = waivedInit.includes(NO_VERIFICATION_MARKER) && waivedAgents.includes('无验证命令');
-    const neverClaims = !waivedInit.includes('Verification Complete');
-    // The same tier without the declaration still fails closed through the real generator, so the
-    // waiver is a flag the user set and not a property of asking for this tier.
-    blankDir = await mkdtemp(path.join(os.tmpdir(), 'harness-plain-blank-'));
-    await execFileAsync('node', [create, '--target', blankDir, '--no-engineering-owner']);
-    const blankInit = await readText(path.join(blankDir, 'init.sh'));
-    const undeclaredHonest = /\bexit 1\b/.test(blankInit) && !blankInit.includes(NO_VERIFICATION_MARKER);
-    // The two owner lists live in two files on purpose — the audit must be able to disagree with the
-    // gate — so the divergence is asserted rather than trusted to stay in sync. Without this arm one
-    // list could shrink while the other kept the suite green.
-    const listsAgree = OWNER_TERMS.length === DELEGATION_OWNER_TERMS.length
-      && OWNER_TERMS.every((term) => DELEGATION_OWNER_TERMS.includes(term));
-
-    const selfRefFree = selfRefLeaks(plain).length === 0;
-    const selfRefTeeth = selfRefLeaks(`${plain}\n本技能**不代建**。`).length === 1;
-
-    return {
-      pass: ownerFree && plainTeeth && engNamed && engUnmarked && refused && refusalWroteNothing
-        && discloses && neverClaims && undeclaredHonest && listsAgree && selfRefFree && selfRefTeeth,
-      selfRefFree,
-      selfRefTeeth,
-      ownerFree,
-      plainTeeth,
-      engNamed,
-      engUnmarked,
-      refused,
-      refusalWroteNothing,
-      discloses,
-      neverClaims,
-      undeclaredHonest,
-      listsAgree,
-      missingOwners: missingOwnerTerms(eng)
-    };
-  } catch (error) {
-    return { pass: false, error: error.message };
-  } finally {
-    for (const dir of [plainDir, engDir, blankDir, waivedDir, refuseParent]) {
-      if (dir) await rm(dir, { recursive: true, force: true });
-    }
-  }
-}
-
-// Maintenance needs a moment to happen, and until now nothing in the shipped artifact supplied
-// one: the skill could assess a harness on request, but a repo's agent had no instruction telling
-// it when re-assessment was due. "After a long task, re-assess" carried only by prose is the exact
-// failure this suite exists to close — a rule with no mechanical carrier loses to one successful
-// wrong action — so the trigger is asserted in the artifact a target repo actually receives.
-//
-// Keyed on the skill NAME inside the wrap-up section, because that is the only form that resolves
-// from the target repo: a path relative to the skill repository is dead on arrival there, and a
-// concrete runtime path varies by host. (maintenanceSection() itself is declared up with the terms.)
-//
-// All-of on the required terms AND none-of on the forbidden ones. The positive half alone is not a
-// gate: it is satisfied by any render that mentions the three words — including the sentence this
-// gate was built to retire, with those words added to it. That hybrid measured PASS before this axis
-// existed, so `stated` has to carry both halves or the gate is vocabulary-shaped decoration.
-function maintenanceTriggerStated(text) {
-  const section = maintenanceSection(text);
-  const missing = MAINTENANCE_TERMS.filter((term) => !section.includes(term));
-  const leaked = MAINTENANCE_FORBIDDEN.filter((phrase) => section.includes(phrase));
-  return { stated: missing.length === 0 && leaked.length === 0, missing, leaked };
-}
-
 // Scoped to the wrap-up section for the same reason the predicate is, and removing EVERY occurrence
 // of the term rather than the first: a term that appears in both the step's heading and its body
 // (会话产出 does) would otherwise survive the strip, and the arm would report BLIND on a render that
@@ -2096,10 +1807,10 @@ async function checkBlankProjectGate() {
   try {
     const createScript = path.join(scriptDir, 'create-harness.mjs');
     await execFileAsync('node', [
-      createScript, '--target', commaDir, '--no-engineering-owner', '--commands', "bash -c 'echo a,b'"
+      createScript, '--target', commaDir, '--commands', "bash -c 'echo a,b'"
     ]);
     await execFileAsync('node', [
-      createScript, '--target', listDir, '--no-engineering-owner', '--commands', 'npm test,npm run lint'
+      createScript, '--target', listDir, '--commands', 'npm test,npm run lint'
     ]);
     const commaAgents = await readText(path.join(commaDir, 'AGENTS.md'));
     const listAgents = await readText(path.join(listDir, 'AGENTS.md'));
@@ -2111,7 +1822,7 @@ async function checkBlankProjectGate() {
     let refusedCode = null;
     try {
       await execFileAsync('node', [
-        createScript, '--target', badCmdDir, '--no-engineering-owner', '--commands', "bash -c 'echo a,b"
+        createScript, '--target', badCmdDir, '--commands', "bash -c 'echo a,b"
       ]);
       refusedCode = 0;
     } catch (error) {

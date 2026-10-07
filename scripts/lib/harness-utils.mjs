@@ -14,41 +14,13 @@ export function scriptCommand(scriptName) {
   return `node ${SKILL_ROOT.replaceAll('\\', '/')}/scripts/${scriptName}`;
 }
 // Three subsystems, not upstream's five. State and lifecycle are real subsystems of a harness, but
-// they are not this skill's to build: they belong to the engineering skills, and the instruction
-// file states the delegation. Scoring them here would rate a correctly-delegated repo as broken —
-// five checks per subsystem, all failing on artifacts that are supposed to be absent.
+// they are not this skill's to build or to grade. Scoring them here would rate a repo as broken for
+// not carrying artifacts it was never supposed to carry.
 export const SUBSYSTEMS = ['instructions', 'verification', 'scope'];
 
-// --- Tier: engineering (default) vs plain -------------------------------------------------
-//
-// A plain target is a working directory with no engineering workflow to hand to anyone: a
-// documentation set, a skill repository, a teaching outline. The artifact is the same one — a
-// startup path, a verification entrypoint, invariants — but there is no owner to name, because
-// there is nothing the engineering stages could be delegated to. The tier is chosen by the USER
-// through a flag and never inferred from the directory: this skill's standing rule is that it does
-// not guess a project's shape from what the directory happens to contain, and a tier inferred from
-// "there is no package.json here" would fire on every empty engineering repo too.
-//
-// The marker is a structured line the render writes and the scorer reads, so the two tiers can
-// never be satisfied by the same file: engineering must NAME the owner, plain must NOT.
-export const PLAIN_TEMPLATE = 'agents-plain.md';
-export const PLAIN_TIER_MARKER = '档位：非工程';
-// Both halves of the plain tier's claim. A file that merely omits the owner names has said
-// nothing at all; a file that states the plain claim while still naming an owner has said two
-// contradictory things, and each half is checked so neither can stand in for the other.
-export const PLAIN_DELEGATION_TERMS = ['项目自有', '不代建'];
-// Duplicated on purpose, not shared with the self-check's OWNER_TERMS: the audit and the gate
-// must be able to disagree. One shared list would let a single shrinkage weaken both sides at
-// once, so the self-check instead asserts the two lists are set-equal and a divergence is caught
-// rather than drifting quietly.
-export const DELEGATION_OWNER_TERMS = ['mattpocock', 'to-tickets', 'handoff', 'setup-matt-pocock-skills'];
-// Printed by the generated init.sh when a plain project explicitly declares it has nothing to
+// Printed by the generated init.sh when a project explicitly declares it has nothing to
 // verify. It is a disclosure, never a pass: the script must not print the completion banner.
 export const NO_VERIFICATION_MARKER = 'NO VERIFICATION DECLARED';
-
-export function isPlainTier(markdown) {
-  return String(markdown).includes(PLAIN_TIER_MARKER);
-}
 
 export function termsAbsentFrom(text, terms) {
   return terms.filter((term) => !String(text).includes(term));
@@ -317,32 +289,21 @@ export function verificationCommands(project, explicitPackageManager) {
   return [install, ...real];
 }
 
-export function initScriptFromCommands(commands, { plain = false, noVerification = false } = {}) {
+export function initScriptFromCommands(commands, { noVerification = false } = {}) {
   if (noVerification) return noVerificationScript();
   const body = (commands || []).map(renderVerificationStep).join('\n\n');
-  // The next-steps block names state, so it names exactly the artifacts this skill writes and
-  // nothing else. A startup script that tells the agent to read a file this skill never creates is
-  // a dangling instruction, and the artifact list stays clean because the leak sits in the
-  // contents of a file that IS expected to exist.
+  // The next-steps block names only artifacts this skill writes. A startup script that tells the
+  // agent to read a file this skill never creates is a dangling instruction, and the artifact list
+  // stays clean because the leak sits in the contents of a file that IS expected to exist.
   //
-  // State no longer appears here because it no longer lives here: it is delegated, and the route
-  // to it is the instruction file, which exists before the tracker is configured. Naming the
-  // tracker's own files instead would be exactly the dangling pointer this block is built to
-  // avoid — a fresh repo has none of them until setup has run.
-  // The startup route has to match the tier the artifact was rendered for. A plain project has no
-  // tracker to configure and no tickets to pick from, so naming them here would send the agent after
-  // files this skill deliberately does not create — the dangling pointer this block exists to avoid.
-  const nextSteps = plain ? [
-    '1. Read AGENTS.md for the startup path and the invariants',
-    '2. Pick ONE unfinished deliverable whose prerequisites are clear',
-    '3. Produce only that deliverable, staying inside its scope',
+  // Which record the project keeps work in is deliberately absent: naming a tracker here would make
+  // this file break whenever that tracker is renamed, and naming a ticket list would send the agent
+  // after files this skill deliberately does not create.
+  const nextSteps = [
+    '1. Read AGENTS.md for the startup path, the invariants and where work is recorded',
+    '2. Pick ONE unfinished piece of work whose prerequisites are clear',
+    '3. Produce only that, staying inside its scope',
     '4. Re-run this script before claiming done'
-  ] : [
-    '1. Configure the tracker once: /setup-matt-pocock-skills',
-    '2. Read AGENTS.md for the startup path, the invariants and where state lives',
-    '3. Pick ONE unfinished ticket whose blocking edges are clear',
-    '4. Implement only that ticket, staying inside its scope',
-    '5. Re-run this script before claiming done'
   ];
   return `#!/bin/bash
 set -e
@@ -405,7 +366,7 @@ function noVerificationScript() {
     'echo "=== Harness Initialization ==="',
     'echo ""',
     `echo "=== ${NO_VERIFICATION_MARKER} ==="`,
-    'echo "This non-engineering project declares that it has no runnable baseline check."',
+    'echo "This project declares that it has no runnable baseline check."',
     'echo "This script therefore verified NOTHING. It exits 0 so the startup path stays walkable."',
     'echo "Nothing here proves a deliverable is complete: evidence is still required by AGENTS.md."',
     'echo "Replace this file with real checks when the project has any."',
@@ -653,26 +614,15 @@ export function scoreHarness(files, { references } = {}) {
   // directory's contents is exactly what this skill refuses to do. The marker is written by the
   // render, so it is a claim the artifact makes about itself — and both halves are then checked, so
   // a file cannot make the claim and contradict it in the same breath.
-  const plain = isPlainTier(agents);
-  const structured = structuredText(agents);
-  const plainDelegation = {
-    pass: plain
-      && PLAIN_DELEGATION_TERMS.every((term) => structured.includes(term))
-      && DELEGATION_OWNER_TERMS.every((term) => !agents.includes(term)),
-    message: 'Owner-free: state left to the project, and no delegated owner named'
-  };
-  // A plain project may legitimately have nothing to verify, but only by SAYING SO in both places
-  // an agent looks: the instruction file it reads and the script it runs. Silence still falls
-  // through to the ordinary static-check requirement, so this arm cannot be satisfied by omission —
-  // and the engineering tier keeps the plain check unchanged, so the disclosure is not a route out
-  // of the gate for a repository that does have a baseline.
-  //
-  // It reads the SAME long needles as the static-check check below rather than its own short list,
-  // because this arm decides whether a waiver is worth granting. A short needle here would let a
-  // docs repository whose prose happens to say "TypeScript" collect the no-verification waiver.
-  const plainGate =
-    textHas(init + agents, STATIC_CHECK_NEEDLES).pass
-    || (init.includes(NO_VERIFICATION_MARKER) && agents.includes('无验证命令'));
+  // A project may legitimately have nothing to verify, but only by SAYING SO in both places an
+  // agent looks: the instruction file it reads and the script it runs. The declaration is read as a
+  // conjunction because one half alone is a file talking about its own gate rather than an agent
+  // being told what the state of the project is.
+  const declaredNoVerification =
+    init.includes(NO_VERIFICATION_MARKER) && agents.includes('无验证命令');
+  // Deliberately NOT gated on the static needles: that arm decides whether a waiver is worth
+  // granting, and a short or borrowed predicate there would let a repo collect it on prose alone.
+  const hasTestCommand = textHas(init + agents, TEST_COMMAND_NEEDLES).pass;
 
   // A harness is scored on the artifacts a harness ships — and only on the ones this skill ships.
   // Nothing below reads CONTEXT.md, docs/adr/, docs/agents/*, feature_list.json or progress.md.
@@ -687,44 +637,25 @@ export function scoreHarness(files, { references } = {}) {
       structuredHas(agents, ['Startup Workflow', 'Before writing code', '启动工作流', '编写代码前'], 'Startup workflow documented'),
       structuredHas(agents, ['Definition of Done', 'done only when', '完成定义'], 'Definition of done documented'),
       structuredHas(agents, ['Verification Commands', '验证命令', './init.sh', 'test', 'verify', '测试'], 'Verification commands discoverable'),
-      // State and handoff are delegated, so what the instruction file must state is WHO owns them
-      // and what the prerequisite is — not where a local file lives. Requiring an in-repo artifact
-      // here is what made this scorer reward shipping one.
-      //
-      // All-of, not any-of, since 09-28: the two fixed slots ARE the content of the delegation, and
-      // `.some()` let a file name only one of them and still pass. The conjunction used to be carried
-      // by the two-owner check below; when the user collapsed the delegation to a single owner the
-      // conjunction moved to the slots rather than leaving this helper unwired.
-      // On the plain tier these two collapse into one check: there is no owner to name, so what the
-      // artifact must state instead is WHERE state goes when nobody owns it — and that it names no
-      // owner anyway. The tiers are mutually exclusive by construction (one requires the names the
-      // other forbids), so neither can be satisfied by the other's render.
-      ...(plain
-        ? [plainDelegation]
-        : [
-            structuredHasAll(agents, ['to-tickets', 'handoff'], 'Delegated state and handoff owners named'),
-            // Was all-of over two owners until 09-28, when the user removed the runtime-routed second
-            // owner (superpowers) and made the engineering workflow one system's. What the render must
-            // now name is that single owner; the removed one is forbidden instead, in
-            // FORBIDDEN_IN_AGENTS_MD over in run-benchmark.mjs. A required name and a forbidden name
-            // are the two sides of the same claim, and either alone is satisfied by a degenerate file.
-            structuredHas(agents, ['mattpocock'], 'Single named owner holds the engineering workflow')
-          ])
+      // The instruction file must say where VERIFIED WORK IS RECORDED, without saying which system
+      // records it. A harness that leaves an agent to invent a record is how the same status ends
+      // up in three places; naming a specific tracker here is what makes the audit depend on a
+      // vendor this skill does not own, and a renamed or removed skill would then fail correct repos.
+      structuredHas(agents, RECORD_EVIDENCE_NEEDLES, 'Verification evidence has a stated home')
     ],
     verification: [
       hasFile(byPath, ['init.sh'], 'Verification entrypoint exists'),
       textHas(init, ['set -e'], 'Verification fails fast'),
-      // The engineering tier asks for a test command; a plain target has no such concept, so that
-      // one requirement is replaced by the tier's own: EITHER a real static check is documented, OR
-      // both the instruction file and the generated gate carry the explicit no-verification
-      // disclosure. Silence satisfies neither half, so the waiver cannot be collected by saying
-      // nothing. The static-check requirement below stays in force for BOTH tiers — which is what
-      // gives the declaration a visible cost: the harness still scores, but no longer perfectly, and
-      // the audit can say why. A waiver that reached full marks would be the cheapest route to a
-      // perfect score, and this suite exists to stop exactly that.
-      ...(plain
-        ? [{ pass: plainGate, message: 'A real static check, or an explicit no-verification disclosure in both places' }]
-        : [textHas(init + agents, TEST_COMMAND_NEEDLES, 'Test command documented')]),
+      // A target with nothing to run may say so explicitly, and the declaration REPLACES this one
+      // requirement rather than adding to it — a repository with no tests is not failing a test
+      // requirement, it is saying it has none. Silence satisfies neither half, so the waiver cannot
+      // be collected by saying nothing.
+      //
+      // The static check below stays in force either way, and that is what stops this from being a
+      // route out of the gate for a repository that does have a baseline: a waiver reaches fewer
+      // marks, not more, and the audit can say why. A waiver that reached full marks would be the
+      // cheapest route to a perfect score, and this suite exists to stop exactly that.
+      { pass: hasTestCommand || declaredNoVerification, message: 'Test command documented, or no-verification declared in both places' },
       textHas(init + agents, STATIC_CHECK_NEEDLES, 'Static/build check documented'),
       // Evidence has to be claimed as a rule the agent reads, so THIS one goes through
       // `structuredText` — a file that mentions evidence in passing prose has not established a
@@ -740,14 +671,15 @@ export function scoreHarness(files, { references } = {}) {
       referencesCheck(references)
     ],
     scope: [
-      // The one-at-a-time rule is the same invariant on both tiers; only its noun differs, because a
-      // plain working directory produces deliverables rather than tickets. Both nouns are listed
-      // here rather than branched, since this is one requirement and a branch would let the two
-      // tiers drift into two separate rules that no longer have to agree.
-      structuredHas(agents, ['One feature at a time', 'one-feature-at-a-time', 'one requirement at a time', 'one ticket at a time', '一次一个功能', '一次一个需求', '一次一个工单', '一次一个交付物'], 'One-ticket-at-a-time rule exists'),
-      textHas(agents, ['dependencies', 'blocking', '阻塞边', '依赖'], 'Blocking edges are stated'),
-      textHas(agents, ['status', '状态'], 'Ticket status is explicit'),
-      structuredHas(agents, ['Stay in scope', 'scope', '保持在本工单范围内', '保持在范围内', '保持在本交付物范围内', '范围'], 'Scope boundary documented'),
+      // The one-at-a-time rule is the same invariant whatever the work is called. The noun is
+      // deliberately neutral — deliverable, not ticket — because a ticket system belongs to whichever
+      // skill the project runs its work through, and an audit that demanded the word "ticket" would
+      // fail a correct repository purely for not owning a tracker.
+      structuredHas(agents, ['One feature at a time', 'one-feature-at-a-time', 'one requirement at a time', 'one deliverable at a time', '一次一个功能', '一次一个需求', '一次一个交付物'], 'One-deliverable-at-a-time rule exists'),
+      // Prerequisite ordering, phrased as a rule rather than as a ticket graph: what cannot start
+      // until what is finished is a property of the work, not of the tool tracking it.
+      structuredHas(agents, ['prerequisite', 'blocked by', 'unblocks', 'depends on', '前置', '阻塞', '依赖'], 'Prerequisite ordering is stated'),
+      structuredHas(agents, ['Stay in scope', 'scope', '保持在范围内', '保持在本交付物范围内', '范围'], 'Scope boundary documented'),
       structuredHas(agents, ['Definition of Done', '完成定义'], 'Completion gate limits scope closure')
     ]
   };
@@ -844,17 +776,14 @@ function structuredText(markdown) {
 // list entirely — which inverts the very advice a user asking "the agent keeps claiming done while
 // the tests fail" most needs to receive.
 //
-// Three defences, because each alone leaves a hole:
+// Two defences, because each alone leaves a hole:
 //   1. LONG needles. `typecheck` / `tsc` do not occur inside "TypeScript"; `CI` becomes `CI link`.
-//   2. `structuredHasAll`, not `textHas`. The evidence requirement must appear as a stated rule in
-//      the instruction file — a heading, list item, table row or bold lead — not as a word that
-//      happens to fall inside a sentence. Same guard the delegation checks already use.
-//   3. `structuredHasAll` is an ALL-of over the alternates, so one hit is enough but a bare
-//      substring cannot be: every listed form is itself a phrase.
+//   2. `structuredHas`, not `textHas`, on the instruction file's side. Evidence has to be stated as
+//      a rule the agent reads — a heading, list item, table row or bold lead — rather than being a
+//      word that happens to fall inside a sentence. Same guard the record-home check uses.
 //
-// `init.sh` only, deliberately. These are claims about what the gate RUNS, and init.sh is the
-// artifact that runs; the instruction file may describe the stack in prose without that prose being
-// evidence that a check exists.
+// init.sh is deliberately NOT structure-gated: it is bash, and its body IS the evidence, so a
+// structure filter over it rejects a gate that plainly runs the commands.
 const TEST_COMMAND_NEEDLES = ['npm test', 'pnpm test', 'yarn test', 'bun test', 'pytest', 'vitest',
   'jest', 'mocha', 'cargo test', 'go test', 'dotnet test', 'mvn test', 'gradle test', '测试'];
 const STATIC_CHECK_NEEDLES = ['tsc --noEmit', 'tsc ', 'typecheck', 'type check', '类型检查',
@@ -862,24 +791,16 @@ const STATIC_CHECK_NEEDLES = ['tsc --noEmit', 'tsc ', 'typecheck', 'type check',
   'dotnet build', 'mvn package', 'gradle build', 'eslint', 'ruff', 'flake8', 'golangci-lint',
   'lint', 'clippy', '静态检查', '构建'];
 const EVIDENCE_NEEDLES = ['验证证据', '证据', 'Evidence', 'command and output', 'CI 链接', 'CI link'];
+// What the instruction file must say about WHERE a verified result is written down. This is the
+// replacement for the old "name the delegated owners" check, and it is intentionally a requirement
+// about the file rather than about any external system: a harness that leaves the question open is
+// how one piece of work ends up recorded in three places, and a harness that answers it by naming a
+// vendor is a harness that breaks when the vendor renames something. So every needle is a place or
+// a rule, never a product name.
+const RECORD_EVIDENCE_NEEDLES = ['记入', '写入', '落在', '存到', 'record', 'write', 'log', '记录到'];
 
 function structuredHas(markdown, needles, message) {
   return textHas(structuredText(markdown), needles, message);
-}
-
-// Conjunction, which structuredHas cannot express — it is `.some()`, so a file that names only ONE
-// of the two delegated slots still passes it. Carried by the two-owner check until 09-28, when the
-// user collapsed the delegation to a single owner and removed the second one; the conjunction moved
-// to the two slots that remain, because those names ARE the content of the delegation sentence.
-//
-// Scope note: this audit check is deliberately coarse. The exact wording the render must carry — the
-// owner's name, both slots and the setup prerequisite — is enforced with word-by-word precision by
-// the GATE on files this skill renders, `checkScopeBoundary`'s OWNER_TERMS. The audit scores
-// arbitrary repos, including hand-written ones, and the doctrine at the top of this file applies:
-// a scorer that fails a correct outcome is worse than no scorer.
-function structuredHasAll(markdown, needles, message = 'Structured text has every required phrase') {
-  const structured = structuredText(markdown).toLowerCase();
-  return { pass: needles.every((needle) => structured.includes(needle.toLowerCase())), message };
 }
 
 // The upstream setup skill edits CLAUDE.md when it exists and treats AGENTS.md and
