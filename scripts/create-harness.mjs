@@ -143,11 +143,12 @@ function splitCommandList(raw) {
 const availableCommands = verificationCommands(project, args.packageManager);
 // The waiver asks the question the empty command list used to answer for it. Short-circuiting to
 // `[]` meant the project was never asked what it could run, so a repository with a real test suite
-// could collect a declaration that it has nothing to run — and the audit then gave that harness 93/100.
-// Measured before this check: a repo defining both `test` and `lint` exited 0 with the waiver in both
-// artifacts. An absent gate is a gate that cannot fail, so the declaration is only honest where there
-// is genuinely nothing to run; everywhere else it is a way of turning the harness off while keeping
-// the appearance of one.
+// could collect a declaration that it has nothing to run — and the audit scored that harness
+// 100/100, a perfect score for a gate that runs no check at all. Measured on a repo defining both
+// `test` and `lint`: exit 0, the waiver in both artifacts, `run-benchmark --target` on the result
+// reporting `Overall: 100/100`. An absent gate is a gate that cannot fail, so the declaration is
+// only honest where there is genuinely nothing to run; everywhere else it is a way of turning the
+// harness off while keeping the appearance of one.
 //
 // "Genuinely nothing" is read from the detected commands with the placeholders removed, NOT from
 // their count: a project with no manifest, or one whose manifest defines no check the generator
@@ -160,7 +161,12 @@ if (noVerification && realCommands.length > 0) {
   for (const command of realCommands) console.error(`  - ${command}`);
   console.error('An absent gate is a gate that cannot fail, and this repository is not short of one.');
   console.error('Drop the flag, or pass --commands with the checks this project actually uses.');
-  console.error('Nothing was created.');
+  // The refusal itself is identical under --dry-run, because a dry run must not report a plan the
+  // real run would refuse to execute. Only the last line differs: "Nothing was created" describes a
+  // write that did not happen, which under a dry run is true of every run and therefore says nothing.
+  console.error(dryRun
+    ? 'Nothing would be created: the run described above is the run that would refuse.'
+    : 'Nothing was created.');
   process.exit(1);
 }
 

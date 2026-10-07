@@ -58,7 +58,13 @@ export async function readText(filePath) {
 }
 
 export async function readJson(filePath) {
-  return JSON.parse(await readText(filePath));
+  // A UTF-8 BOM is stripped rather than left for JSON.parse, which rejects it outright. That is not
+  // an exotic input on Windows: PowerShell 5.1's `Set-Content -Encoding UTF8`, Notepad's default
+  // save, and several editors all write one, and the symptom was an unhandled SyntaxError quoting a
+  // byte offset in `<anonymous_script>` — a crash that reads like a missing feature rather than a
+  // file the user edited normally. Only the generator's manifest read reached this path; the audit
+  // side already swallowed the failure, so the two producers disagreed about the same file.
+  return JSON.parse((await readText(filePath)).replace(/^\uFEFF/, ''));
 }
 
 export async function writeText(filePath, contents) {
