@@ -645,7 +645,6 @@ function referencesCheck(references, message = 'Documented commands resolve') {
 
 export function scoreHarness(files, { references } = {}) {
   const byPath = new Map(files.map((file) => [file.path, file.content]));
-  const allText = files.map((file) => `${file.path}\n${file.content}`).join('\n\n');
   const agents = byPath.get('AGENTS.md') || byPath.get('CLAUDE.md') || '';
   const init = byPath.get('init.sh') || '';
 
@@ -667,8 +666,12 @@ export function scoreHarness(files, { references } = {}) {
   // through to the ordinary static-check requirement, so this arm cannot be satisfied by omission —
   // and the engineering tier keeps the plain check unchanged, so the disclosure is not a route out
   // of the gate for a repository that does have a baseline.
+  //
+  // It reads the SAME long needles as the static-check check below rather than its own short list,
+  // because this arm decides whether a waiver is worth granting. A short needle here would let a
+  // docs repository whose prose happens to say "TypeScript" collect the no-verification waiver.
   const plainGate =
-    textHas(init + agents, ['build', 'type', 'lint', 'compile', '类型', '构建']).pass
+    textHas(init + agents, STATIC_CHECK_NEEDLES).pass
     || (init.includes(NO_VERIFICATION_MARKER) && agents.includes('无验证命令'));
 
   // A harness is scored on the artifacts a harness ships — and only on the ones this skill ships.
@@ -721,9 +724,14 @@ export function scoreHarness(files, { references } = {}) {
       // perfect score, and this suite exists to stop exactly that.
       ...(plain
         ? [{ pass: plainGate, message: 'A real static check, or an explicit no-verification disclosure in both places' }]
-        : [textHas(init + agents, ['test', 'pytest', 'vitest', 'cargo test', 'go test', 'dotnet test', '测试'], 'Test command documented')]),
-      textHas(init + agents, ['build', 'type', 'lint', 'compile', '类型', '构建'], 'Static/build check documented'),
-      textHas(allText, ['Evidence', 'Verification Evidence', 'command and output', '证据', 'CI'], 'Verification evidence is recorded'),
+        : [textHas(init + agents, TEST_COMMAND_NEEDLES, 'Test command documented')]),
+      textHas(init + agents, STATIC_CHECK_NEEDLES, 'Static/build check documented'),
+      // Evidence has to be claimed as a rule the agent reads, so THIS one goes through
+      // `structuredText` — a file that mentions evidence in passing prose has not established a
+      // policy. The two checks above deliberately do not: init.sh is bash, and its body IS the
+      // evidence, so structure-gating it would reject a gate that plainly runs the commands.
+      // Structured on the instruction file's side instead, which is where an agent looks for rules.
+      structuredHas(agents, EVIDENCE_NEEDLES, 'Verification evidence is recorded'),
       // Inside the existing verification subsystem, never a fourth one: the three subsystems are a
       // ratified boundary, and a dangling command is a verification defect — the harness names a
       // check that cannot run. `references` is threaded in from the caller because resolving it needs
@@ -822,6 +830,39 @@ function structuredText(markdown) {
   return kept.join('\n');
 }
 
+// The three needle sets below are the checkers that decide whether a repository's verification
+// subsystem deserves its score, and they share one failure mode that has been measured rather than
+// imagined: a SHORT needle matches inside a longer word, so a file that never mentions a static
+// check at all still scores.
+//
+//   "type"  matched "TypeScript"   — a repo with no init.sh and no gate scored 3/5 on verification
+//   "CI"    matched "concise"      — the same file scored evidence it never recorded
+//
+// Both were reproduced before this comment was written. The second one is the worse of the two: it
+// is not even a technology word, just two letters inside an adjective, and the resulting harness
+// ranked its verification subsystem ABOVE instructions and scope and dropped out of the bottleneck
+// list entirely — which inverts the very advice a user asking "the agent keeps claiming done while
+// the tests fail" most needs to receive.
+//
+// Three defences, because each alone leaves a hole:
+//   1. LONG needles. `typecheck` / `tsc` do not occur inside "TypeScript"; `CI` becomes `CI link`.
+//   2. `structuredHasAll`, not `textHas`. The evidence requirement must appear as a stated rule in
+//      the instruction file — a heading, list item, table row or bold lead — not as a word that
+//      happens to fall inside a sentence. Same guard the delegation checks already use.
+//   3. `structuredHasAll` is an ALL-of over the alternates, so one hit is enough but a bare
+//      substring cannot be: every listed form is itself a phrase.
+//
+// `init.sh` only, deliberately. These are claims about what the gate RUNS, and init.sh is the
+// artifact that runs; the instruction file may describe the stack in prose without that prose being
+// evidence that a check exists.
+const TEST_COMMAND_NEEDLES = ['npm test', 'pnpm test', 'yarn test', 'bun test', 'pytest', 'vitest',
+  'jest', 'mocha', 'cargo test', 'go test', 'dotnet test', 'mvn test', 'gradle test', '测试'];
+const STATIC_CHECK_NEEDLES = ['tsc --noEmit', 'tsc ', 'typecheck', 'type check', '类型检查',
+  'npm run build', 'pnpm build', 'yarn build', 'make build', 'cargo build', 'go build',
+  'dotnet build', 'mvn package', 'gradle build', 'eslint', 'ruff', 'flake8', 'golangci-lint',
+  'lint', 'clippy', '静态检查', '构建'];
+const EVIDENCE_NEEDLES = ['验证证据', '证据', 'Evidence', 'command and output', 'CI 链接', 'CI link'];
+
 function structuredHas(markdown, needles, message) {
   return textHas(structuredText(markdown), needles, message);
 }
@@ -836,7 +877,7 @@ function structuredHas(markdown, needles, message) {
 // the GATE on files this skill renders, `checkScopeBoundary`'s OWNER_TERMS. The audit scores
 // arbitrary repos, including hand-written ones, and the doctrine at the top of this file applies:
 // a scorer that fails a correct outcome is worse than no scorer.
-function structuredHasAll(markdown, needles, message) {
+function structuredHasAll(markdown, needles, message = 'Structured text has every required phrase') {
   const structured = structuredText(markdown).toLowerCase();
   return { pass: needles.every((needle) => structured.includes(needle.toLowerCase())), message };
 }

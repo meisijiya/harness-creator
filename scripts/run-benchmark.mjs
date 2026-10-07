@@ -151,8 +151,8 @@ const DISCOVERABLE_CONTENT = [
 // level up: the gate would be asserting the existence of the thing that was removed.
 const SELF_CHECK_GROUPS = [
   'budget', 'agentsBudget', 'agentsDiscover', 'scopeBrake', 'plainTier', 'maintenance', 'skillDesign',
-  'wrapupOutput', 'dryRun', 'selfRefs', 'references', 'bottleneckTies', 'blankGate', 'blueprint',
-  'agentFile', 'reportContract', 'taskContract', 'plainRecord', 'maintContract'
+  'wrapupOutput', 'dryRun', 'selfRefs', 'references', 'bottleneckTies', 'foreignAudit', 'blankGate',
+  'blueprint', 'agentFile', 'reportContract', 'taskContract', 'plainRecord', 'maintContract'
 ];
 
 // One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
@@ -172,6 +172,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
   ['references', (group) => ` A documented command that no longer resolves is caught rather than silently trusted: the audit resolves manifest scripts and runnable files, reports by name what it cannot resolve, and is proven in both directions (${group.pass ? 'verified' : `dangling fixture ${group.danglingCaught ? 'caught' : 'MISSED'}; guarded fixture ${group.guardedExcused ? 'excused' : 'FALSELY FLAGGED'}; unchecked bucket ${group.uncheckedListed ? 'populated' : 'SILENT'}; uncollected scan ${group.uncollectedRefused ? 'refused' : 'PASSED'}`}).`],
   ['bottleneckTies', (group) => ` The bottleneck line names ${group.tieCount} tied subsystem(s) as a tie instead of picking one (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['foreignAudit', (group) => ` A repository the audit did not generate — no init.sh, no gate — cannot collect the static-check or evidence points from the word "TypeScript" or the letters inside "concise", so it no longer ranks its empty verification subsystem above instructions and scope; and a repository that does have a gate still passes both (${group.pass ? 'verified' : `gate-less ${group.bareVerification}/5 vs gated ${group.gatedVerification}/5; static ${group.staticCheckFailed ? 'ok' : 'LEAKED'}; evidence ${group.evidenceFailed ? 'ok' : 'LEAKED'}; entrypoint ${group.entrypointFailed ? 'ok' : 'LEAKED'}; gated static ${group.gatedStaticPasses ? 'ok' : 'BROKEN'}; gated evidence ${group.gatedEvidencePasses ? 'ok' : 'BROKEN'}; not overranked ${group.notOverranked ? 'ok' : 'INVERTED'}; teeth ${group.teeth ? 'ok' : 'BLIND'}`}).`],
   ['blankGate', (group) => ` A project with nothing to verify — no manifest, a manifest with no runnable script, or an explicit --commands list whose scripts the manifest does not define — gets a refusal that exits non-zero instead of reporting a pass it did not earn, the counter reopens the moment a real check runs, a comma inside a quoted command stays one command while a genuine comma-separated list still splits, an unterminated quote is refused leaving nothing behind, and the manual fallback template refuses on the same shapes (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-description slot stays a visible pending marker when the user has not stated one, while a blueprint change rewrites that slot only — the rest of the file survives byte for byte, and a shape this skill did not render is refused rather than guessed at (${group.pass ? 'verified' : `pending ${group.pendingMarked ? 'ok' : 'NO'}; no stack fill ${group.noInventedFill ? 'ok' : 'NO'}; verbatim ${group.verbatim ? 'ok' : 'NO'}; slot-only ${group.slotRewritten && group.restIntact ? 'ok' : 'NO'}; detector ${group.detectorHasTeeth ? 'has teeth' : 'BLIND'}; refusal ${group.refusalHonoured && group.refusedUntouched ? 'ok' : 'NO'}`}).`],
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`],
@@ -441,6 +442,7 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['selfRefs', 'Self-reference paths'],
   ['references', 'Command references'],
   ['bottleneckTies', 'Bottleneck ties'],
+  ['foreignAudit', 'Foreign-repo audit'],
   ['blankGate', 'Blank-project gate'],
   ['blueprint', 'Blueprint slot'],
   ['agentFile', 'Agent-file invariant'],
@@ -950,6 +952,10 @@ function consoleSelfCheckLines(selfCheck) {
     const { pass, tieCount, uniqueCount, noneCount, tieLabel } = selfCheck.bottleneckTies;
     lines.push(`  Bottleneck ties: ${pass ? 'PASS' : 'FAIL'} — tie names all 3 subsystems: ${tieCount === 3 ? 'ok' : `NO (${tieCount})`}; unique minimum names one: ${uniqueCount === 1 ? 'ok' : `NO (${uniqueCount})`}; complete harness reports none: ${noneCount === 0 ? 'ok' : `NO (${noneCount})`} — ${tieLabel}`);
   }
+  if (selfCheck.foreignAudit) {
+    const { pass, bareVerification, gatedVerification, staticCheckFailed, evidenceFailed, entrypointFailed, gatedStaticPasses, gatedEvidencePasses, notOverranked, teeth } = selfCheck.foreignAudit;
+    lines.push(`  Foreign-repo audit: ${pass ? 'PASS' : 'FAIL'} — a repo this skill did not generate, with no gate at all: static check ${staticCheckFailed ? 'ok' : 'LEAKED'}; evidence ${evidenceFailed ? 'ok' : 'LEAKED'}; entrypoint ${entrypointFailed ? 'ok' : 'LEAKED'}; does not outrank instructions/scope: ${notOverranked ? 'ok' : 'INVERTED'}; the same repo WITH a gate still passes both: ${gatedStaticPasses && gatedEvidencePasses ? 'ok' : 'BROKEN'}; seeded phrases flip exactly their own check: ${teeth ? 'ok' : 'BLIND'} — ${bareVerification}/5 without a gate vs ${gatedVerification}/5 with one`);
+  }
   if (selfCheck.blankGate) {
     const { pass, placeholderFails, realRuns, scriptlessRefuses, withTestRuns, explicitFailsClosed, explicitOpensWhenRun, quotedCommaUnsplit, listStillSplits, unterminatedRefused, templateRefusals, templateRefusalsExitNonZero, templateStillRuns } = selfCheck.blankGate;
     lines.push(`  Blank-project gate: ${pass ? 'PASS' : 'FAIL'} — placeholder verification exits non-zero: ${placeholderFails ? 'ok' : 'NO'}; a real command still runs: ${realRuns ? 'ok' : 'NO'}; a manifest with no runnable script refuses too: ${scriptlessRefuses ? 'ok' : 'NO'}; a manifest with a real script still runs: ${withTestRuns ? 'ok' : 'NO'}; an explicit --commands list the manifest cannot run fails closed: ${explicitFailsClosed ? 'ok' : 'NO'}; and opens again once a check really runs: ${explicitOpensWhenRun ? 'ok' : 'NO'}; a comma inside a quoted command stays one command: ${quotedCommaUnsplit ? 'ok' : 'NO'}; a genuine comma-separated list still splits: ${listStillSplits ? 'ok' : 'NO'}; an unterminated quote is refused and leaves nothing behind: ${unterminatedRefused ? 'ok' : 'NO'}; the manual fallback carries ${templateRefusals} refusal(s) each armed with a non-zero exit: ${templateRefusalsExitNonZero ? 'ok' : 'NO'}; and still reaches a success tail: ${templateStillRuns ? 'ok' : 'NO'}`);
@@ -1017,6 +1023,7 @@ async function runSelfCheck() {
       selfRefs: () => checkSelfReferencePaths(),
       references: () => checkCommandReferences(),
       bottleneckTies: () => checkBottleneckTies(),
+      foreignAudit: () => checkForeignAudit(),
       blankGate: () => checkBlankProjectGate(),
       blueprint: () => checkBlueprintSlot(),
       agentFile: () => checkAgentFileInvariant(),
@@ -1900,6 +1907,94 @@ async function checkBottleneckTies() {
     uniqueCount: uniqueList.length,
     noneCount: noneList.length,
     tieLabel
+  };
+}
+
+// Stage: the audit must not reward a repository that has no gate. Every other group in this file
+// tests something this skill RENDERS; this one tests what it SCORES, and it exists because the two
+// used to be the same thing in the reader's mind.
+//
+// The measured failure, not a hypothetical: the verification needles were `type` and `CI`. A repo
+// whose instruction file merely read "A React + TypeScript dashboard. Keep responses concise." —
+// with no init.sh, no test command, no gate of any kind — matched both, scored 3/5 on verification,
+// and was lifted ABOVE instructions and scope, dropping out of the bottleneck list. So the audit's
+// most-quoted output told the user asking "the agent keeps saying done while the tests fail" to
+// improve the wrong thing, and the two real gate checks in that subsystem were FAILs the score
+// ignored.
+//
+// Why the suite stayed green through it: every fixture here is a harness THIS skill renders, which
+// always carries a gate. Nothing in the suite ever handed the scorer a real foreign repository, so
+// the case that mattered was never in the test set. The three arms below close that gap in the two
+// directions that matter — a gate-less repo must fail the two gate checks, and a repo WITH a gate
+// must still pass them, so the fix cannot be "score everyone lower".
+//
+// The fixture is written out literally rather than generated. A fixture derived from the needles
+// would move with them, and a fixture that merely calls scoreHarness on an empty object proves
+// nothing about which check fired.
+async function checkForeignAudit() {
+  const gateLess = [
+    '# My App',
+    '',
+    'A React + TypeScript dashboard. Keep responses concise.',
+    '',
+    'Run the tests before saying you are done.'
+  ].join('\n');
+  // The same repository with a gate, so the arms are two readings of one comparison rather than
+  // two unrelated fixtures. npm test / npm run build are the exact phrases the needles now require,
+  // which is the point: the fix must admit these and reject the lines above.
+  const withGate = `${gateLess}\n\n## 验证命令\n\n- \`npm test\`\n- \`npm run build\`\n\n## 完成定义\n\n- [ ] 证据：命令与结果摘要\n`;
+
+  const scoreOf = (agents, init = '') => scoreHarness(
+    [{ path: 'AGENTS.md', content: agents }, ...(init ? [{ path: 'init.sh', content: init }] : [])],
+    {}
+  );
+
+  const bare = scoreOf(gateLess);
+  const gated = scoreOf(withGate, '#!/bin/bash\nset -e\nnpm test\nnpm run build\n');
+
+  const bareVerification = bare.subsystems?.verification;
+  const gatedVerification = gated.subsystems?.verification;
+
+  // The regression itself: no gate, so no verification entrypoint and no fail-fast, and neither
+  // must be scored as satisfied by the words "TypeScript" and "concise".
+  const staticCheckFailed = (bareVerification?.checks ?? []).find((c) => /Static\/build check/.test(c.message))?.pass === false;
+  const evidenceFailed = (bareVerification?.checks ?? []).find((c) => /evidence is recorded/.test(c.message))?.pass === false;
+  const entrypointFailed = (bareVerification?.checks ?? []).find((c) => /entrypoint exists/.test(c.message))?.pass === false;
+
+  // And the anti-regression: the fix must not have been "fail everything", so a repo with a real
+  // gate and a real evidence rule still scores both checks.
+  const gatedStaticPasses = (gatedVerification?.checks ?? []).find((c) => /Static\/build check/.test(c.message))?.pass === true;
+  const gatedEvidencePasses = (gatedVerification?.checks ?? []).find((c) => /evidence is recorded/.test(c.message))?.pass === true;
+
+  // And the failure must be visible where the user looks: a gate-less repo that outranks
+  // instructions/scope on verification is the inverted advice, so assert it does not happen.
+  const notOverranked = (() => {
+    const names = ['instructions', 'scope'];
+    return names.every((n) => (bare.subsystems?.[n]?.score ?? 0) >= (bareVerification?.score ?? 0));
+  })();
+
+  const teeth = (() => {
+    // Prove the two predicates read the lines rather than passing vacuously: seeding each phrase
+    // into the bare fixture must flip exactly that one check back to pass.
+    const flips = (needle, pattern) => {
+      const seeded = scoreOf(`${gateLess}\n\n- ${needle}`);
+      return (seeded.subsystems?.verification?.checks ?? []).find((c) => pattern.test(c.message))?.pass === true;
+    };
+    return flips('npm run build', /Static\/build check/) && flips('证据：命令与结果摘要', /evidence is recorded/);
+  })();
+
+  return {
+    pass: staticCheckFailed && evidenceFailed && entrypointFailed && gatedStaticPasses
+      && gatedEvidencePasses && notOverranked && teeth,
+    bareVerification: bareVerification?.score,
+    gatedVerification: gatedVerification?.score,
+    staticCheckFailed,
+    evidenceFailed,
+    entrypointFailed,
+    gatedStaticPasses,
+    gatedEvidencePasses,
+    notOverranked,
+    teeth
   };
 }
 
