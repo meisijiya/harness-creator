@@ -1510,7 +1510,10 @@ function scoreEvals(evalsJson) {
   // delegation case replaces them: it asserts the NAMED owners instead of the artifacts they own.
   const familyEntries = [
     ['Covers minimal harness creation', /最小化/],
-    ['Covers delegated state and handoff', /委派/],
+    // The state/handoff family used to be covered by a case asserting the NAMED owners and their
+// artifacts. It now asserts the replacement: the render names no external system, and the one
+// thing it does require — evidence going somewhere that exists — is checkable without a vendor.
+['Covers delegated state and handoff', /证据落点/],
     ['Covers harness assessment', /评估/],
     ['Covers verification workflow', /验证工作流/],
     ['Covers memory taxonomy', /记忆/],
@@ -1534,25 +1537,25 @@ function scoreEvals(evalsJson) {
     // only a case shows whether an agent aligns with the user beforehand, and refuses rather than
     // guessing when the file's shape is one this skill did not render.
     ['Covers the blueprint rewrite path', /蓝图变更/],
-    // Added with the single-owner rule on 09-28, replacing the entry that covered the two-owner
-    // routing condition. The gate proves the generated file CARRIES the claim; only a case shows
-    // whether an agent handed a machine with superpowers installed still routes the engineering
-    // workflow to the one owner the harness names, rather than reintroducing the branch it removed —
-    // and whether it keeps state and handoff with the owner that can serve them. Same split the
-    // maintenance and blueprint entries record above.
-    ['Covers the single-owner delegation', /单一 owner/],
+    // Was the two-owner routing condition, then the single-owner rule. With no owner named at all there
+// is no routing left to cover, so this family now covers the opposite claim: that a render naming
+// zero external systems is correct, and that the replacement requirement (evidence must land
+// somewhere that exists) is what takes its place. The doc gate cannot check this — "no vendor named"
+// has no mechanical carrier — so the case is the only evidence it exists as a rule.
+['Covers the single-owner delegation', /不具名任何外部系统/],
     // Added with the command-reference check in the verification subsystem. The gate proves the
     // SCRIPT flags a dead command; only a case shows whether an agent handed a harness whose own
     // docs name a script that no longer exists reports that, rather than trusting the prose — and
     // whether it keeps the check honest in both directions: no false alarm on a guarded command,
     // and no quiet pass over what it could not resolve.
     ['Covers command reference integrity', /命令引用/],
-    // Added with the plain tier. The gate proves the two renders make mutually exclusive claims and
-    // that the waiver cannot be collected without asking for it; only a case shows what an agent
-    // does with a documentation directory — whether it keeps the verification honest instead of
+    // Was the plain tier, which existed because a docs directory could not use a render that named
+    // an owner. Removing the naming removed the tier with it, so this family now covers the
+    // question it left behind: does a documentation directory get the same harness, with the
+    // verification gate still honest and the no-verification waiver still explicit?
     // letting "no owner" quietly become "no gates", and whether it hands back a waiver the user
     // never asked for.
-    ['Covers the plain tier for non-engineering working directories', /非工程/]
+    ['Covers the plain tier for non-engineering working directories', /文档目录同样有 harness/]
   ];
   for (const [message, pattern] of familyEntries) {
     checks.push({ pass: cases.some((item) => pattern.test(item.name)), message });
