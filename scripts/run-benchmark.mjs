@@ -84,8 +84,21 @@ const execFileAsync = promisify(execFile);
 // restate the gate count. Print the live figure from the budget group instead.
 // An unnamed tier would be the defect this skill tells everyone else to fix: a capability with no
 // entry point in the artifact that routes to it, reachable only by someone who already knew.
+// 1.25 -> 1.5 on 2026-10-08, the third raise and the first made in the OTHER skill's favour: the user
+// is running this file through darwin-skill, whose remaining queue is the two dimensions that need
+// net-new prose rather than rewording. Measured trigger: SKILL.md sat at 12829/12862 — 33 bytes of
+// runway — and the last four keeps all came in under that ceiling by deleting redundancy, which is
+// not a strategy that survives more than one pass. 1.5 is also where `multiplierSane` already draws
+// its line and what a plain 150%-ceiling rule would ask for, so this lands ON the existing guard
+// rather than past it.
+//
+// Recorded at the same weight as the 09-23 raise because it is the same kind of move. What this
+// spends is restraint, and the compensating control is the one written above it: the multiplier is
+// the number a user decision moves, so the next raise costs a decision, not a round. Note what this
+// is NOT — it is not the gate being quietly relaxed by an optimisation pass. It is the gate being
+// relaxed, loudly, with the direction of the trade named.
 const SKILL_MD_BASELINE_BYTES = 10290;
-const SKILL_MD_GROWTH = 1.25; // widened from 1.15 by user decision, 2026-09-23
+const SKILL_MD_GROWTH = 1.5; // 1.25 -> 1.5 by user decision, 2026-10-08
 const SKILL_MD_MAX_BYTES = Math.floor(SKILL_MD_BASELINE_BYTES * SKILL_MD_GROWTH);
 
 // The generated instruction file gets the same treatment, for the same reason and with more at
