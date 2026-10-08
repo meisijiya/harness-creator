@@ -1,7 +1,10 @@
 #!/usr/bin/env node
+import { execFile as execFileCallback } from 'node:child_process';
 import { chmod, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import {
+  appendVerificationCheck,
   copyTemplate,
   detectAgentFile,
   detectPackageManager,
@@ -10,6 +13,7 @@ import {
   exists,
   initScriptFromCommands,
   isPlaceholderVerification,
+  lineCount,
   parseArgs,
   readText,
   replaceBlueprintSlot,
@@ -19,10 +23,11 @@ import {
   writeText
 } from './lib/harness-utils.mjs';
 
+const execFileAsync = promisify(execFileCallback);
 const args = parseArgs(process.argv.slice(2));
 
 if (args.help) {
-  console.log(`Usage: ${scriptCommand('create-harness.mjs')} [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--blueprint "WHAT THIS PROJECT IS"] [--commands "a,b"] [--no-verification] [--force] [--dry-run]
+  console.log(`Usage: ${scriptCommand('create-harness.mjs')} [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--blueprint "WHAT THIS PROJECT IS"] [--commands "a,b"] [--add-check "cmd"] [--no-verification] [--force] [--dry-run]
 
 Creates a minimal production harness — the three subsystems this skill owns, no more:
   AGENTS.md or CLAUDE.md (an existing CLAUDE.md is kept and preferred)
@@ -75,6 +80,18 @@ A comma inside a command has to be quoted, or it would separate rather than belo
 "bash -c 'echo a,b'" is ONE command. An unterminated quote is refused with a non-zero exit and
 nothing created, rather than split into steps that no longer check anything.
 
+--add-check grows a gate instead of creating one: --add-check "npm run e2e" appends that check
+to the region between the RAN=0 counter and the refusal that reads it, and never touches a step
+already there. A harness should gain one check per new capability and lose none, so this is the
+only edit a re-run can make to an existing init.sh, and there is no --force analogue for it: there
+is nothing here to overwrite. Naming a check the gate already runs is reported and exits 0 with
+the file byte-identical. The append is REFUSED with nothing written where there is no init.sh
+(create the harness first, no flags), where the two anchors are not each present exactly once,
+and where the command is one of this generator's own placeholders — a file whose shape is not
+recognised gets a hand edit instead of a guess, because a check in the guessed place still looks
+like a gate. The run reports the net line change, so "I added one check" is a number the reader
+can check rather than a claim.
+
 Existing files are skipped unless --force is set. --force does not overwrite a file whose content
 another skill owns; it only lifts the skip on this skill's own artifacts.`);
   process.exit(0);
@@ -116,8 +133,11 @@ project.packageManager = detectPackageManager(target, args.packageManager);
 // which is not a check at all — a gate silently rewritten into something that cannot fail, which is
 // the silent degradation this skill exists to forbid. The split is now quote-aware, and an
 // unterminated quote is refused instead of guessed at, because guessing is what produced the split.
-// Quoting is the only escape; there is no backslash form to remember.
-function splitCommandList(raw) {
+// Quoting is the only escape; there is no backslash form to remember. The label is a parameter
+// because --add-check splits through the same function and would otherwise be told its error
+// happened in --commands — a wrong file name in a refusal is the kind of small wrongness that
+// teaches a reader to stop reading refusals.
+function splitCommandList(raw, label = '--commands') {
   const parts = [];
   let current = '';
   let quote = null;
@@ -135,7 +155,7 @@ function splitCommandList(raw) {
       current += char;
     }
   }
-  if (quote) return { error: `unterminated ${quote} in --commands` };
+  if (quote) return { error: `unterminated ${quote} in ${label}` };
   parts.push(current);
   return { commands: parts.map((part) => part.trim()).filter(Boolean) };
 }
@@ -183,6 +203,244 @@ if (commandSplit.error) {
   process.exit(1);
 }
 const commands = commandSplit.commands;
+
+// --add-check GROWS a gate that already exists, so it is a mode of its own rather than a fifth
+// thing the create flow does on the way past. A run that appended one check and also wrote
+// AGENTS.md would carry two unrelated edits behind one flag, and the refusals below could no longer
+// honestly say "nothing was written". It is entered before any artifact is created, and it touches
+// init.sh and nothing else — no other file this script writes has a region worth growing into.
+if (args.addCheck !== undefined) {
+  const addCheckHonoured = new Set(['addCheck', 'dryRun', 'target']);
+  const addCheckConflicts = Object.keys(args)
+    .filter((key) => key !== '_' && !addCheckHonoured.has(key));
+  if (addCheckConflicts.length > 0) {
+    const names = addCheckConflicts.map((key) => `--${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`);
+    console.error(`REFUSED: --add-check cannot be combined with ${names.join(', ')}.`);
+    console.error('This mode appends one check to an init.sh that already exists and creates nothing');
+    console.error('elsewhere. Taking a second flag and quietly not honouring it would report an edit');
+    console.error('that did not happen, which is the shape of failure this script refuses elsewhere.');
+    console.error(dryRun
+      ? 'Nothing would be created: the run described above is the run that would refuse.'
+      : 'Nothing was created.');
+    process.exit(1);
+  }
+
+  const addPath = path.join(target, 'init.sh');
+  if (!await exists(addPath)) {
+    console.error(`REFUSED: --add-check, but there is no ${addPath} to add to.`);
+    console.error('A check has to join a gate that exists, because the gate is what decides whether a');
+    console.error('feature may be called done. Create the harness first, with no flags, then re-run this');
+    console.error('command to grow it:');
+    console.error(`  ${scriptCommand('create-harness.mjs')} --target "${target}" --commands "npm test"`);
+    console.error(dryRun
+      ? 'Nothing would be created: the run described above is the run that would refuse.'
+      : 'Nothing was created.');
+    process.exit(1);
+  }
+
+  const addSplit = splitCommandList(String(args.addCheck), '--add-check');
+  if (addSplit.error) {
+    console.error(`REFUSED: ${addSplit.error}.`);
+    console.error('--add-check takes one check per entry and separates entries with commas, so a comma');
+    console.error('inside a check must be quoted: --add-check "bash -c \'echo a,b\'" is ONE check.');
+    console.error('Splitting it would append a fragment that checks nothing. Nothing was written.');
+    process.exit(1);
+  }
+
+  // renderVerificationStep turns a placeholder into a step that exits 1, which is exactly right
+  // when the GENERATOR emits one — a blank repo must not collect a pass. Appended by a user it
+  // would freeze the gate red on a line nobody could have meant to keep, so it is refused by name
+  // here rather than left to fail later. Same reasoning as the waiver, opposite direction: that one
+  // refuses a gate that cannot fail, this one refuses a gate that cannot pass.
+  const addPlaceholders = addSplit.commands.filter(isPlaceholderVerification);
+  if (addPlaceholders.length > 0) {
+    console.error('REFUSED: --add-check, but these are this generator\'s own placeholders, not checks:');
+    for (const command of addPlaceholders) console.error(`  - ${command}`);
+    console.error('Appended to a live gate, a placeholder would make ./init.sh exit 1 forever. Add the');
+    console.error('real command this repository can run instead.');
+    console.error('Nothing was written.');
+    process.exit(1);
+  }
+
+  const original = await readText(addPath);
+
+  let script = original;
+  const appended = [];
+  const present = [];
+  for (const command of addSplit.commands) {
+    const step = appendVerificationCheck(script, command);
+    if (step.status === 'refused') {
+      console.error(`REFUSED: --add-check "${command}" — ${step.reason}.`);
+      console.error('The check region is the span between the RAN=0 counter and the refusal that reads');
+      console.error('it. A file without that exact shape is one this script did not generate, or one');
+      console.error('restructured by hand since; appending into it would be a guess about where a check');
+      console.error('belongs, and a check in the wrong place still looks like a gate. Nothing was written.');
+      process.exit(1);
+    }
+    if (step.status === 'duplicate') {
+      present.push(step);
+      continue;
+    }
+    script = step.script;
+    appended.push(step);
+  }
+
+  // Behaviour, not position: whether the grown gate actually RUNS the new check is answered by
+  // running it, because the answer is not derivable from the anchors. A check inside a dead branch
+  // still parses, still exits 0 and still looks like coverage — and templates/init.sh nests its
+  // counter inside `if [ -f package.json ]`, so a Python repo appending to that gate gets a check
+  // no code path ever reaches, reported as a check that was added.
+  //
+  // `bash` on PATH is not necessarily a shell that can run this project's gate. On Windows the name
+  // often resolves to the WSL bridge, which cannot see the Windows drive: it runs ./init.sh, prints
+  // that script's own opening banner, and then dies on the first real command with "npm: command not
+  // found" and exit 127. So neither "did it start?" nor "did it print the banner?" separates the two —
+  // the failing shell reproduces both. What only a shell that can actually execute this gate produces
+  // is the TAIL of a run that got past every command. Asking for the closing banner is what turns "a
+  // shell exists" into "a shell that can execute this gate".
+  const SHELL_CANDIDATES = [
+    process.env.HARNESS_BASH,
+    'bash',
+    'C:/Program Files/Git/bin/bash.exe',
+    'C:/Program Files/Git/usr/bin/bash.exe'
+  ].filter(Boolean);
+  const GATE_COMPLETION = '=== Verification Complete ===';
+  const runGateWith = async (shell) => {
+    try {
+      const { stdout } = await execFileAsync(shell, ['./init.sh'], { cwd: target, timeout: 300000 });
+      return { ok: true, stdout };
+    } catch (error) {
+      if (error.code === 'ENOENT') return { ok: false, unavailable: true, stdout: '' };
+      return { ok: false, stdout: `${error.stdout || ''}${error.stderr || ''}` };
+    }
+  };
+  let shell = null;
+  let anyShellRan = false;
+  for (const candidate of SHELL_CANDIDATES) {
+    const probe = await runGateWith(candidate);
+    if (!probe.unavailable) anyShellRan = true;
+    if (!probe.unavailable && probe.stdout.includes(GATE_COMPLETION)) { shell = candidate; break; }
+  }
+
+  // Unable to run the gate is indistinguishable from a check that does not run, and silence is the
+  // one answer this must not give. Refuse with the reason and the way out rather than append on
+  // trust: this is the branch where a wrong "ADDED" ships a regression net with a hole in it.
+  //
+  // The message names which of the two happened rather than a vague "could not verify", because the
+  // two need opposite fixes. No shell at all is an environment problem. A shell that started the gate
+  // but never reached the completion banner is a RED GATE — usually this repo's own placeholder
+  // step, which is correct on a fresh skeleton — and telling someone to install bash would send them
+  // off to fix something that is already fine.
+  if (!dryRun && appended.length > 0 && !shell) {
+    console.error('REFUSED: --add-check could not confirm the grown gate actually runs the new check.');
+    if (!anyShellRan) {
+      console.error(`No usable shell was found (tried: ${SHELL_CANDIDATES.join(', ')}).`);
+      console.error('Install a POSIX shell (Git Bash or WSL), or point HARNESS_BASH at one, and re-run.');
+    } else {
+      console.error('A shell ran ./init.sh, but the gate never reached its completion line — it is red');
+      console.error('before and after this change. Growing a gate that is already failing would report');
+      console.error('coverage nobody can confirm, so fix the baseline first, then re-run this command.');
+    }
+    console.error('Appending on trust is how a check lands in a branch the gate never takes and is still');
+    console.error('reported as coverage. Or add the check by hand to the branch ./init.sh actually takes.');
+    console.error('Nothing was written.');
+    process.exit(1);
+  }
+
+  // The baseline run is what keeps a red gate from being read as "the appended step did not run":
+  // a gate that already fails is a broken project, not a rejected append. Requiring the command to
+  // appear in the SECOND run and be absent from the first is what stops another step's echo from
+  // making the confirmation pass by accident.
+  const baseline = shell ? await runGateWith(shell) : { ok: false, unavailable: true, stdout: '' };
+
+  // Written once, after every check has been accepted: a refusal halfway down the list would
+  // otherwise leave the earlier ones on disk, and "nothing was written" has to be true of the file
+  // as well as of the message. The mode is chmod 0o755, never set — writeFile keeps the existing
+  // file's mode, and a growth pass has no business changing permissions it did not choose.
+  if (!dryRun && appended.length > 0) await writeText(addPath, script);
+
+  // The one thing a grown gate cannot be asked about afterwards is whether its new checks run, so
+  // the growth pass answers it while the answer is still undoable.
+  //
+  // Step one is `bash -n`, a parse with no execution, and it is not an optimisation — it closes the
+  // hole the banner test below cannot. A command like `npm test (unit)` renders a line the shell
+  // cannot parse; the gate prints the step's banner and then dies on the syntax error, so "the banner
+  // appeared" and "the check ran" are the same observation. Measured: the tool reported ADDED and
+  // exit 0 on a gate that had gone from exit 0 to exit 2 with the check never executed. Parsing first
+  // settles that whole class deterministically, and a syntax error is never a legitimate gate.
+  const notRun = [];
+  if (!dryRun && appended.length > 0) {
+    let syntaxOk = true;
+    try {
+      await execFileAsync(shell, ['-n', './init.sh'], { cwd: target, timeout: 60000 });
+    } catch {
+      syntaxOk = false;
+    }
+    if (!syntaxOk) {
+      await writeText(addPath, original);
+      console.error('REFUSED: --add-check, and the appended check does not parse as shell.');
+      for (const entry of appended) console.error(`  - ${entry.command}`);
+      console.error('The file has been put back byte for byte. A check the shell cannot parse is not a');
+      console.error('check: the gate would fail on the line itself, before running anything. Quote the');
+      console.error('command if it needs spaces or shell metacharacters, e.g.');
+      console.error(`  --add-check "bash -c 'go test ./pkg/...'"`);
+      process.exit(1);
+    }
+
+    // Step two is the run. A check proves it ran by the gate reaching PAST it, and the banner alone
+    // only proves the gate ENTERED it — so the evidence is the banner plus the gate still reaching
+    // its completion line afterwards. Requiring the banner to be absent from the baseline run keeps
+    // another step's banner from standing in for this one.
+    const grown = await runGateWith(shell);
+    for (const entry of appended) {
+      const needle = `=== ${entry.command.trim()} ===`;
+      if (!grown.stdout.includes(needle) || baseline.stdout.includes(needle)) notRun.push(entry.command);
+    }
+    // Entering a step is not finishing it. A check that runs and FAILS leaves its banner in the
+    // output too, so on its own this test would call a broken gate a successful append — the mirror
+    // of the false pass above. The gate must reach its completion line after the append, and it did
+    // before it, so a check that cannot pass is refused rather than added on a technicality.
+    if (notRun.length === 0 && !grown.stdout.includes(GATE_COMPLETION)) {
+      for (const entry of appended) notRun.push(`${entry.command}  (the gate fails once this check is in)`);
+    }
+    if (notRun.length > 0) {
+      await writeText(addPath, original);
+      console.error('REFUSED: --add-check, and the gate does not actually pass with what was appended:');
+      for (const entry of notRun) console.error(`  - ${entry.command}`);
+      console.error('The file has been put back byte for byte. A check that never runs is not coverage,');
+      console.error('and neither is one that turns the gate red on the spot: both would be reported as');
+      console.error('a regression net that is not one. Fix the check until it passes, then add it.');
+      console.error('Or add it by hand to the branch ./init.sh actually takes, or regenerate the gate:');
+      console.error(`  ${scriptCommand('create-harness.mjs')} --target "${target}" --commands "..."`);
+      process.exit(1);
+    }
+  }
+
+  if (dryRun) {
+    console.log(`DRY RUN — no files were written. Plan for ${target}:`);
+  } else if (appended.length > 0) {
+    console.log(`Grew the gate in ${path.relative(target, addPath)}`);
+  } else {
+    console.log(`${path.relative(target, addPath)} already runs every check you named.`);
+  }
+  for (const entry of appended) {
+    console.log(`${dryRun ? 'WOULD ADD' : 'ADDED'}  ${entry.command}`);
+    for (const line of entry.step.split('\n')) console.log(`    ${line}`);
+  }
+  for (const entry of present) {
+    console.log(`ALREADY PRESENT  ${entry.command}  (not added again, file unchanged)`);
+  }
+  // The net change is reported whether or not anything was appended, so "one check, no more" is a
+  // number the reader can check rather than a claim. Removed is a structural zero — this path
+  // deletes nothing — so it is stated instead of computed; a computed second number would be a
+  // second copy of the guarantee that has to hold.
+  const delta = lineCount(script) - lineCount(original);
+  console.log(`  lines ${lineCount(original)} -> ${lineCount(script)}  (net +${delta} added / 0 removed)`);
+  if (appended.length > 0) {
+    console.log('  The gate only grows: no existing check is removed or reordered by this command.');
+  }
+  process.exit(0);
+}
 
 // One template, no branches. A second template had existed for a "plain" tier, chosen by a flag,
 // and the two files could drift while the self-check asserted they matched; both halves of that

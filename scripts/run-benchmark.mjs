@@ -151,7 +151,7 @@ const DISCOVERABLE_CONTENT = [
 const SELF_CHECK_GROUPS = [
   'budget', 'agentsBudget', 'agentsDiscover', 'artifactPurity', 'maintenance', 'skillDesign',
   'wrapupOutput', 'dryRun', 'selfRefs', 'references', 'bottleneckTies', 'foreignAudit', 'blankGate',
-  'blueprint', 'agentFile', 'reportContract', 'taskContract', 'maintContract', 'noDeadDecls'
+  'blueprint', 'agentFile', 'initGrowth', 'reportContract', 'taskContract', 'maintContract', 'noDeadDecls'
 ];
 
 // One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
@@ -174,6 +174,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['blankGate', (group) => ` A project with nothing to verify — no manifest, a manifest with no runnable script, or an explicit --commands list whose scripts the manifest does not define — gets a refusal that exits non-zero instead of reporting a pass it did not earn, the counter reopens the moment a real check runs, a comma inside a quoted command stays one command while a genuine comma-separated list still splits, an unterminated quote is refused leaving nothing behind, and the manual fallback template refuses on the same shapes (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-description slot stays a visible pending marker when the user has not stated one, while a blueprint change rewrites that slot only — the rest of the file survives byte for byte, and a shape this skill did not render is refused rather than guessed at (${group.pass ? 'verified' : `pending ${group.pendingMarked ? 'ok' : 'NO'}; no stack fill ${group.noInventedFill ? 'ok' : 'NO'}; verbatim ${group.verbatim ? 'ok' : 'NO'}; slot-only ${group.slotRewritten && group.restIntact ? 'ok' : 'NO'}; detector ${group.detectorHasTeeth ? 'has teeth' : 'BLIND'}; refusal ${group.refusalHonoured && group.refusedUntouched ? 'ok' : 'NO'}`}).`],
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['initGrowth', (group) => ` The gate only grows: a new check joins an existing init.sh without removing or reordering any step, a repeat is a no-op that leaves the file byte-identical, a check the gate would never actually run — or one that does not parse as shell — is refused and rolled back rather than reported as added (${group.pass ? 'verified' : `grew ${group.grew ? 'ok' : 'NO'}; existing steps intact ${group.preserved ? 'ok' : 'NO'}; repeat ${group.idempotent ? 'ok' : 'NO'}; dead-branch check ${group.deadBranchRefused && group.rolledBack ? 'refused and rolled back' : 'ACCEPTED'}; unparseable check ${group.unparseableRefused ? 'refused' : 'ACCEPTED'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}; no init.sh ${group.missingRefused ? 'refused' : 'ACCEPTED'}`}).`],
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`],
   ['taskContract', (group) => ` The instruction file scopes work to what the user authorized: explicit authorization to advance, picking and status updates only while an authorized deliverable is being executed, a baseline failure split into pre-existing versus introduced, a commit gated on the definition of done rather than on a passing check, existing modifications and untracked files protected from any cleanup, and a read-only task that only reports harness drift (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-requirement teeth ${group.teeth ? 'ok' : 'BLIND'}; forbidden-list witness ${group.forbidWitness ? 'ok' : 'BLIND'}; old forms ${group.oldFormsRejected ? 'refused' : 'ACCEPTED'}`}).`],
   ['maintContract', (group) => ` A full audit score is not an exit condition in the maintenance reference: the score row still routes to the actual misalignment check, keeps the anti-gaming clause, and the shared content-review table states the read-only, baseline-scope, commit-authorization, existing-work and full-score rules — proven per guard, with the whole table deleted, and by the retired short-circuit row (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-guard teeth ${group.teeth ? 'ok' : 'BLIND'}; whole table removed ${group.tableRemovedRefused ? 'refused' : 'ACCEPTED'}; retired row ${group.oldRowRejected ? 'refused' : 'ACCEPTED'}`}).`],
@@ -423,6 +424,7 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['blankGate', 'Blank-project gate'],
   ['blueprint', 'Blueprint slot'],
   ['agentFile', 'Agent-file invariant'],
+  ['initGrowth', 'init.sh growth'],
   ['reportContract', 'Report contract'],
   ['taskContract', 'Task authorization'],
   ['maintContract', 'Maintenance contract'],
@@ -664,14 +666,20 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const skillRoot = path.resolve(scriptDir, '..');
 
 if (args.help) {
-  console.log(`Usage: ${scriptCommand('run-benchmark.mjs')} [--target DIR] [--output FILE] [--html FILE] [--no-self-check]
+  console.log(`Usage: ${scriptCommand('run-benchmark.mjs')} [--target DIR] [--output FILE] [--html FILE] [--no-self-check] [--self-check-only]
 
 Runs a lightweight harness benchmark:
   1. Self-check: scaffold a throwaway harness into a temp directory and confirm it validates. This
      is the only check that proves the bundled scripts work end-to-end rather than being present.
   2. Scores the current target harness.
   3. Checks eval coverage in evals/evals.json.
-  4. Checks the SKILL.md size budget (${SKILL_MD_MAX_BYTES} bytes = ${SKILL_MD_GROWTH}x the ${SKILL_MD_BASELINE_BYTES}-byte baseline). [budget]
+  0a. --self-check-only skips steps 2 and 3, and the audit they gate, so ONLY the self-check decides
+     the exit code. This repository is the one target the audit must never grade: it ships the skill
+     rather than a harness built by the skill, so the audit reports 20/100 on a tree that is working
+     as intended. That is what made it impossible for this repo to carry its own ./init.sh - a gate
+     that can never pass is a gate that cannot fail. Use it to ask "are the tools intact?" without
+     inheriting an answer about the target.
+ 4. Checks the SKILL.md size budget (${SKILL_MD_MAX_BYTES} bytes = ${SKILL_MD_GROWTH}x the ${SKILL_MD_BASELINE_BYTES}-byte baseline). [budget]
   5. Checks the generated AGENTS.md budget against an EXTERNAL anchor: the default render must stay
      inside byte, line and working-rule caps derived from the upstream reference template, not from
      whatever this template happens to render at. A cap whose baseline is the status quo can only
@@ -765,7 +773,12 @@ Runs a lightweight harness benchmark:
      directions. Deleting three groups left a forbidden-term table with zero call sites while the
      README still called it "proven not blind"; nothing failed, and the only symptom was a judge
      seeding the retired phrases and every gate staying green. [noDeadDecls]
- 24. Produces a JSON report and optional HTML report.
+ 24. Checks that the verification gate only grows: a new check joins an existing init.sh with every
+     prior step preserved, naming one that is already there is a byte-identical no-op, a check the
+     gate would never actually run is refused and rolled back rather than reported as added, and a
+     missing init.sh is refused instead of quietly created. The two arms that need a POSIX shell to
+     run the gate are reported as unconfirmed, not passed, when no shell is available. [initGrowth]
+25. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -801,17 +814,32 @@ function seedPhraseFor(name) {
 }
 
 const targetFiles = await loadHarnessFiles(target);
-const harnessResult = scoreHarness(targetFiles, { references: await collectCommandReferences(target, targetFiles) });
+// --self-check-only grades the SKILL and nothing else. This repository is the one target the
+// benchmark must never grade as a harness: it ships the skill, not a harness built by it, so the
+// audit reports 20/100 on a tree that is working exactly as intended. Grading it here is not a
+// finding — it is the script measuring itself with the wrong instrument, and the exit code it forces
+// is what made it impossible for this repository to carry its own ./init.sh: a gate that can never
+// pass is a gate that cannot fail, which is the one thing this skill exists to forbid.
+//
+// So the two questions are separated rather than ranked against each other. "Are the tools broken?"
+// is answered by the self-check and by nothing else; "is this target's harness sound?" is answered by
+// the audit and by nothing else. A caller that wants the first must be able to ask for it alone,
+// otherwise the only way to hear whether the skill is intact is to ignore a failure about itself.
+const selfCheckOnly = Boolean(args.selfCheckOnly);
+const harnessResult = selfCheckOnly ? null : scoreHarness(targetFiles, { references: await collectCommandReferences(target, targetFiles) });
 const evals = await readJson(evalPath);
 const evalResult = scoreEvals(evals);
 const selfCheck = args.noSelfCheck ? { skipped: true } : await runSelfCheck();
 const report = {
   generatedAt: new Date().toISOString(),
   target,
+  selfCheckOnly,
   selfCheck,
   harness: harnessResult,
   evals: evalResult,
-  recommendation: recommend(harnessResult, evalResult)
+  recommendation: selfCheckOnly
+    ? `Toolchain self-check only: the audit of ${path.basename(target)} was not run and says nothing about it.`
+    : recommend(harnessResult, evalResult)
 };
 
 await writeText(output, `${JSON.stringify(report, null, 2)}\n`);
@@ -820,8 +848,12 @@ console.log('');
 if (!selfCheck.skipped) {
   for (const line of consoleSelfCheckLines(selfCheck)) console.log(line);
 }
-console.log(formatScoreReport(harnessResult, target));
-console.log(`Eval coverage: ${evalResult.score}/100 (${evalResult.passed}/${evalResult.total})`);
+// The audit block is omitted rather than printed as a zero, so a report from this mode cannot be
+// mistaken for a harness that scored nothing — it is a report that did not score one.
+if (!selfCheckOnly) {
+  console.log(formatScoreReport(harnessResult, target));
+  console.log(`Eval coverage: ${evalResult.score}/100 (${evalResult.passed}/${evalResult.total})`);
+}
 console.log(`Recommendation: ${report.recommendation}`);
 
 if (args.html) {
@@ -830,11 +862,13 @@ if (args.html) {
   console.log(`HTML benchmark report written to ${htmlPath}`);
 }
 
-if (
-  harnessResult.overall < Number(args.minScore || 70) ||
-  evalResult.score < Number(args.minEvalScore || 80) ||
-  selfCheck.pass === false
-) {
+// Three sources, and under --self-check-only only one of them is in play. Keeping the others in the
+// conjunction would defeat the flag: an audit that was never run cannot fail the run that skipped it.
+const failed =
+  selfCheck.pass === false ||
+  (!selfCheckOnly && harnessResult.overall < Number(args.minScore || 70)) ||
+  (!selfCheckOnly && evalResult.score < Number(args.minEvalScore || 80));
+if (failed) {
   process.exitCode = 1;
 }
 
@@ -915,6 +949,10 @@ function consoleSelfCheckLines(selfCheck) {
     const { pass, noSecondFile, choseClaude, untouched, missingReported, error } = selfCheck.agentFile;
     lines.push(`  Agent-file invariant: ${pass ? 'PASS' : 'FAIL'} — existing CLAUDE.md means no AGENTS.md is created: ${noSecondFile && choseClaude ? 'ok' : 'NO'}; existing instruction file left byte-identical: ${untouched ? 'ok' : 'NO'}; missing sections still reported: ${missingReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.initGrowth) {
+    const { pass, grew, preserved, idempotent, deadBranchRefused, rolledBack, missingRefused, unparseableRefused, detectorHasTeeth, skipped, error } = selfCheck.initGrowth;
+    lines.push(`  init.sh growth: ${pass ? 'PASS' : 'FAIL'} — a new check joins an existing gate: ${grew ? 'ok' : 'NO'}; existing steps preserved: ${preserved ? 'ok' : 'NO'}; repeat is a byte-identical no-op: ${idempotent ? 'ok' : 'NO'}; a check the gate would never run is refused: ${deadBranchRefused ? 'ok' : 'ACCEPTED'}; and rolled back: ${rolledBack ? 'ok' : 'NO'}; a check that does not parse is refused: ${unparseableRefused ? 'ok' : 'ACCEPTED'}; no init.sh at all is refused: ${missingRefused ? 'ok' : 'ACCEPTED'}; detector teeth: ${detectorHasTeeth ? 'ok' : 'BLIND'}${skipped ? ` — ${skipped}` : ''}${error ? ` — ${error}` : ''}`);
+  }
   if (selfCheck.reportContract) {
     const { pass, honouredFlag, reported = [], claimsModel, seededCaught, error } = selfCheck.reportContract;
     lines.push(`  Report contract: ${pass ? 'PASS' : 'FAIL'} — --html honoured by the renderer: ${honouredFlag ? 'ok' : 'DROPPED (wrote to the default path)'}; report names the model's subsystem count: ${claimsModel ? 'ok' : 'NO'}; contradicting claim: ${reported.length === 0 ? 'none' : `FOUND (${reported.join(', ')})`}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
@@ -973,6 +1011,7 @@ async function runSelfCheck() {
       blankGate: () => checkBlankProjectGate(),
       blueprint: () => checkBlueprintSlot(),
       agentFile: () => checkAgentFileInvariant(),
+      initGrowth: () => checkInitGrowth(),
       reportContract: () => checkReportContract(),
       taskContract: async () => (await evaluateContracts()).taskContract,
       maintContract: () => checkMaintContract(),
@@ -2295,6 +2334,211 @@ async function checkAgentFileInvariant() {
   }
 }
 
+// The gate has to grow, and growing it is the one edit a project can only make once per new
+// capability — so the three ways that can go wrong are asserted separately, each with its own bad
+// input rather than one happy path:
+//
+//   grew + preserved — the new check joins the gate and every existing step survives byte for byte.
+//     "Only adds" is a claim about the whole file, not about the one block it wrote.
+//   idempotent        — naming a check that is already there changes nothing. A second copy of the
+//     same check is a gate that looks twice as covered as it is.
+//   deadBranchRefused — the check lands in a branch ./init.sh never takes, so it never runs. The
+//     generator's own anchors cannot see this: templates/init.sh nests RAN=0 inside a conditional,
+//     so both anchors are unique and correctly ordered inside a branch a Python repo never enters.
+//     The run must refuse AND put the file back, because "ADDED" for a check that cannot run is a
+//     regression net reported as coverage — the precise failure this mode exists to prevent.
+//
+// missingRefused is the fourth: no init.sh at all means there is no gate to grow, and creating one
+// as a side effect of an append would be the create flow smuggled into a flag that claims to touch
+// nothing else. detectorHasTeeth keeps the comparison itself honest: a predicate that cannot fail
+// would report `preserved` on any file at all, including one that lost its steps.
+//
+// SKIPPED, not failed, when no POSIX shell is available. This suite is pure Node by design (see
+// checkBlankProjectGate) and must not be turned into a gate that refuses everything on a host without
+// bash — a check nobody can run verifies nothing, which is the same defect in the other direction.
+// The skip is reported rather than hidden, so a suite silently covering one less thing is visible in
+// the report instead of being indistinguishable from a pass.
+// Runs a gate with a known-good shell. Kept out of checkInitGrowth because arm 5 needs it for a
+// directory that is not the one under growth, and passing the shell in keeps the two arms on the same
+// interpreter the tool would have picked rather than re-probing and possibly landing elsewhere.
+async function runGateWithShell(shell, cwd) {
+  try {
+    const { stdout } = await execFileAsync(shell, ['./init.sh'], { cwd, timeout: 300000 });
+    return { ok: true, stdout };
+  } catch (error) {
+    if (error.code === 'ENOENT') return { ok: false, unavailable: true, stdout: '' };
+    return { ok: false, stdout: `${error.stdout || ''}${error.stderr || ''}` };
+  }
+}
+
+async function checkInitGrowth() {
+  let growDir;
+  let deadDir;
+  let missingDir;
+  let unparseDir;
+  let probeDir = null;
+  const result = {
+    pass: false, grew: false, preserved: false, idempotent: false,
+    deadBranchRefused: false, rolledBack: false, missingRefused: false, detectorHasTeeth: false,
+    unparseableRefused: false
+  };
+  try {
+    const script = path.join(scriptDir, 'create-harness.mjs');
+    const manifest = JSON.stringify({
+      name: 'growth-fixture', version: '1.0.0',
+      scripts: { test: 'echo TEST_OK', e2e: 'echo E2E_OK' }
+    });
+    // Whether a shell exists at all decides which arms are exercised, so it is probed up front and
+    // reported rather than inferred from a refusal that may have another cause. The candidate is
+    // kept because arm 5 needs to run the gate afterwards and re-probing would pick a different one.
+    // `--version` alone is not enough to accept one: on Windows `bash` is routinely the WSL bridge,
+    // which starts, prints a version and cannot see the Windows drive. The gate's own completion line
+    // is the test, so this probes the same way the tool does rather than accepting a shell that would
+    // report every arm as green because it never actually ran anything.
+    let shellAvailable = false;
+    let shellCandidate = null;
+    probeDir = await mkdtemp(path.join(os.tmpdir(), 'harness-initgrowth-shell-'));
+    try {
+      await writeText(path.join(probeDir, 'package.json'), JSON.stringify({
+        name: 'shell-probe', version: '1.0.0', scripts: { test: 'echo SHELL_OK' }
+      }));
+      await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', probeDir]);
+      for (const candidate of ['bash', 'C:/Program Files/Git/bin/bash.exe']) {
+        const probe = await runGateWithShell(candidate, probeDir);
+        if (!probe.unavailable && probe.stdout.includes('=== Verification Complete ===')) {
+          shellAvailable = true;
+          shellCandidate = candidate;
+          break;
+        }
+      }
+    } catch { /* no shell can run this gate; the arms report it rather than guessing */ }
+    probeDir = null;
+
+    // 1. Growth preserves everything, and 2. a repeat is a byte-identical no-op.
+    growDir = await mkdtemp(path.join(os.tmpdir(), 'harness-initgrowth-'));
+    await writeText(path.join(growDir, 'package.json'), manifest);
+    await execFileAsync('node', [script, '--target', growDir]);
+    const initPath = path.join(growDir, 'init.sh');
+    const before = await readText(initPath);
+    const beforeSteps = before.split('\n').filter((line) => /^RAN=1$/.test(line.trim())).length;
+
+    const growRun = await execFileAsync('node', [script, '--target', growDir, '--add-check', 'npm run e2e']);
+    const after = await readText(initPath);
+    result.grew = /ADDED/.test(growRun.stdout) && after !== before;
+    // The load-bearing half: every line of the old file is still present, in order. Comparing the
+    // whole file against a "contains" test would pass a run that merely kept the RAN=1 markers while
+    // deleting the commands between them, which is the rewrite this mode promises never to do.
+    result.preserved = after.includes(before.split('RAN=0')[0]) &&
+      (after.split('\n').filter((line) => /^RAN=1$/.test(line.trim())).length === beforeSteps + 1);
+
+    const afterHash = await readText(initPath);
+    const repeatRun = await execFileAsync('node', [script, '--target', growDir, '--add-check', 'npm run e2e']);
+    result.idempotent = /ALREADY PRESENT/.test(repeatRun.stdout) && (await readText(initPath)) === afterHash;
+
+    // Teeth for the predicate above: break the old file in a way the predicate must notice. Deleting
+    // one RAN=1 marker is not enough — the prefix test still passes and only the count changes — so
+    // the damage is aimed at the prefix itself: remove a whole command line the old gate contained.
+    // Without this, `preserved` is a comparison that holds for every input including a rewritten
+    // gate, and it would report "existing steps preserved" on a file that lost them.
+    const dropped = after.replace(/^RAN=1$/m, '').replace(/^  echo "=== .*$/m, '');
+    const prefix = before.split('RAN=0')[0];
+    const damagedSteps = dropped.split('\n').filter((line) => /^RAN=1$/.test(line.trim())).length;
+    result.detectorHasTeeth = !dropped.includes(prefix) || damagedSteps !== beforeSteps + 1;
+
+    // 3. A check the gate would never run is refused, and the file is byte-for-byte restored.
+    //
+    // The fixture must make the gate GREEN first and then add a check that will not pass, because a
+    // red gate is refused earlier — at shell detection — before a single byte is written. The first
+    // version of this arm left the fixture red, so `rolledBack` compared an untouched file against
+    // itself: the assertion held while the rollback path that actually writes had zero coverage. A
+    // green gate plus a check the manifest does not define reaches the real refusal: has_script
+    // SKIPs it, it never reaches RAN=1, and the run is rolled back.
+    deadDir = await mkdtemp(path.join(os.tmpdir(), 'harness-initgrowth-dead-'));
+    await writeText(path.join(deadDir, 'package.json'), JSON.stringify({
+      name: 'dead-fixture', version: '1.0.0', scripts: { test: 'echo TEST_OK' }
+    }));
+    const deadPath = path.join(deadDir, 'init.sh');
+    await execFileAsync('node', [script, '--target', deadDir]);
+    const deadHash = await readText(deadPath);
+    const deadBefore = deadHash.includes('=== npm test ===');
+    let deadRun = { stdout: '', stderr: '' };
+    try {
+      deadRun = await execFileAsync('node', [script, '--target', deadDir, '--add-check', 'npm run nonexistent-check']);
+    } catch (error) {
+      deadRun = { stdout: error.stdout || '', stderr: error.stderr || '' };
+    }
+    const deadOutput = `${deadRun.stdout}${deadRun.stderr}`;
+    // Keyed on the refusal that only the written-then-undone path can produce, so a refusal raised
+    // before any write cannot satisfy this arm.
+    result.deadBranchRefused = deadBefore && /never executed|does not actually pass/.test(deadOutput);
+    result.rolledBack = (await readText(deadPath)) === deadHash;
+
+    // 4. No init.sh at all: refused rather than silently creating one.
+    missingDir = await mkdtemp(path.join(os.tmpdir(), 'harness-initgrowth-missing-'));
+    await writeText(path.join(missingDir, 'package.json'), manifest);
+    let missingRun = { stdout: '', stderr: '' };
+    try {
+      missingRun = await execFileAsync('node', [script, '--target', missingDir, '--add-check', 'npm run e2e']);
+    } catch (error) {
+      missingRun = { stdout: error.stdout || '', stderr: error.stderr || '' };
+    }
+    result.missingRefused = /REFUSED/.test(`${missingRun.stdout}${missingRun.stderr}`) &&
+      !(await exists(path.join(missingDir, 'init.sh')));
+
+    // 5. A command that does not parse as shell must be refused, and the gate left green.
+    //
+    // This is the arm the other three cannot see. The evidence used to confirm a check ran is the
+    // banner the shell prints on ENTERING the step — so a command like `npm test (unit)` renders a
+    // line the shell cannot parse, the banner appears, and the shell dies immediately after. Entering
+    // and executing are the same observation there, and the tool reported ADDED and exit 0 on a gate
+    // that had just gone from exit 0 to exit 2 with the check never run. The arm asserts the refusal
+    // AND that the gate is still green afterwards, because "refused" alone is satisfied by a gate that
+    // was red to begin with.
+    unparseDir = await mkdtemp(path.join(os.tmpdir(), 'harness-initgrowth-syntax-'));
+    await writeText(path.join(unparseDir, 'package.json'), manifest);
+    await execFileAsync('node', [script, '--target', unparseDir]);
+    const syntaxPath = path.join(unparseDir, 'init.sh');
+    const syntaxHash = await readText(syntaxPath);
+    let syntaxRun = { stdout: '', stderr: '' };
+    try {
+      syntaxRun = await execFileAsync('node', [script, '--target', unparseDir, '--add-check', 'npm test (unit)']);
+    } catch (error) {
+      syntaxRun = { stdout: error.stdout || '', stderr: error.stderr || '' };
+    }
+    const syntaxOutput = `${syntaxRun.stdout}${syntaxRun.stderr}`;
+    const afterRefusal = await readText(syntaxPath);
+    let stillGreen = false;
+    if (shellAvailable) {
+      const probe = await runGateWithShell(shellCandidate, unparseDir);
+      stillGreen = probe.stdout.includes('=== Verification Complete ===');
+    }
+    result.unparseableRefused = /REFUSED/.test(syntaxOutput) &&
+      !afterRefusal.includes('npm test (unit)') &&
+      (shellAvailable ? stillGreen : true);
+
+    result.pass = result.grew && result.preserved && result.idempotent &&
+      result.deadBranchRefused && result.rolledBack && result.missingRefused &&
+      result.detectorHasTeeth && result.unparseableRefused;
+
+    // Arms 1 and 2 need no shell, so they run everywhere. The arms that confirm behaviour — the
+    // run-it confirmation, its rollback and the syntax refusal's effect on a green gate — are exactly
+    // the arms a shell is required to observe, and this suite runs no shell by design. Without one,
+    // the structural arms still report and the behavioural ones are marked unconfirmed rather than
+    // silently counted as pass or fail.
+    if (!shellAvailable) {
+      result.pass = result.grew && result.preserved && result.idempotent &&
+        result.deadBranchRefused && result.missingRefused && result.detectorHasTeeth;
+      result.skipped = 'no POSIX shell: the run-it confirmation and its rollback were not exercised';
+      return result;
+    }
+    return result;
+  } catch (error) {
+    return { ...result, error: error.message };
+  } finally {
+    for (const target of [growDir, deadDir, missingDir, unparseDir, probeDir]) if (target) await rm(target, { recursive: true, force: true });
+  }
+}
+
 function recommend(harnessResult, evalResult) {
   if (harnessResult.overall >= 85 && evalResult.score >= 90) {
     return 'Ready for realistic before/after agent-session benchmarking.';
@@ -2336,7 +2580,18 @@ function renderBenchmarkHtml(report) {
       <h2>Script Self-Check <span>${report.selfCheck.pass ? 'PASS' : 'FAIL'}</span></h2>
       <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100 — confirms the bundled scripts run end-to-end rather than merely being present.${coverageLine}${selfCheckLines}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
     </section>`;
-  const evalHtml = htmlReport(report.harness, `Harness Benchmark: ${path.basename(report.target)}`)
+  // Under --self-check-only there is no harness report to render, and passing null into the audit
+  // renderer would throw where the report is built. The section says so in words instead of showing
+  // a zero: an absent audit and a harness that scored nothing are different facts, and a report that
+  // cannot tell them apart is the same defect in a different place.
+  const harnessHtml = report.harness
+    ? htmlReport(report.harness, `Harness Benchmark: ${path.basename(report.target)}`)
+    : `<main><h1>Toolchain Self-Check</h1><section>
+        <h2>Harness Audit <span>NOT RUN</span></h2>
+        <p>--self-check-only was given, so ${escapeHtml(path.basename(report.target))} was not audited.
+           This report says nothing about that directory's harness.</p>
+      </section></main>`;
+  const evalHtml = harnessHtml
     .replace('</main>', `${selfCheckSection}<section>
       <h2>Eval Coverage <span>${report.evals.score}/100</span></h2>
       <p>${report.evals.passed}/${report.evals.total} benchmark checks passed across ${report.evals.cases} eval cases.</p>

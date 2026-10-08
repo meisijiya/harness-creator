@@ -471,6 +471,94 @@ function escapeForEcho(value) {
   return value.replaceAll('"', '\\"');
 }
 
+// Line endings are whatever the file already uses, so a CRLF checkout is counted as one line per
+// line rather than one line plus a stray carriage return. Exported because a run that appends a
+// check has to report the net change, and a second copy of this arithmetic would be a second thing
+// that can disagree with the first.
+export function lineCount(text) {
+  if (text === '') return 0;
+  const parts = String(text).split(/\r\n|\r|\n/);
+  if (parts[parts.length - 1] === '') parts.pop();
+  return parts.length;
+}
+
+// The gate only grows. A check that arrives after creation goes into the SAME region the generator
+// fills at creation time — between the RAN=0 counter and the refusal that reads it — so a grown
+// file and a regenerated one keep one shape and the counter cannot misread where a step begins.
+// Existing steps are carried over verbatim and nothing is deleted: a check this skill drops is a
+// check nobody can see disappear.
+//
+// The anchor is the exact pair of lines that bracket the region, each required exactly once and in
+// order. A file without that shape — hand-written, a --no-verification declaration, restructured
+// since — is refused rather than appended to, for the same reason replaceBlueprintSlot refuses an
+// unrecognised blueprint slot: both ways of guessing are silent. Insert too early and the step runs
+// outside the region or before RAN=0 initialises it; either way the file still parses, still exits
+// 0, and still says nothing was checked while looking exactly like a gate.
+const CHECK_REGION_OPEN = 'RAN=0';
+const CHECK_REGION_CLOSE = 'if [ "$RAN" -eq 0 ]; then';
+
+// Three outcomes rather than the {ok} pair the other editors return, because this one can also
+// succeed by doing nothing. Reporting "already there" as ok:true would be indistinguishable from a
+// write unless the caller read a second field, and a caller that forgets it writes nothing and
+// claims a check was added.
+export function appendVerificationCheck(scriptText, command) {
+  const bare = (line) => line.replace(/\r$/, '');
+  const lines = String(scriptText).split('\n');
+  const opens = [];
+  const closes = [];
+  lines.forEach((line, index) => {
+    const trimmed = bare(line).trim();
+    if (trimmed === CHECK_REGION_OPEN) opens.push(index);
+    if (trimmed === CHECK_REGION_CLOSE) closes.push(index);
+  });
+
+  if (opens.length !== 1 || closes.length !== 1) {
+    return {
+      status: 'refused',
+      reason: `expected exactly one \`${CHECK_REGION_OPEN}\` and one \`${CHECK_REGION_CLOSE}\` anchor, found ${opens.length} and ${closes.length}`
+    };
+  }
+  if (opens[0] >= closes[0]) {
+    return {
+      status: 'refused',
+      reason: `the \`${CHECK_REGION_OPEN}\` anchor is not above the \`${CHECK_REGION_CLOSE}\` one, so this is not the generated shape`
+    };
+  }
+
+  // "Already there" is decided on the command line itself, not on a rendered block: a step that
+  // has since been edited by hand still runs the same command, and reporting it as new would
+  // append a second copy of a check the gate already performs. Only a line that IS the command
+  // counts, so `npm test` never matches `npm test -- --ci` — over-adding a near-duplicate is
+  // visible, whereas silently skipping a check the user asked for is the failure being guarded.
+  const step = renderVerificationStep(String(command));
+  const region = lines.slice(opens[0] + 1, closes[0]);
+  if (region.some((line) => bare(line).trim() === String(command).trim())) {
+    return { status: 'duplicate', command: String(command) };
+  }
+
+  // Trailing blanks in the region are spacing, not a step. Dropping them is what puts the new
+  // block one blank line from the refusal either way — and whether the region is empty (a gate
+  // generated with nothing to run) or full, the result reads like the generator's own render.
+  let last = region.length;
+  while (last > 0 && bare(region[last - 1]).trim() === '') last -= 1;
+  const carriageReturn = lines.some((line) => /\r$/.test(line)) ? '\r' : '';
+  const written = [
+    ...lines.slice(0, opens[0] + 1),
+    ...region.slice(0, last),
+    ...['', ...step.split('\n'), ''].map((line) => `${line}${carriageReturn}`),
+    ...lines.slice(closes[0])
+  ].join('\n');
+
+  return {
+    status: 'added',
+    command: String(command),
+    step,
+    script: written,
+    linesBefore: lineCount(scriptText),
+    linesAfter: lineCount(written)
+  };
+}
+
 export function dedupe(values) {
   return [...new Set(values)];
 }
