@@ -44,3 +44,23 @@ SKILL.md：12848 → **12840**/12862（余 22B）。删的是重复不是内容�
 checkSpecLayer()、CONSOLE_GROUP_LABELS、pass 合取，外加 `--help` 第 25 条 `[specLayer]` 标注。
 `noDeadDecls` 实测 26 条编号 vs 21 组键，双向相等；`reportCoverage` PASS。README 已同步，
 且**未复述关卡条数**（按原文约定）。
+
+## 收口时自查抓到的一处
+`purityHeld`（规范层两份文档不具名任何外部系统，且判据被播种证明有牙）**算了但没进 pass 合取**——
+正是 `reportCoverage` 那组要抓的「算了、报了、但不参与判定」。是我自己写的那一组的同一个缺陷。
+已补进合取，并同时补上控制台行与报告行，让打印出来的字段与判定真正依赖的字段一致。补后自检 21 组
+仍全 PASS、exit 0（新增字段 `no external system named, and the predicate proven on them: ok`）。
+
+## 独立复审（verifier）结论与处理
+verifier 独立复现 C1–C8 **全部成立**：默认渲染与 3ce6203 逐字节相同（SHA256 全等）、五个预算常量
+逐字未动、禁项表 diff 为空、init.sh 与 templates/init.sh 未被碰、门禁 21 组 PASS exit 0、入口行无守卫
+且移走后 exit=127 / 不打印 Complete、栈确实被检测到而使命零泄漏、全 diff 无 `.skip` / `|| true` /
+mock。它**独立**发现了同一个 `purityHeld` 死臂，并注意到修复当时尚未提交。
+按「LOW 项同轮修」处理三条：
+1. 无 shell 主机上 `entryGateFailsWhenUnresolvable` 曾被直接置 `true` —— 一个从未跑过的臂报成 ok。
+   已改为**不设值**，从无 shell 合取里剔除，并写进 `skipped` 文案。
+2. 报告句里 `a repeat is a no-op…` 重复两次（我早前那次截断式编辑的残留）——已删重复。
+3. `['reportContract',` 丢了同级两格缩进（同一次编辑的残留）——已补。
+未采纳一条：`normalizeEntryPath` 里 `raw.startsWith('../')` 按现写法不可达。**保留并加注释**——
+删了会让返回值依赖两条独立检查的先后，将来有人删掉 `..` 规则就会静悄悄开始吐 `..//verify.sh`。
+另记一条不修的事实：SKILL.md 余 22 字节，下次文档改动即触顶；上限没动过，这是取舍不是缺陷。

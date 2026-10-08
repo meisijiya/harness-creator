@@ -530,6 +530,12 @@ export function normalizeEntryPath(value) {
   // A bare name is what a reader types; the shell only finds a script by an explicit relative
   // path. Normalising here is what makes `verify.sh` and `./verify.sh` the SAME step, so a repeat
   // of either spelling is recognised as already present instead of appending a near-duplicate.
+  //
+  // The `../` half of the test is unreachable as written, because the rule above refuses any path
+  // with a `..` segment first. It is kept deliberately: it makes the normaliser total, so the value
+  // returned for a leading `../` does not depend on the ORDER of two independent checks. Deleting it
+  // would be shorter and would make a future removal of the `..` rule silently start emitting
+  // `..//verify.sh`. The fixture table still guards that rule on its own.
   return { ok: true, path: raw.startsWith('./') || raw.startsWith('../') ? raw : `./${raw}` };
 }
 
