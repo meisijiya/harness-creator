@@ -89,6 +89,20 @@ node <技能目录>/scripts/run-benchmark.mjs --target /path/to/project --html /
 
 真实有效性仍需在代表任务上做前后对照会话。
 
+### 更新 harness
+
+更新没有独立脚本。先取证，再按 `references/harness-maintenance-pattern.md` 的五步走：取证 → 两份清单 → 🔴 CHECKPOINT → 落地 → 复验。
+
+```bash
+# 取证：FAIL 行与得分是候选的证据，不是结论
+node <技能目录>/scripts/validate-harness.mjs --target /path/to/project
+node <技能目录>/scripts/run-benchmark.mjs --self-check-only
+```
+
+触发键是**本次会话的产出**有没有让它失准，不是 harness 文件有没有被动过。改动分两份清单：**候选改动**（能定性、按授权范围落地）与**需你判断**（工具判不了但可能已过时，不自行落地，也不留成待办队列）。删除前 🔴 CHECKPOINT：先列「将删 / 将留」获批。改完复验，并报净增/净减；没有候选就如实报「不改」。
+
+维护路径的三条反例：把触发键绑回 `git diff`（自指，只能发现已经发生的改动）；只报改了什么、不报净变化（删掉的量永远看不出来）；两份清单混列成一列。
+
 ## 何时阅读参考文档
 
 - 跨会话记忆：`memory-persistence-pattern.md`
