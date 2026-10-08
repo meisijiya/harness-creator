@@ -1,0 +1,22 @@
+# Shell scripts are read by an interpreter that has no idea what a carriage return means. Under
+# core.autocrlf=true — the Windows default, and this machine's global setting — git rewrites every
+# .sh to CRLF on checkout, and the result is a gate that cannot run:
+#
+#   ./init.sh: line 10: syntax error near unexpected token `$'{\r''
+#
+# Measured on 2026-10-08, before this file existed: both init.sh and templates/init.sh are pure LF
+# in the index and pass `bash -n` there, while the same two files checked out on Windows fail the
+# same check. So the bytes in the repository were never wrong; the checkout was.
+#
+# This matters more here than in most repositories. ./init.sh is not a convenience script — it is
+# the verification entrypoint this repository's own AGENTS.md tells an agent to run before claiming
+# anything done. A gate that cannot execute is the one failure mode this project exists to prevent,
+# and it was failing silently for anyone checking out on Windows.
+#
+# `text=auto` below is deliberately NOT `text` alone: the negative form is what stops git from
+# treating CRLF as a real content difference, which is what made the drift invisible.
+* text=auto
+
+# The interpreters read these byte-exactly. eol=lf pins the working tree, and the leading path
+# covers anything added later, not just the two files that happen to exist today.
+*.sh text eol=lf
