@@ -1,0 +1,3 @@
+﻿timestamp	commit	skill	old_score	new_score	status	dimension	noteval_mode
+2026-10-08	07bed8c	harness-creator	-	86.9	baseline	-	两个独立 judge 结构分(dim1-7,9)+实测分(dim8)，均判 PARTIAL	paired
+2026-10-08	ae1f855	plus 644610f	harness-creator	86.9	-	keep	dim8 实测表现	3-0 better (margin 全 slight)：命令队列边界首次进入 SKILL.md 正文；删三处同族冗余；补机械载体+手写见证，变异测试两条失效路径均被抓	paired
