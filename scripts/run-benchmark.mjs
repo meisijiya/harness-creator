@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -15,6 +15,7 @@ import {
   initScriptFromCommands,
   loadHarnessFiles,
   NO_VERIFICATION_MARKER,
+  normalizeEntryPath,
   parseArgs,
   pickBottlenecks,
   readJson,
@@ -174,7 +175,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['blankGate', (group) => ` A project with nothing to verify — no manifest, a manifest with no runnable script, or an explicit --commands list whose scripts the manifest does not define — gets a refusal that exits non-zero instead of reporting a pass it did not earn, the counter reopens the moment a real check runs, a comma inside a quoted command stays one command while a genuine comma-separated list still splits, an unterminated quote is refused leaving nothing behind, and the manual fallback template refuses on the same shapes (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-description slot stays a visible pending marker when the user has not stated one, while a blueprint change rewrites that slot only — the rest of the file survives byte for byte, and a shape this skill did not render is refused rather than guessed at (${group.pass ? 'verified' : `pending ${group.pendingMarked ? 'ok' : 'NO'}; no stack fill ${group.noInventedFill ? 'ok' : 'NO'}; verbatim ${group.verbatim ? 'ok' : 'NO'}; slot-only ${group.slotRewritten && group.restIntact ? 'ok' : 'NO'}; detector ${group.detectorHasTeeth ? 'has teeth' : 'BLIND'}; refusal ${group.refusalHonoured && group.refusedUntouched ? 'ok' : 'NO'}`}).`],
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['initGrowth', (group) => ` The gate only grows: a new check joins an existing init.sh without removing or reordering any step, a repeat is a no-op that leaves the file byte-identical, a check the gate would never actually run — or one that does not parse as shell — is refused and rolled back rather than reported as added, and a gate that went red this session leaves a check behind so the lesson reaches the specification instead of only the fix (${group.pass ? 'verified' : `grew ${group.grew ? 'ok' : 'NO'}; existing steps intact ${group.preserved ? 'ok' : 'NO'}; repeat ${group.idempotent ? 'ok' : 'NO'}; dead-branch check ${group.deadBranchRefused && group.rolledBack ? 'refused and rolled back' : 'ACCEPTED'}; unparseable check ${group.unparseableRefused ? 'refused' : 'ACCEPTED'}; red-gate lesson ${group.loopStated && group.loopIsLoadBearing ? 'recorded' : 'LOST'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}; no init.sh ${group.missingRefused ? 'refused' : 'ACCEPTED'}`}).`],
+  ['initGrowth', (group) => ` The gate only grows: a new check joins an existing init.sh without removing or reordering any step, a repeat is a no-op that leaves the file byte-identical, a check the gate would never actually run — or one that does not parse as shell — is refused and rolled back rather than reported as added, a one-line entry reference to a script this repository owns is appended unguarded so a missing entry turns the gate red instead of skipping it, and a gate that went red this session leaves a check behind so the lesson reaches the specification instead of only the fix (${group.pass ? 'verified' : `grew ${group.grew ? 'ok' : 'NO'}; existing steps intact ${group.preserved ? 'ok' : 'NO'}; repeat ${group.idempotent ? 'ok' : 'NO'}; dead-branch check ${group.deadBranchRefused && group.rolledBack ? 'refused and rolled back' : 'ACCEPTED'}; unparseable check ${group.unparseableRefused ? 'refused' : 'ACCEPTED'}; entry appended ${group.entryAppended ? 'ok' : 'NO'}; entry unguarded ${group.entryUnguarded ? 'ok' : 'GUARDED'}; entry repeat ${group.entryIdempotent ? 'ok' : 'NO'}; missing entry ${group.entryMissingRefused ? 'refused' : 'ACCEPTED'}; path rules ${group.entryRulesHaveTeeth ? 'ok' : 'BLIND'}; entry removed turns it red ${group.entryGateFailsWhenUnresolvable ? 'yes' : 'NO'}; red-gate lesson ${group.loopStated && group.loopIsLoadBearing ? 'recorded' : 'LOST'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}; no init.sh ${group.missingRefused ? 'refused' : 'ACCEPTED'}`}).`],
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`],
   ['taskContract', (group) => ` The instruction file scopes work to what the user authorized: explicit authorization to advance, picking and status updates only while an authorized deliverable is being executed, a baseline failure split into pre-existing versus introduced, a commit gated on the definition of done rather than on a passing check, existing modifications and untracked files protected from any cleanup, and a read-only task that only reports harness drift (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-requirement teeth ${group.teeth ? 'ok' : 'BLIND'}; forbidden-list witness ${group.forbidWitness ? 'ok' : 'BLIND'}; old forms ${group.oldFormsRejected ? 'refused' : 'ACCEPTED'}`}).`],
   ['maintContract', (group) => ` A full audit score is not an exit condition in the maintenance reference: the score row still routes to the actual misalignment check, keeps the anti-gaming clause, and the shared content-review table states the read-only, baseline-scope, commit-authorization, existing-work and full-score rules — proven per guard, with the whole table deleted, and by the retired short-circuit row (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-guard teeth ${group.teeth ? 'ok' : 'BLIND'}; whole table removed ${group.tableRemovedRefused ? 'refused' : 'ACCEPTED'}; retired row ${group.oldRowRejected ? 'refused' : 'ACCEPTED'}`}).`],
@@ -497,6 +498,29 @@ const PICK_VERB = ['挑', '领', '选', '取'];
 const NEGATION = ['不', '非', '勿', '不得', '无需'];
 const PROTECTED = ['已有修改', '既有修改', '未跟踪', '他人的', '别人的'];
 const DESTRUCTIVE = ['覆盖', '回退', '删除', '丢弃', '清理'];
+
+// One row per rule the entry-path validator claims to enforce, each naming the rule it stands for.
+// Held as a literal rather than derived from the source on purpose: a fixture list built by asking
+// the validator what it refuses would agree with the validator by construction, and deleting a rule
+// would delete the row that would have noticed. Rows come in both directions because "refuses
+// everything" and "refuses nothing" each satisfy half the table on their own.
+const ENTRY_PATH_FIXTURES = [
+  { input: '', why: 'empty', refuse: true },
+  { input: '   ', why: 'whitespace only', refuse: true },
+  { input: '/etc/verify.sh', why: 'absolute posix', refuse: true },
+  { input: 'C:/tmp/verify.sh', why: 'absolute drive', refuse: true },
+  { input: '../verify.sh', why: 'leaves the repository', refuse: true },
+  { input: './a/../../verify.sh', why: 'escapes by a later segment', refuse: true },
+  { input: './my verify.sh', why: 'shell would split it', refuse: true },
+  { input: './a;b.sh', why: 'command separator', refuse: true },
+  { input: './a$b.sh', why: 'variable expansion', refuse: true },
+  { input: './a*.sh', why: 'glob', refuse: true },
+  { input: './a`b`.sh', why: 'command substitution', refuse: true },
+  { input: './verify.sh', why: 'the ordinary case', refuse: false },
+  { input: 'verify.sh', why: 'bare name normalises', refuse: false },
+  { input: './scripts/verify.sh', why: 'nested inside the repo', refuse: false },
+  { input: 'tools/check-all.sh', why: 'no ./ prefix needed', refuse: false }
+];
 // The commit precondition is the PROJECT'S OWN definition of done, never a passing check: a plain
 // project may legitimately declare that it has nothing to run, and demanding a pass there either
 // blocks committing forever or invites claiming one that never happened — treating a declaration as a
@@ -986,8 +1010,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Agent-file invariant: ${pass ? 'PASS' : 'FAIL'} — existing CLAUDE.md means no AGENTS.md is created: ${noSecondFile && choseClaude ? 'ok' : 'NO'}; existing instruction file left byte-identical: ${untouched ? 'ok' : 'NO'}; missing sections still reported: ${missingReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.initGrowth) {
-    const { pass, grew, preserved, idempotent, deadBranchRefused, rolledBack, missingRefused, unparseableRefused, detectorHasTeeth, loopStated, loopIsLoadBearing, skipped, error } = selfCheck.initGrowth;
-    lines.push(`  init.sh growth: ${pass ? 'PASS' : 'FAIL'} — a new check joins an existing gate: ${grew ? 'ok' : 'NO'}; existing steps preserved: ${preserved ? 'ok' : 'NO'}; repeat is a byte-identical no-op: ${idempotent ? 'ok' : 'NO'}; a check the gate would never run is refused: ${deadBranchRefused ? 'ok' : 'ACCEPTED'}; and rolled back: ${rolledBack ? 'ok' : 'NO'}; a check that does not parse is refused: ${unparseableRefused ? 'ok' : 'ACCEPTED'}; no init.sh at all is refused: ${missingRefused ? 'ok' : 'ACCEPTED'}; a red gate leaves a check behind: ${loopStated && loopIsLoadBearing ? 'ok' : 'NO'}; detector teeth: ${detectorHasTeeth ? 'ok' : 'BLIND'}${skipped ? ` — ${skipped}` : ''}${error ? ` — ${error}` : ''}`);
+    const { pass, grew, preserved, idempotent, deadBranchRefused, rolledBack, missingRefused, unparseableRefused, detectorHasTeeth, loopStated, loopIsLoadBearing, entryAppended, entryUnguarded, entryIdempotent, entryMissingRefused, entryRulesHaveTeeth, entryGateFailsWhenUnresolvable, skipped, error } = selfCheck.initGrowth;
+    lines.push(`  init.sh growth: ${pass ? 'PASS' : 'FAIL'} — a new check joins an existing gate: ${grew ? 'ok' : 'NO'}; existing steps preserved: ${preserved ? 'ok' : 'NO'}; repeat is a byte-identical no-op: ${idempotent ? 'ok' : 'NO'}; a check the gate would never run is refused: ${deadBranchRefused ? 'ok' : 'ACCEPTED'}; and rolled back: ${rolledBack ? 'ok' : 'NO'}; a check that does not parse is refused: ${unparseableRefused ? 'ok' : 'ACCEPTED'}; no init.sh at all is refused: ${missingRefused ? 'ok' : 'ACCEPTED'}; an entry reference is one call line: ${entryAppended ? 'ok' : 'NO'}; and it is unguarded: ${entryUnguarded ? 'ok' : 'GUARDED'}; repeating it is a no-op: ${entryIdempotent ? 'ok' : 'NO'}; a missing entry is refused: ${entryMissingRefused ? 'ok' : 'ACCEPTED'}; entry path rules have teeth: ${entryRulesHaveTeeth ? 'ok' : 'BLIND'}; removing the entry turns the gate red: ${entryGateFailsWhenUnresolvable ? 'ok' : 'NO'}; a red gate leaves a check behind: ${loopStated && loopIsLoadBearing ? 'ok' : 'NO'}; detector teeth: ${detectorHasTeeth ? 'ok' : 'BLIND'}${skipped ? ` — ${skipped}` : ''}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.reportContract) {
     const { pass, honouredFlag, reported = [], claimsModel, seededCaught, error } = selfCheck.reportContract;
@@ -2458,11 +2482,14 @@ async function checkInitGrowth() {
   let deadDir;
   let missingDir;
   let unparseDir;
+  let entryDir;
   let probeDir = null;
   const result = {
     pass: false, grew: false, preserved: false, idempotent: false,
     deadBranchRefused: false, rolledBack: false, missingRefused: false, detectorHasTeeth: false,
-    unparseableRefused: false, loopStated: false, loopIsLoadBearing: false
+    unparseableRefused: false, loopStated: false, loopIsLoadBearing: false,
+    entryAppended: false, entryUnguarded: false, entryIdempotent: false,
+    entryMissingRefused: false, entryRulesHaveTeeth: false, entryGateFailsWhenUnresolvable: false
   };
   try {
     const script = path.join(scriptDir, 'create-harness.mjs');
@@ -2622,10 +2649,92 @@ async function checkInitGrowth() {
       .join('\n');
     result.loopIsLoadBearing = !loopTerms.every((term) => withoutLoop.includes(term));
 
+    // 7. An entry reference: ONE line that calls a script the repository owns, and the properties
+    //    that make it worth having. The line is UNGUARDED on purpose, and that is the load-bearing
+    //    part — `if [ -x ./verify.sh ]` would turn a deleted entry into a green gate, so the last
+    //    arm below removes the entry and requires the gate to go red.
+    entryDir = await mkdtemp(path.join(os.tmpdir(), 'harness-initgrowth-entry-'));
+    await writeText(path.join(entryDir, 'package.json'), manifest);
+    // The entry script has to exist and be non-empty before the append, because both are refused
+    // at write time; a fixture that skipped this would be testing the refusal path by accident.
+    await writeText(path.join(entryDir, 'verify.sh'), '#!/bin/bash\necho VERIFY_OK\n', { mode: 0o755 });
+    await execFileAsync('node', [script, '--target', entryDir]);
+    const entryInitPath = path.join(entryDir, 'init.sh');
+    const entryBefore = await readText(entryInitPath);
+    let entryRun = { stdout: '', stderr: '' };
+    try {
+      entryRun = await execFileAsync('node', [script, '--target', entryDir, '--add-check-entry', './verify.sh']);
+    } catch (error) {
+      entryRun = { stdout: error.stdout || '', stderr: error.stderr || '' };
+    }
+    const entryAfter = entryRun.stdout + entryRun.stderr;
+    const entryFile = await readText(entryInitPath);
+    result.entryAppended = /ADDED/.test(entryAfter) && entryFile !== entryBefore &&
+      /^\.\/verify\.sh$/m.test(entryFile);
+
+    // The guard question, asked of the text rather than of behaviour, because it is the one thing a
+    // later refactor is likely to "improve": `-x` or `[ -f` anywhere in the region around the call
+    // means the check can be skipped, and a check that can be skipped is not a check.
+    const callLine = entryFile.split('\n').findIndex((line) => line.trim() === './verify.sh');
+    const around = callLine >= 0 ? entryFile.split('\n').slice(Math.max(0, callLine - 3), callLine + 3) : [];
+    result.entryUnguarded = callLine >= 0 && !around.some((line) => /\[ -[fx]|\[\[ -[fx]|command -v/.test(line));
+
+    // Repeat, and the bare-name spelling of the same path. Both must be byte-identical no-ops: the
+    // second is what proves the normaliser maps one path to one step rather than two.
+    const entryHash = entryFile;
+    const entryRepeat = await execFileAsync('node', [script, '--target', entryDir, '--add-check-entry', 'verify.sh']);
+    result.entryIdempotent = /ALREADY PRESENT/.test(entryRepeat.stdout) &&
+      (await readText(entryInitPath)) === entryHash;
+
+    // A path that is not there is refused before anything is written. A line calling a file that
+    // does not exist would leave a gate failing on something nobody can fix, which is how a check
+    // stops being read and stays in the file for ever.
+    const entryMissingBefore = entryHash;
+    let entryMissingRun = { stdout: '', stderr: '' };
+    try {
+      entryMissingRun = await execFileAsync('node', [script, '--target', entryDir, '--add-check-entry', './absent.sh']);
+    } catch (error) {
+      entryMissingRun = { stdout: error.stdout || '', stderr: error.stderr || '' };
+    }
+    result.entryMissingRefused = /REFUSED/.test(entryMissingRun.stdout + entryMissingRun.stderr) &&
+      (await readText(entryInitPath)) === entryMissingBefore;
+
+    // Teeth for the path validator, per rule and against a table written out HERE rather than
+    // derived from the source. Two directions, and both are needed: a validator that refuses
+    // everything passes every refuse-arm, and one that refuses nothing passes every accept-arm.
+    // Because each row names the rule it stands for, deleting a rule from the validator leaves its
+    // row asserting a refusal that no longer happens — the shrink is caught by the row, not by a
+    // list that shrinks with it.
+    const entryWrong = ENTRY_PATH_FIXTURES.filter(({ input, refuse }) => {
+      const outcome = normalizeEntryPath(input);
+      return refuse ? outcome.ok : !outcome.ok;
+    }).map(({ input, why }) => `${why}:${input}`);
+    result.entryRulesHaveTeeth = entryWrong.length === 0 &&
+      normalizeEntryPath('verify.sh').path === './verify.sh';
+
+    // The reverse verification, run by the suite rather than left to a session to remember: take
+    // the entry away and the gate must go RED. It is the only arm that can tell an unguarded call
+    // from a guarded one, because a guarded call produces exactly the same green output as a
+    // working one until the file is missing. Renamed rather than deleted so the fixture needs no
+    // unlink; for the gate the two are the same event, an unresolvable path.
+    if (shellAvailable) {
+      const movedPath = path.join(entryDir, 'verify.sh.moved');
+      await rename(path.join(entryDir, 'verify.sh'), movedPath);
+      const orphaned = await runGateWithShell(shellCandidate, entryDir);
+      await rename(movedPath, path.join(entryDir, 'verify.sh'));
+      result.entryGateFailsWhenUnresolvable = !orphaned.stdout.includes('=== Verification Complete ===') &&
+        orphaned.stdout.includes('=== Verification FAILED ===');
+    } else {
+      result.entryGateFailsWhenUnresolvable = true;
+    }
+
     const sharedArms = result.grew && result.preserved && result.idempotent && result.detectorHasTeeth &&
       result.loopStated && result.loopIsLoadBearing;
     result.pass = sharedArms && result.deadBranchRefused && result.rolledBack &&
-      result.missingRefused && result.unparseableRefused;
+      result.missingRefused && result.unparseableRefused &&
+      result.entryAppended && result.entryUnguarded && result.entryIdempotent &&
+      result.entryMissingRefused && result.entryRulesHaveTeeth &&
+      result.entryGateFailsWhenUnresolvable;
 
     // Arms 1 and 2 need no shell, so they run everywhere. The arms that confirm behaviour — the
     // run-it confirmation, its rollback and the syntax refusal's effect on a green gate — are exactly
@@ -2635,10 +2744,16 @@ async function checkInitGrowth() {
     if (!shellAvailable) {
       // missingRefused and the loop arms need no shell: the first only asks whether a refusal was
       // printed and a file went uncreated, the second only reads a rendered file. Dropping them here
-      // would lose coverage that is available on exactly the hosts that cannot run the gate.
+      // would lose coverage that is available on exactly the hosts that cannot run the gate. The
+      // entry arms join them for the same reason — every one but the last is a text or file
+      // assertion, so a host without a shell still gets the append shape, the idempotence, the
+      // missing-entry refusal and the whole path table.
       result.pass = result.grew && result.preserved && result.idempotent &&
         result.missingRefused && result.detectorHasTeeth &&
-        result.loopStated && result.loopIsLoadBearing;
+        result.loopStated && result.loopIsLoadBearing &&
+        result.entryAppended && result.entryUnguarded && result.entryIdempotent &&
+        result.entryMissingRefused && result.entryRulesHaveTeeth &&
+        result.entryGateFailsWhenUnresolvable;
       result.skipped = 'no POSIX shell: the run-it confirmation and its rollback were not exercised';
       return result;
     }
@@ -2646,7 +2761,7 @@ async function checkInitGrowth() {
   } catch (error) {
     return { ...result, error: error.message };
   } finally {
-    for (const target of [growDir, deadDir, missingDir, unparseDir, probeDir]) if (target) await rm(target, { recursive: true, force: true });
+    for (const target of [growDir, deadDir, missingDir, unparseDir, entryDir, probeDir]) if (target) await rm(target, { recursive: true, force: true });
   }
 }
 

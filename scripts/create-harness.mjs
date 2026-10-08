@@ -14,10 +14,12 @@ import {
   initScriptFromCommands,
   isPlaceholderVerification,
   lineCount,
+  normalizeEntryPath,
   parseArgs,
   readText,
   replaceBlueprintSlot,
   scriptCommand,
+  statOrNull,
   TEMPLATE_DIR,
   verificationCommands,
   writeText
@@ -27,7 +29,7 @@ const execFileAsync = promisify(execFileCallback);
 const args = parseArgs(process.argv.slice(2));
 
 if (args.help) {
-  console.log(`Usage: ${scriptCommand('create-harness.mjs')} [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--blueprint "WHAT THIS PROJECT IS"] [--commands "a,b"] [--add-check "cmd"] [--no-verification] [--force] [--dry-run]
+  console.log(`Usage: ${scriptCommand('create-harness.mjs')} [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--blueprint "WHAT THIS PROJECT IS"] [--commands "a,b"] [--add-check "cmd"] [--add-check-entry "./verify.sh"] [--no-verification] [--force] [--dry-run]
 
 Creates a minimal production harness — the three subsystems this skill owns, no more:
   AGENTS.md or CLAUDE.md (an existing CLAUDE.md is kept and preferred)
@@ -91,6 +93,17 @@ and where the command is one of this generator's own placeholders — a file who
 recognised gets a hand edit instead of a guess, because a check in the guessed place still looks
 like a gate. The run reports the net line change, so "I added one check" is a number the reader
 can check rather than a claim.
+
+--add-check-entry PATH grows the gate with ONE line that calls a script this repository owns:
+--add-check-entry ./verify.sh. The alternative is pasting every check into init.sh, where each one
+makes the gate longer and the order they run in starts to matter for reasons nobody chose. The
+appended line is the path itself — unquoted and unguarded, so it is exactly what was named here, and
+a missing or non-executable entry fails the gate loudly instead of being skipped into a green one.
+It is REFUSED with nothing written when the path is not a relative file inside this repository, when
+no such file exists yet, when it is a directory, and when it is empty (an empty script exits 0, so it
+would verify nothing for ever while looking like a check). A bare name is normalised to ./name, so
+both spellings name the same step and a repeat of either is the byte-identical no-op. Name the
+script, do not run it: authoring the checks this points at is the project's own work.
 
 Existing files are skipped unless --force is set. --force does not overwrite a file whose content
 another skill owns; it only lifts the skip on this skill's own artifacts.`);
@@ -209,8 +222,8 @@ const commands = commandSplit.commands;
 // AGENTS.md would carry two unrelated edits behind one flag, and the refusals below could no longer
 // honestly say "nothing was written". It is entered before any artifact is created, and it touches
 // init.sh and nothing else — no other file this script writes has a region worth growing into.
-if (args.addCheck !== undefined) {
-  const addCheckHonoured = new Set(['addCheck', 'dryRun', 'target']);
+if (args.addCheck !== undefined || args.addCheckEntry !== undefined) {
+  const addCheckHonoured = new Set(['addCheck', 'addCheckEntry', 'dryRun', 'target']);
   const addCheckConflicts = Object.keys(args)
     .filter((key) => key !== '_' && !addCheckHonoured.has(key));
   if (addCheckConflicts.length > 0) {
@@ -226,8 +239,14 @@ if (args.addCheck !== undefined) {
   }
 
   const addPath = path.join(target, 'init.sh');
+  // A refusal naming the wrong flag is the defect the quote-splitter's own `label` parameter was
+  // introduced to avoid, and this mode now has two flags. Both grow the same region, so the
+  // message names whichever the reader actually typed.
+  const growFlag = args.addCheckEntry !== undefined && args.addCheck === undefined
+    ? '--add-check-entry'
+    : '--add-check';
   if (!await exists(addPath)) {
-    console.error(`REFUSED: --add-check, but there is no ${addPath} to add to.`);
+    console.error(`REFUSED: ${growFlag}, but there is no ${addPath} to add to.`);
     console.error('A check has to join a gate that exists, because the gate is what decides whether a');
     console.error('feature may be called done. Create the harness first, with no flags, then re-run this');
     console.error('command to grow it:');
@@ -238,7 +257,59 @@ if (args.addCheck !== undefined) {
     process.exit(1);
   }
 
-  const addSplit = splitCommandList(String(args.addCheck), '--add-check');
+  // An entry reference is checked on disk BEFORE anything is appended. The line itself is an
+  // unguarded call precisely so that a later deletion turns the gate red rather than skipping it;
+  // refusing here is the other half of that bargain — the gate is never left holding a line that
+  // was known to be unable to succeed. Nothing has been written at this point, so "nothing was
+  // written" is true of the file as well as of the message.
+  let entryPath = null;
+  if (args.addCheckEntry !== undefined) {
+    if (args.addCheckEntry === true) {
+      console.error('REFUSED: --add-check-entry takes a path: --add-check-entry ./verify.sh.');
+      console.error('The flag names the one script the gate calls, and a bare flag names nothing, so');
+      console.error('there is no entry to check and none was appended. Nothing was written.');
+      process.exit(1);
+    }
+    const normalized = normalizeEntryPath(args.addCheckEntry);
+    if (!normalized.ok) {
+      console.error(`REFUSED: --add-check-entry — ${normalized.reason}.`);
+      console.error('The appended line is the path itself, unquoted and unguarded, so the gate runs');
+      console.error('exactly what was named here. Name a relative path inside this repository, such as');
+      console.error('  --add-check-entry ./verify.sh');
+      console.error('Nothing was written.');
+      process.exit(1);
+    }
+    entryPath = normalized.path;
+    const entryFull = path.join(target, entryPath);
+    const entryStat = await statOrNull(entryFull);
+    if (!entryStat) {
+      console.error(`REFUSED: --add-check-entry ${entryPath} — there is no such file in ${target}.`);
+      console.error('Appending a call to a file that is not there would leave a gate that fails on a');
+      console.error('line nobody can fix, which is how a check stops being read and stays in the file');
+      console.error('forever. Create the script, then re-run this command.');
+      console.error('Nothing was written.');
+      process.exit(1);
+    }
+    if (!entryStat.isFile()) {
+      console.error(`REFUSED: --add-check-entry ${entryPath} — that is a directory, not a script.`);
+      console.error('Nothing was written.');
+      process.exit(1);
+    }
+    // An empty file exits 0. It would satisfy the gate for ever while running nothing at all, which
+    // is the whole failure this harness exists to prevent — so it is refused here rather than
+    // welcomed as a working entry the reader then trusts.
+    if (entryStat.size === 0) {
+      console.error(`REFUSED: --add-check-entry ${entryPath} — that file is empty.`);
+      console.error('An empty script exits 0, so the gate would report success having verified');
+      console.error('nothing, and every later green would inherit that. Give it the checks it is');
+      console.error('meant to run first. Nothing was written.');
+      process.exit(1);
+    }
+  }
+
+  const addSplit = args.addCheck === undefined
+    ? { commands: [] }
+    : splitCommandList(String(args.addCheck), '--add-check');
   if (addSplit.error) {
     console.error(`REFUSED: ${addSplit.error}.`);
     console.error('--add-check takes one check per entry and separates entries with commas, so a comma');
@@ -267,10 +338,18 @@ if (args.addCheck !== undefined) {
   let script = original;
   const appended = [];
   const present = [];
-  for (const command of addSplit.commands) {
+  // One loop over both kinds of append, in the order they were named. They share the region, and
+  // the region is rewritten per item — appending the entry first and the commands after it would
+  // put them in the opposite order to the one the reader typed, and gate order is the thing this
+  // mode exists to stop mattering.
+  const requested = [
+    ...addSplit.commands.map((command) => ({ command, isEntry: false })),
+    ...(entryPath ? [{ command: entryPath, isEntry: true }] : [])
+  ];
+  for (const { command, isEntry } of requested) {
     const step = appendVerificationCheck(script, command);
     if (step.status === 'refused') {
-      console.error(`REFUSED: --add-check "${command}" — ${step.reason}.`);
+      console.error(`REFUSED: ${growFlag} "${command}" — ${step.reason}.`);
       console.error('The check region is the span between the RAN=0 counter and the refusal that reads');
       console.error('it. A file without that exact shape is one this script did not generate, or one');
       console.error('restructured by hand since; appending into it would be a guess about where a check');
@@ -278,11 +357,11 @@ if (args.addCheck !== undefined) {
       process.exit(1);
     }
     if (step.status === 'duplicate') {
-      present.push(step);
+      present.push({ ...step, isEntry });
       continue;
     }
     script = step.script;
-    appended.push(step);
+    appended.push({ ...step, isEntry });
   }
 
   // Behaviour, not position: whether the grown gate actually RUNS the new check is answered by
@@ -424,7 +503,7 @@ if (args.addCheck !== undefined) {
     console.log(`${path.relative(target, addPath)} already runs every check you named.`);
   }
   for (const entry of appended) {
-    console.log(`${dryRun ? 'WOULD ADD' : 'ADDED'}  ${entry.command}`);
+    console.log(`${dryRun ? 'WOULD ADD' : 'ADDED'}  ${entry.command}${entry.isEntry ? '  (entry reference — the gate calls it, it does not hold it)' : ''}`);
     for (const line of entry.step.split('\n')) console.log(`    ${line}`);
   }
   for (const entry of present) {

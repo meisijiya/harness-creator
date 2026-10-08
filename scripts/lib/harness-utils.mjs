@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { access, chmod, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -50,6 +50,18 @@ export async function exists(filePath) {
     return true;
   } catch {
     return false;
+  }
+}
+
+// Three questions about one path — is it there, is it a file, is it empty — that a caller has to
+// answer together before it can say anything useful about a gate entry. `exists` answers only the
+// first, and a refusal built on it alone reads "no such file" for a directory that is plainly
+// there. Absent rather than null so the call site reads as a question, not as a null to remember.
+export async function statOrNull(filePath) {
+  try {
+    return await stat(filePath);
+  } catch {
+    return null;
   }
 }
 
@@ -480,6 +492,45 @@ export function lineCount(text) {
   const parts = String(text).split(/\r\n|\r|\n/);
   if (parts[parts.length - 1] === '') parts.pop();
   return parts.length;
+}
+
+// An entry reference is ONE line in init.sh that calls a script the target repository owns.
+// It exists because the alternative grows the gate without bound: every check pasted in makes the
+// gate longer, and the order those checks run in starts to matter for reasons nobody chose. The
+// checks stay in one file the project edits; the gate keeps one line however many it holds.
+//
+// Deliberately NOT a guard. The tempting render is `if [ -x ./verify.sh ]; then ./verify.sh; fi`,
+// and it is the exact defect this file exists to refuse: the entry is deleted, the gate skips it,
+// exits 0 and reports "Verification Complete" having verified less than before. An unguarded call
+// under the script's own `set -e` fails loudly instead, so a missing or non-executable entry
+// costs a red gate rather than a silently weaker one. Nothing is checked before writing either —
+// see the caller, which refuses an entry that is not there rather than appending a line that is
+// guaranteed to fail.
+//
+// The path is refused rather than normalised when the shell would read it as more than one word or
+// as something other than this file. `./my verify.sh` runs `./my`; quoting it would make the
+// appended line differ from the duplicate-detection key, and the repeat would then append a second
+// copy instead of doing nothing. An absolute path names a machine rather than this project: it
+// would keep passing on the author's laptop after breaking everywhere else. A `..` segment points
+// out of the repository, and a gate that depends on its parent is not this project's gate.
+const ENTRY_SHELL_UNSAFE = /[\s"'`$&|;<>()*?!#~^\\{}\[\]]/;
+
+export function normalizeEntryPath(value) {
+  const raw = String(value ?? '').trim();
+  if (raw === '') return { ok: false, reason: 'the flag was given an empty path' };
+  if (raw.startsWith('/') || /^[A-Za-z]:[\\/]/.test(raw)) {
+    return { ok: false, reason: `\`${raw}\` is absolute; ./init.sh runs with the repository as its working directory, so it can only call a path inside it` };
+  }
+  if (ENTRY_SHELL_UNSAFE.test(raw)) {
+    return { ok: false, reason: `\`${raw}\` contains whitespace or a shell metacharacter; the appended line is one shell line, and a path the shell would split or expand is a check of the wrong thing` };
+  }
+  if (raw.split('/').includes('..')) {
+    return { ok: false, reason: `\`${raw}\` leaves the repository through \`..\`; a gate that calls its parent directory is not this project's gate` };
+  }
+  // A bare name is what a reader types; the shell only finds a script by an explicit relative
+  // path. Normalising here is what makes `verify.sh` and `./verify.sh` the SAME step, so a repeat
+  // of either spelling is recognised as already present instead of appending a near-duplicate.
+  return { ok: true, path: raw.startsWith('./') || raw.startsWith('../') ? raw : `./${raw}` };
 }
 
 // The gate only grows. A check that arrives after creation goes into the SAME region the generator
