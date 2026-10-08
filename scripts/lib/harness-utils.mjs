@@ -341,22 +341,42 @@ export function verificationCommands(project, explicitPackageManager) {
   return [install, ...real];
 }
 
+// The next-steps block names only artifacts this skill writes. A startup script that tells the
+// agent to read a file this skill never creates is a dangling instruction, and the artifact list
+// stays clean because the leak sits in the contents of a file that IS expected to exist.
+//
+// Which record the project keeps work in is deliberately absent: naming a tracker here would make
+// this file break whenever that tracker is renamed, and naming a ticket list would send the agent
+// after files this skill deliberately does not create.
+//
+// ONE literal, two producers. initScriptFromCommands() renders it into every generated init.sh, and
+// the hand-copy fallback templates/init.sh carries the same text; the self-check group `nextSteps`
+// asserts the two agree, so they cannot drift apart silently. They HAD drifted: the generator said
+// "Pick ONE unfinished piece of work whose prerequisites are clear" while the fallback said "Work
+// only on what the user has explicitly authorized" — the generated gate told the agent to select its
+// own next task in the same breath as the instruction file it ships beside, which forbids exactly
+// that ("推进需显式授权 … 已有的记录与清单是上下文，不是待办队列"). A gate that contradicts the
+// rules shipped next to it is worse than either wording alone.
+//
+// The text is a cross-file contract, so the detector compares the rendered block against the fallback
+// rather than scanning for a phrase: a phrase check would pass on both drifting copies at once.
+export const NEXT_STEPS = [
+  '1. Read AGENTS.md for the startup path, the invariants and where work is recorded',
+  '2. Work only on what the user has explicitly authorized in this session —',
+  '   no authorization, no advance, even when the next task looks obvious',
+  '3. Produce only that, staying inside its scope',
+  '4. Re-run this script before claiming done'
+];
+
+// The fallback template is a plain text file, so it cannot import this constant — the literal is
+// transcribed there and the check below compares the two. Kept adjacent to the constant so the
+// reader of one is looking at the other.
+export const FALLBACK_INIT_TEMPLATE = 'templates/init.sh';
+
 export function initScriptFromCommands(commands, { noVerification = false } = {}) {
   if (noVerification) return noVerificationScript();
   const body = (commands || []).map(renderVerificationStep).join('\n\n');
-  // The next-steps block names only artifacts this skill writes. A startup script that tells the
-  // agent to read a file this skill never creates is a dangling instruction, and the artifact list
-  // stays clean because the leak sits in the contents of a file that IS expected to exist.
-  //
-  // Which record the project keeps work in is deliberately absent: naming a tracker here would make
-  // this file break whenever that tracker is renamed, and naming a ticket list would send the agent
-  // after files this skill deliberately does not create.
-  const nextSteps = [
-    '1. Read AGENTS.md for the startup path, the invariants and where work is recorded',
-    '2. Pick ONE unfinished piece of work whose prerequisites are clear',
-    '3. Produce only that, staying inside its scope',
-    '4. Re-run this script before claiming done'
-  ];
+  const nextSteps = NEXT_STEPS;
   return `#!/bin/bash
 set -e
 

@@ -7,6 +7,8 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import {
+  FALLBACK_INIT_TEMPLATE,
+  NEXT_STEPS,
   bottleneckLabel,
   collectCommandReferences,
   exists,
@@ -168,7 +170,7 @@ const DISCOVERABLE_CONTENT = [
 const SELF_CHECK_GROUPS = [
   'budget', 'agentsBudget', 'agentsDiscover', 'artifactPurity', 'maintenance', 'skillDesign',
   'wrapupOutput', 'dryRun', 'selfRefs', 'references', 'bottleneckTies', 'foreignAudit', 'blankGate',
-  'blueprint', 'agentFile', 'initGrowth', 'specLayer', 'reportContract', 'taskContract', 'maintContract', 'noDeadDecls'
+  'blueprint', 'agentFile', 'initGrowth', 'specLayer', 'nextSteps', 'reportContract', 'taskContract', 'maintContract', 'noDeadDecls'
 ];
 
 // One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
@@ -193,6 +195,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, an existing instruction file is left byte-identical while its missing sections are still reported, and --force refuses to render over sections it does not define — the one rule protecting another owner's block, which was prose until it destroyed a fixture — while still overwriting this skill's own render (${group.pass ? 'verified' : `FAILED (foreign block refused: ${group.forceRefused ? 'ok' : 'NO'}; own render rewritten: ${group.forceStillWritesOwn ? 'ok' : 'NO'})`}).`],
   ['initGrowth', (group) => ` The gate only grows: a new check joins an existing init.sh without removing or reordering any step, a repeat is a no-op that leaves the file byte-identical, a check the gate would never actually run — or one that does not parse as shell — is refused and rolled back rather than reported as added, a one-line entry reference to a script this repository owns is appended unguarded so a missing entry turns the gate red instead of skipping it, and a gate that went red this session leaves a check behind so the lesson reaches the specification instead of only the fix (${group.pass ? 'verified' : `grew ${group.grew ? 'ok' : 'NO'}; existing steps intact ${group.preserved ? 'ok' : 'NO'}; repeat ${group.idempotent ? 'ok' : 'NO'}; dead-branch check ${group.deadBranchRefused && group.rolledBack ? 'refused and rolled back' : 'ACCEPTED'}; unparseable check ${group.unparseableRefused ? 'refused' : 'ACCEPTED'}; entry appended ${group.entryAppended ? 'ok' : 'NO'}; entry unguarded ${group.entryUnguarded ? 'ok' : 'GUARDED'}; entry repeat ${group.entryIdempotent ? 'ok' : 'NO'}; missing entry ${group.entryMissingRefused ? 'refused' : 'ACCEPTED'}; path rules ${group.entryRulesHaveTeeth ? 'ok' : 'BLIND'}; entry removed turns it red ${group.entryGateFailsWhenUnresolvable ? 'yes' : 'NO'}; red-gate lesson ${group.loopStated && group.loopIsLoadBearing ? 'recorded' : 'LOST'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}; no init.sh ${group.missingRefused ? 'refused' : 'ACCEPTED'}`}).`],
   ['specLayer', (group) => ` The spec layer is opt-in and says nothing when it is off: a run without --spec-layer still produces the two artifacts and byte-identical content, the two documents exist only when the flag is given, the detected stack never becomes an answer to "what is this project", they are pointed at as read-on-demand rather than as files every session must open, and the same byte/line/working-rule ceilings still hold with the extra pointer (${group.pass ? 'verified' : `default unchanged ${group.offByDefault ? 'ok' : 'CHANGED'}; flag creates the layer ${group.onCreatesLayer ? 'ok' : 'NO'}; stack kept out of the mission ${group.noStackLeak ? 'ok' : 'LEAKED'}; read on demand ${group.onDemandNotResident ? 'ok' : 'RESIDENT'}; budget ${group.budgetHeld ? 'ok' : 'BUSTED'}; re-run skips ${group.reRunSkips ? 'ok' : 'OVERWROTE'}; flag value ${group.flagValueRefused ? 'refused' : 'ACCEPTED'}; zero coupling ${group.purityHeld ? 'ok' : 'NAMED OR BLIND'}`}).`],
+  ['nextSteps', (group) => ` The gate's closing instructions are one literal with two producers: the generated init.sh, the hand-copy fallback and this repository's own gate all carry the same next-steps block, and it tells the agent to work only on what was explicitly authorized rather than to pick its own next task — a contradiction that was shipping, because the generated gate selected work in the same breath as the instruction file that forbids it (${group.pass ? 'verified' : `generated ${group.generatorAgrees ? 'agrees' : 'DRIFTED'}; fallback ${group.fallbackAgrees ? 'agrees' : 'DRIFTED'}; own gate ${group.ownGateAgrees ? 'agrees' : 'DRIFTED'}; authorizes rather than selects ${group.authorizesRatherThanSelects ? 'ok' : 'SELECTS'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}`}).`],
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`],
   ['taskContract', (group) => ` The instruction file scopes work to what the user authorized: explicit authorization to advance, picking and status updates only while an authorized deliverable is being executed, a baseline failure split into pre-existing versus introduced, a commit gated on the definition of done rather than on a passing check, existing modifications and untracked files protected from any cleanup, and a read-only task that only reports harness drift (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-requirement teeth ${group.teeth ? 'ok' : 'BLIND'}; forbidden-list witness ${group.forbidWitness ? 'ok' : 'BLIND'}; old forms ${group.oldFormsRejected ? 'refused' : 'ACCEPTED'}`}).`],
   ['maintContract', (group) => ` A full audit score is not an exit condition in the maintenance reference: the score row still routes to the actual misalignment check, keeps the anti-gaming clause, and the shared content-review table states the read-only, baseline-scope, commit-authorization, existing-work and full-score rules — proven per guard, with the whole table deleted, and by the retired short-circuit row (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-guard teeth ${group.teeth ? 'ok' : 'BLIND'}; whole table removed ${group.tableRemovedRefused ? 'refused' : 'ACCEPTED'}; retired row ${group.oldRowRejected ? 'refused' : 'ACCEPTED'}`}).`],
@@ -474,6 +477,7 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['agentFile', 'Agent-file invariant'],
   ['initGrowth', 'init.sh growth'],
   ['specLayer', 'Spec layer'],
+  ['nextSteps', 'Next-steps agreement'],
   ['reportContract', 'Report contract'],
   ['taskContract', 'Task authorization'],
   ['maintContract', 'Maintenance contract'],
@@ -860,7 +864,13 @@ Runs a lightweight harness benchmark:
      repository whose stack IS detected still yields a mission containing no stack word at all, both
      documents are pointed at as read-on-demand rather than as files every session must open, and the
      same byte, line and working-rule ceilings still hold with the extra pointer. [specLayer]
-26. Produces a JSON report and optional HTML report.
+26. Checks that the gate's closing instructions are ONE literal with two producers: the generated
+     init.sh, the hand-copy fallback template and this repository's own ./init.sh must carry the same
+     next-steps block, and it must tell the agent to work only on what was explicitly authorized
+     rather than to pick its own next task. The two had drifted apart, and the drift shipped: the
+     generated gate selected work in the same breath as the instruction file that forbids selecting
+     it. [nextSteps]
+27. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -1070,6 +1080,10 @@ function consoleSelfCheckLines(selfCheck) {
     const { pass, offByDefault, onCreatesLayer, noStackLeak, onDemandNotResident, budgetHeld, reRunSkips, flagValueRefused, purityHeld, artifactsDeclareLayer, specSize, specLines, error } = selfCheck.specLayer;
     lines.push(`  Spec layer: ${pass ? 'PASS' : 'FAIL'} — without --spec-layer the run is unchanged: ${offByDefault ? 'ok' : 'CHANGED'}; with it the two documents exist: ${onCreatesLayer ? 'ok' : 'NO'}; the detected stack never fills the mission: ${noStackLeak ? 'ok' : 'LEAKED'}; pointed at as read-on-demand, not resident: ${onDemandNotResident ? 'ok' : 'RESIDENT'}; the artifact contract names them: ${artifactsDeclareLayer ? 'ok' : 'MISSING'}; still inside the same budget (${specSize} bytes, ${specLines} lines): ${budgetHeld ? 'ok' : 'BUSTED'}; a re-run leaves an edited one alone: ${reRunSkips ? 'ok' : 'OVERWROTE'}; a value on the switch is refused: ${flagValueRefused ? 'ok' : 'ACCEPTED'}; no external system named, and the predicate proven on them: ${purityHeld ? 'ok' : 'NAMED OR BLIND'}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.nextSteps) {
+    const { pass, generatorAgrees, fallbackAgrees, ownGateAgrees, authorizesRatherThanSelects, detectorHasTeeth, error } = selfCheck.nextSteps;
+    lines.push(`  Next-steps agreement: ${pass ? 'PASS' : 'FAIL'} — the generated gate carries the shared literal: ${generatorAgrees ? 'ok' : 'DRIFTED'}; the hand-copy fallback agrees: ${fallbackAgrees ? 'ok' : 'DRIFTED'}; this repository's own gate agrees: ${ownGateAgrees ? 'ok' : 'DRIFTED'}; it authorizes rather than telling the agent to pick its own task: ${authorizesRatherThanSelects ? 'ok' : 'SELECTS'}; detector teeth: ${detectorHasTeeth ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
+  }
   if (selfCheck.reportContract) {
     const { pass, honouredFlag, reported = [], claimsModel, seededCaught, error } = selfCheck.reportContract;
     lines.push(`  Report contract: ${pass ? 'PASS' : 'FAIL'} — --html honoured by the renderer: ${honouredFlag ? 'ok' : 'DROPPED (wrote to the default path)'}; report names the model's subsystem count: ${claimsModel ? 'ok' : 'NO'}; contradicting claim: ${reported.length === 0 ? 'none' : `FOUND (${reported.join(', ')})`}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
@@ -1130,6 +1144,7 @@ async function runSelfCheck() {
       agentFile: () => checkAgentFileInvariant(),
       initGrowth: () => checkInitGrowth(),
       specLayer: () => checkSpecLayer(),
+      nextSteps: () => checkNextStepsAgreement(),
       reportContract: () => checkReportContract(),
       taskContract: async () => (await evaluateContracts()).taskContract,
       maintContract: () => checkMaintContract(),
@@ -1384,6 +1399,73 @@ async function checkSpecLayer() {
     return { ...result, error: error.message };
   } finally {
     for (const target of [plainDir, specDir, leakDir]) if (target) await rm(target, { recursive: true, force: true });
+  }
+}
+
+// One next-steps literal, two producers. The generated init.sh and the hand-copy fallback
+// templates/init.sh are separate strings that must agree: they were NOT agreeing, and the drift was
+// a contradiction rather than a cosmetic difference. The generator told the agent to "Pick ONE
+// unfinished piece of work" in the success banner — i.e. to select its own next task — in the same
+// breath as the instruction file it ships beside, whose working rules say the opposite
+// ("推进需显式授权 … 已有的记录与清单是上下文，不是待办队列"). Both files passed every other group.
+//
+// Compared, not grepped. A phrase detector would have been satisfied by BOTH drifting copies at
+// once, which is the whole defect; the only assertion that can fail here is set equality between the
+// block the generator renders and the block the fallback carries.
+//
+// The third producer is this repository's own ./init.sh. It is a real instance of the same artifact
+// and it had the retired wording too, so it is read as well — a check that only compares the two
+// shipped templates would let the local gate drift back while the check stayed green.
+async function checkNextStepsAgreement() {
+  const result = {
+    pass: false,
+    generatorAgrees: false,
+    fallbackAgrees: false,
+    ownGateAgrees: false,
+    authorizesRatherThanSelects: false,
+    detectorHasTeeth: false
+  };
+  let dir;
+  try {
+    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-nextsteps-'));
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
+    const rendered = await readText(path.join(dir, 'init.sh'));
+
+    // The block is everything after the banner, so the comparison cannot be satisfied by a mention
+    // of the wording anywhere else in the file.
+    //
+    // Trailing newline trimmed, and the banner line itself kept in the block on both sides: a
+    // generator ends the file with "\n" after the last echo while the templates are read the same
+    // way, so comparing raw tails would report drift on all three for a byte that is not content.
+    // That is the failure this check exists to catch — a comparison that is wrong in a way that
+    // looks like the finding it was built for.
+    const blockOf = (text) => text.slice(text.indexOf('echo "Next steps:"')).trimEnd();
+    const expected = ['echo "Next steps:"', ...NEXT_STEPS.map((line) => `echo "${line}"`)].join('\n');
+
+    result.generatorAgrees = blockOf(rendered) === expected;
+    result.fallbackAgrees = blockOf(await readText(path.join(skillRoot, FALLBACK_INIT_TEMPLATE))) === expected;
+    result.ownGateAgrees = blockOf(await readText(path.join(skillRoot, 'init.sh'))) === expected;
+
+    // The property the wording exists to carry, asserted on the rendered artifact rather than on the
+    // constant — otherwise a constant that lost the clause would still pass the equality above.
+    result.authorizesRatherThanSelects = /explicitly authorized/.test(rendered) &&
+      !/Pick ONE unfinished/.test(rendered);
+
+    // Teeth: substitute the retired wording into the rendered copy and require the comparison to
+    // fail. Without this, a comparator that compared nothing would report agreement on all three.
+    const drifted = rendered.replace(expected, expected.replace(
+      /2\. Work only on what the user has explicitly authorized[\s\S]*?looks obvious/,
+      '2. Pick ONE unfinished piece of work whose prerequisites are clear'
+    ));
+    result.detectorHasTeeth = drifted !== rendered && blockOf(drifted) !== expected;
+
+    result.pass = result.generatorAgrees && result.fallbackAgrees && result.ownGateAgrees &&
+      result.authorizesRatherThanSelects && result.detectorHasTeeth;
+    return result;
+  } catch (error) {
+    return { ...result, error: error.message };
+  } finally {
+    if (dir) await rm(dir, { recursive: true, force: true });
   }
 }
 
