@@ -1,3 +1,5 @@
-﻿timestamp	commit	skill	old_score	new_score	status	dimension	noteval_mode
-2026-10-08	07bed8c	harness-creator	-	86.9	baseline	-	两个独立 judge 结构分(dim1-7,9)+实测分(dim8)，均判 PARTIAL	paired
-2026-10-08	ae1f855	plus 644610f	harness-creator	86.9	-	keep	dim8 实测表现	3-0 better (margin 全 slight)：命令队列边界首次进入 SKILL.md 正文；删三处同族冗余；补机械载体+手写见证，变异测试两条失效路径均被抓	paired
+timestamp	commit	skill	old_score	new_score	status	dimension	mode	note
+2026-10-08	07bed8c	harness-creator	-	86.9	baseline	-	paired	两个独立 judge：结构分 dim1-7,9 + 实测分 dim8，均判 PARTIAL
+2026-10-08	ae1f855+644610f	harness-creator	86.9	-	keep	dim8 实测表现	paired	3-0 better (margin 全 slight)：命令队列边界首次进入 SKILL.md 正文；删三处同族冗余；补机械载体 + 手写见证，变异测试两条失效路径均被抓
+2026-10-08	e72ea5f	harness-creator	-	-	keep	净增/净减 承诺可达性	mutation	未跑 paired（HL-4 触顶 + 用户裁定）：诊断 judge 判定任务 4「无正文小节」是 09-23 既有形态，唯一已登记的窄缺口是缺「复验并报净增/净减」。SKILL.md 净减 17B（LF 归一化 12852 -> 12835，余量 10 -> 27）；补机械载体，7 变异全红 / 2 对照全绿
+2026-10-08	0dba1e1	harness-creator	-	-	keep	见证表自缩守卫	mutation	变异 harness 误伤撞出：旧见证表 WRAPUP_INCOMPLETE_FORMS 可逐行自删而门禁全绿（已单独复验）。补 sameTermSet 词集相等守卫；逐条删净增/需你判断/净减，三条全红
