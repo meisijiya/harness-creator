@@ -1067,8 +1067,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  init.sh growth: ${pass ? 'PASS' : 'FAIL'} — a new check joins an existing gate: ${grew ? 'ok' : 'NO'}; existing steps preserved: ${preserved ? 'ok' : 'NO'}; repeat is a byte-identical no-op: ${idempotent ? 'ok' : 'NO'}; a check the gate would never run is refused: ${deadBranchRefused ? 'ok' : 'ACCEPTED'}; and rolled back: ${rolledBack ? 'ok' : 'NO'}; a check that does not parse is refused: ${unparseableRefused ? 'ok' : 'ACCEPTED'}; no init.sh at all is refused: ${missingRefused ? 'ok' : 'ACCEPTED'}; an entry reference is one call line: ${entryAppended ? 'ok' : 'NO'}; and it is unguarded: ${entryUnguarded ? 'ok' : 'GUARDED'}; repeating it is a no-op: ${entryIdempotent ? 'ok' : 'NO'}; a missing entry is refused: ${entryMissingRefused ? 'ok' : 'ACCEPTED'}; entry path rules have teeth: ${entryRulesHaveTeeth ? 'ok' : 'BLIND'}; removing the entry turns the gate red: ${entryGateFailsWhenUnresolvable ? 'ok' : 'NO'}; a red gate leaves a check behind: ${loopStated && loopIsLoadBearing ? 'ok' : 'NO'}; detector teeth: ${detectorHasTeeth ? 'ok' : 'BLIND'}${skipped ? ` — ${skipped}` : ''}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.specLayer) {
-    const { pass, offByDefault, onCreatesLayer, noStackLeak, onDemandNotResident, budgetHeld, reRunSkips, flagValueRefused, purityHeld, specSize, specLines, error } = selfCheck.specLayer;
-    lines.push(`  Spec layer: ${pass ? 'PASS' : 'FAIL'} — without --spec-layer the run is unchanged: ${offByDefault ? 'ok' : 'CHANGED'}; with it the two documents exist: ${onCreatesLayer ? 'ok' : 'NO'}; the detected stack never fills the mission: ${noStackLeak ? 'ok' : 'LEAKED'}; pointed at as read-on-demand, not resident: ${onDemandNotResident ? 'ok' : 'RESIDENT'}; still inside the same budget (${specSize} bytes, ${specLines} lines): ${budgetHeld ? 'ok' : 'BUSTED'}; a re-run leaves an edited one alone: ${reRunSkips ? 'ok' : 'OVERWROTE'}; a value on the switch is refused: ${flagValueRefused ? 'ok' : 'ACCEPTED'}; no external system named, and the predicate proven on them: ${purityHeld ? 'ok' : 'NAMED OR BLIND'}${error ? ` — ${error}` : ''}`);
+    const { pass, offByDefault, onCreatesLayer, noStackLeak, onDemandNotResident, budgetHeld, reRunSkips, flagValueRefused, purityHeld, artifactsDeclareLayer, specSize, specLines, error } = selfCheck.specLayer;
+    lines.push(`  Spec layer: ${pass ? 'PASS' : 'FAIL'} — without --spec-layer the run is unchanged: ${offByDefault ? 'ok' : 'CHANGED'}; with it the two documents exist: ${onCreatesLayer ? 'ok' : 'NO'}; the detected stack never fills the mission: ${noStackLeak ? 'ok' : 'LEAKED'}; pointed at as read-on-demand, not resident: ${onDemandNotResident ? 'ok' : 'RESIDENT'}; the artifact contract names them: ${artifactsDeclareLayer ? 'ok' : 'MISSING'}; still inside the same budget (${specSize} bytes, ${specLines} lines): ${budgetHeld ? 'ok' : 'BUSTED'}; a re-run leaves an edited one alone: ${reRunSkips ? 'ok' : 'OVERWROTE'}; a value on the switch is refused: ${flagValueRefused ? 'ok' : 'ACCEPTED'}; no external system named, and the predicate proven on them: ${purityHeld ? 'ok' : 'NAMED OR BLIND'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.reportContract) {
     const { pass, honouredFlag, reported = [], claimsModel, seededCaught, error } = selfCheck.reportContract;
@@ -1274,7 +1274,8 @@ async function checkSpecLayer() {
   let leakDir;
   const result = {
     pass: false, offByDefault: false, onCreatesLayer: false, noStackLeak: false,
-    onDemandNotResident: false, budgetHeld: false, reRunSkips: false, flagValueRefused: false
+    onDemandNotResident: false, budgetHeld: false, reRunSkips: false, flagValueRefused: false,
+    artifactsDeclareLayer: false
   };
   try {
     const script = path.join(scriptDir, 'create-harness.mjs');
@@ -1300,6 +1301,18 @@ async function checkSpecLayer() {
     const specAgentsRaw = await readText(path.join(specDir, 'AGENTS.md'));
     const specAgents = specAgentsRaw.replace(/\r\n/g, '\n');
     result.onCreatesLayer = specFiles.join(',') === 'AGENTS.md,init.sh,mission.md,tech-stack.md';
+
+    // Arm 2b: the ARTIFACT CONTRACT, not just the files. Arm 2 asks whether the documents landed;
+    // this asks whether the instruction file says so. They came apart once: --spec-layer shipped
+    // mission.md and tech-stack.md while 必需产物 still listed two files, measured by rendering
+    // both ways and finding the section byte-identical. The agent reading that file every session
+    // would have been told four things were delivered by the file that delivered them — and the
+    // startup-path pointer alone does not repair it, because a pointer says "you may read these",
+    // while the artifact contract says "these are what you got".
+    const artifactsSection = (text) => (text.split(/^##\s+/m).slice(1).find((p) => p.startsWith('必需产物')) || '');
+    result.artifactsDeclareLayer = /mission\.md/.test(artifactsSection(specAgents)) &&
+      /tech-stack\.md/.test(artifactsSection(specAgents)) &&
+      !/mission\.md|tech-stack\.md/.test(artifactsSection(await readText(path.join(plainDir, 'AGENTS.md'))));
 
     const specLines = specAgents.split('\n').length;
     const specSize = Buffer.byteLength(specAgents, 'utf8');
@@ -1365,7 +1378,7 @@ async function checkSpecLayer() {
     // console shows a field the verdict actually depends on.
     result.pass = result.offByDefault && result.onCreatesLayer && result.noStackLeak &&
       result.onDemandNotResident && result.budgetHeld && result.reRunSkips &&
-      result.flagValueRefused && result.purityHeld;
+      result.flagValueRefused && result.purityHeld && result.artifactsDeclareLayer;
     return result;
   } catch (error) {
     return { ...result, error: error.message };

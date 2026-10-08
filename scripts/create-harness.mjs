@@ -593,6 +593,15 @@ const replacements = {
   // avoid. One clause, no new line, no new rule.
   SPEC_LAYER_NOTE: specLayer
     ? '；规范层 `mission.md`、`tech-stack.md` **按需读**，与本次任务无关就不必打开'
+    : '',
+  // The artifact contract, not just the startup path. Without this the section listed two files
+  // while two more sat in the repository root — measured by rendering with and without
+  // --spec-layer and finding the section byte-identical. The agent that reads this file every
+  // session would have been told what was delivered was two files, by a file that is itself the
+  // thing that shipped them. Empty string when the switch is off, so the default render does not
+  // move by a byte.
+  SPEC_LAYER_ARTIFACTS: specLayer
+    ? '- `mission.md`、`tech-stack.md` — 规范层：项目事实与栈证据，**按需读**，各格只由用户陈述或文件证据填入'
     : ''
 };
 
