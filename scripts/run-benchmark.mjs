@@ -165,7 +165,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['artifactPurity', (group) => ` The generated artifacts carry none of this skill's retired machinery (${group.total} forbidden patterns, ${group.seeded} caught by the seeded violation) and name no external system at all (${group.named.length ? `NAMED ${group.named.join(', ')}` : 'none'}); both detectors are proven per-entry rather than by one blob (${group.pass ? 'verified' : `leaked ${(group.leaked || []).join(', ') || 'none'}; per-entry teeth ${group.perEntryTeeth ? 'ok' : 'BLIND'}; external teeth ${group.externalTeeth ? 'ok' : 'BLIND'}; named in this skill's own --help ${(group.namedInHelp || []).join(', ') || 'none'}; every --help body located ${group.helpBodiesLocated ? 'yes' : 'NO'}`}).`],
   ['maintenance', (group) => ` Harness maintenance has a moment to happen: the generated instruction file tells the agent to optimise the harness at wrap-up when the session's own output leaves it stale or thin, rather than when the harness files happen to have been touched, and the detector is proven to have teeth per term, against the retired diff-keyed sentence, against that sentence wearing the new vocabulary, and against a shortened forbidden list (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; retired phrasing ${(group.leaked || []).length ? `LEAKED (${group.leaked.join(', ')})` : 'absent'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old-form rejection ${group.oldFormRejected ? 'honoured' : 'ACCEPTED'}; hybrid form ${group.hybridRejected ? 'rejected' : 'ACCEPTED'}; forbidden-list shrink witness ${group.forbiddenWitness ? 'has teeth' : 'BLIND'}`}).`],
   ['skillDesign', (group) => ` The skill's own design rules are machine-checked rather than trusted to prose: SKILL.md's design section states the wrap-up criterion on the session's own output, and the detector is proven to have teeth per term, against the pre-09-25 rule line, against the old condition wearing the new vocabulary, and against a shortened requirement list (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; diff key ${(group.leaked || []).length ? `LEAKED (${group.leaked.join(', ')})` : 'absent'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; old rule line ${group.oldFormRejected ? 'rejected' : 'ACCEPTED'}; hybrid form ${group.hybridRejected ? 'rejected' : 'ACCEPTED'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}`}).`],
-  ['wrapupOutput', (group) => ` The wrap-up procedure a maintainer actually reads carries both of its outputs: the candidate changes, and the judgment items that are handed to the user instead of being decided — the part that stops a fresh session from treating already-dead rules as live — plus a net-change report, which is what keeps blind increment from hiding in wording, and SKILL.md's task table promises that net-change report on its own so the promise survives an agent that never opens the reference (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; own section ${group.heading ? 'present' : 'ABSENT'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; heading requirement ${group.headingArm ? 'has teeth' : 'BLIND'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}; task row ${group.entry && group.entry.row ? (group.entry.stated ? 'stated' : `MISSING (${(group.entry.missing || []).join(', ')})`) : 'NOT FOUND'}; task-row per-term detector ${group.entryTeeth ? 'has teeth' : 'BLIND'}; task-row witness ${group.entryWitness ? 'has teeth' : 'BLIND'}`}).`],
+  ['wrapupOutput', (group) => ` The wrap-up procedure a maintainer actually reads carries both of its outputs: the candidate changes, and the judgment items that are handed to the user instead of being decided — the part that stops a fresh session from treating already-dead rules as live — plus a net-change report, which is what keeps blind increment from hiding in wording, and SKILL.md's task table promises that net-change report on its own so the promise survives an agent that never opens the reference (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; own section ${group.heading ? 'present' : 'ABSENT'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; heading requirement ${group.headingArm ? 'has teeth' : 'BLIND'}; witness coverage ${group.witnessCovers ? 'complete' : 'HOLE'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}; task row ${group.entry && group.entry.row ? (group.entry.stated ? 'stated' : `MISSING (${(group.entry.missing || []).join(', ')})`) : 'NOT FOUND'}; task-row per-term detector ${group.entryTeeth ? 'has teeth' : 'BLIND'}; task-row witness ${group.entryWitness ? 'has teeth' : 'BLIND'}`}).`],
   ['dryRun', (group) => ` --dry-run writes nothing, reports the target's real state, and its plan matches the live run entry for entry (${group.pass ? 'verified' : 'FAILED'}).`],
   ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
   ['references', (group) => ` A documented command that no longer resolves is caught rather than silently trusted: the audit resolves manifest scripts and runnable files, reports by name what it cannot resolve, and is proven in both directions (${group.pass ? 'verified' : `dangling fixture ${group.danglingCaught ? 'caught' : 'MISSED'}; guarded fixture ${group.guardedExcused ? 'excused' : 'FALSELY FLAGGED'}; unchecked bucket ${group.uncheckedListed ? 'populated' : 'SILENT'}; uncollected scan ${group.uncollectedRefused ? 'refused' : 'PASSED'}`}).`],
@@ -396,6 +396,15 @@ const WRAPUP_SKILL_ENTRY_INCOMPLETE = [
   ['净增', '| 4 | 更新 | 目标仓路径 → 候选改动清单 + 需你判断清单，🔴 获批后落地候选改动，复验并报净减 |'],
   ['净减', '| 4 | 更新 | 目标仓路径 → 候选改动清单 + 需你判断清单，🔴 获批后落地候选改动，复验并报净增 |']
 ];
+
+// Set equality between a required-term list and the keys of a hand-written witness table. BOTH
+// directions matter and one-way containment is the trap: it passes on a table that has quietly lost its
+// weakest member, and that member is exactly the one nobody notices is gone. Found the hard way on
+// 10-08 — the task-row witness was guarded this way while the older reference-side one was not, and
+// deleting a row from that older table left every gate green. Declared up here with the other wrap-up
+// constants, ahead of the runSelfCheck() call site, for the temporal-dead-zone reason at line 347.
+const sameTermSet = (terms, witnessRows) =>
+  witnessRows.map(([term]) => term).sort().join('|') === [...terms].sort().join('|');
 
 // Declared at module scope, ahead of the runSelfCheck() call: a const sitting next to the function
 // that reads it would still be in its temporal dead zone at that call site.
@@ -776,9 +785,11 @@ Runs a lightweight harness benchmark:
      it) — and it must report the NET change rather than only what was edited. The same net-change promise
      must also appear in SKILL.md's own task table, the one version of this procedure every reader is
      guaranteed to meet, keyed on the task name so renumbering the table cannot read as a regression.
-     Seeded on seven sides:
+     Seeded on nine sides:
      each term dropped in turn, a version refused by its own missing term, and a fixture that keeps
-     every term while losing the place to put them, each of the three repeated against the task row.
+     every term while losing the place to put them, each of the three repeated against the task row —
+     and, for both witness tables, a row deleted from the witness itself, which a one-way containment
+     check waves through and only set equality catches.
      The judgment half is the part no tool can settle,
      so the gate proves the handover is stated instead of pretending the tool can make the call. [wrapupOutput]
  21. Checks the task conditions the instruction file carries — advance only what the user authorized,
@@ -939,11 +950,11 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  SKILL.md design rule: ${pass ? 'PASS' : 'FAIL'} — the skill's own design section states the wrap-up criterion on the session's output: ${stated ? 'ok' : `MISSING (${missing.join(', ') || 'section not found'})`}; the diff key it replaced: ${leaked.length === 0 ? 'absent' : `LEAKED (${leaked.join(', ')})`}; per-term detector: ${teeth ? 'ok' : 'BLIND'}; pre-09-25 rule line rejected: ${oldFormRejected ? 'ok' : 'ACCEPTED'}; hybrid form rejected: ${hybridRejected ? 'ok' : 'ACCEPTED'}; requirement-list shrink caught: ${witness ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.wrapupOutput) {
-    const { pass, stated, heading, missing = [], teeth, headingArm, witness, entry, entryTeeth, entryWitness, error } = selfCheck.wrapupOutput;
+    const { pass, stated, heading, missing = [], teeth, headingArm, witnessCovers, witness, entry, entryTeeth, entryWitness, error } = selfCheck.wrapupOutput;
     const entryLine = entry && entry.stated
       ? 'ok'
       : `NO (${entry && entry.row ? `MISSING (${(entry.missing || []).join(', ')})` : '更新 row not found'})`;
-    lines.push(`  Wrap-up outputs: ${pass ? 'PASS' : 'FAIL'} — the maintenance reference produces both lists (candidate changes and the items the user must judge) and reports the net change: ${stated ? 'ok' : `MISSING (${missing.join(', ') || 'terms'})`}; its own section: ${heading ? 'ok' : 'ABSENT'}; per-term detector: ${teeth ? 'ok' : 'BLIND'}; heading requirement: ${headingArm ? 'ok' : 'BLIND'}; list-shrink witness: ${witness ? 'ok' : 'BLIND'}; SKILL.md task row promises the same: ${entryLine}; per-term detector: ${entryTeeth ? 'ok' : 'BLIND'}; list-shrink witness: ${entryWitness ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
+    lines.push(`  Wrap-up outputs: ${pass ? 'PASS' : 'FAIL'} — the maintenance reference produces both lists (candidate changes and the items the user must judge) and reports the net change: ${stated ? 'ok' : `MISSING (${missing.join(', ') || 'terms'})`}; its own section: ${heading ? 'ok' : 'ABSENT'}; per-term detector: ${teeth ? 'ok' : 'BLIND'}; heading requirement: ${headingArm ? 'ok' : 'BLIND'}; witness covers every term: ${witnessCovers ? 'ok' : 'BLIND'}; list-shrink witness: ${witness ? 'ok' : 'BLIND'}; SKILL.md task row promises the same: ${entryLine}; per-term detector: ${entryTeeth ? 'ok' : 'BLIND'}; list-shrink witness: ${entryWitness ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.dryRun) {
     const { pass, changesNothing, previewedFiles, reflectsState, planMatchesRun, wrote = [], error } = selfCheck.dryRun;
@@ -1627,7 +1638,10 @@ async function checkWrapupOutputs() {
       && !wrapupJudgmentStated(WRAPUP_HEADING_LESS_FORM).heading;
     // List-shrink arm: each incomplete form is refused by the term it is missing, which is what makes
     // the required vocabulary provable rather than assumed (see the WRAPUP_INCOMPLETE_FORMS comment).
-    const witness = WRAPUP_INCOMPLETE_FORMS.every(([term, text]) =>
+    // The coverage guard comes first because the witness is the only thing standing between a dropped
+    // term and silence — verified 10-08 to be deletable row by row with the gate still green.
+    const witnessCovers = sameTermSet(WRAPUP_TERMS, WRAPUP_INCOMPLETE_FORMS);
+    const witness = witnessCovers && WRAPUP_INCOMPLETE_FORMS.every(([term, text]) =>
       wrapupJudgmentStated(text).missing.includes(term));
     // SKILL.md arm: the net-change promise has to live in the task table as well, not only in the
     // reference an agent opens once it is already maintaining — otherwise trimming the row back to its old
@@ -1644,8 +1658,9 @@ async function checkWrapupOutputs() {
     // quietly stop covering it, drop a witness and that term stops being tested at all. Compared as sets
     // because a per-entry loop passes on a list that has quietly lost its weakest member — which is exactly
     // how the first version of this guard let a witness deletion through while looking like it worked.
-    const entryWitnessCovers = WRAPUP_SKILL_ENTRY_INCOMPLETE.map(([term]) => term).sort().join('|')
-      === [...WRAPUP_SKILL_ENTRY_TERMS].sort().join('|');
+    // Same guard as the reference-side witness above, same reason: the first version of it was written
+    // as one-way containment and a witness deletion walked straight through.
+    const entryWitnessCovers = sameTermSet(WRAPUP_SKILL_ENTRY_TERMS, WRAPUP_SKILL_ENTRY_INCOMPLETE);
     const entryWitness = entryWitnessCovers && WRAPUP_SKILL_ENTRY_INCOMPLETE.every(([term, text]) =>
       wrapupSkillEntryStated(`| # | 任务 | 输入 → 输出 |\n|---|---|---|\n${text}\n`).missing.includes(term));
     return {
@@ -1655,6 +1670,7 @@ async function checkWrapupOutputs() {
       missing,
       teeth,
       headingArm,
+      witnessCovers,
       witness,
       entry,
       entryTeeth,
@@ -1663,7 +1679,7 @@ async function checkWrapupOutputs() {
   } catch (error) {
     return {
       pass: false, stated: false, heading: false, missing: [], teeth: false,
-      headingArm: false, witness: false,
+      headingArm: false, witnessCovers: false, witness: false,
       entry: { stated: false, row: false, missing: [] }, entryTeeth: false, entryWitness: false,
       error: error.message
     };
