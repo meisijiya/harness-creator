@@ -76,9 +76,12 @@ const execFileAsync = promisify(execFile);
 // 9820 -> 10290 on 2026-09-28, the second raise and the second time for scope rather than wording:
 // the user kept this skill in charge of non-engineering working directories (documentation sets,
 // skill repositories, teaching outlines) instead of giving that up, which adds a second tier the
-// skill's own routing has to name. The raise is 470 bytes for 545 bytes of new text measured on the
-// rendered file, rounded up so the ceiling lands at 12862 with 53 bytes spare — deliberately not
+// skill's own routing has to name. The ceiling is the product below, rounded — deliberately not
 // padded, because the point of a baseline is to be the tightest number the current scope justifies.
+// This comment states NO spare-byte figure on purpose: the file moves every session, so any such
+// number is stale within a day — and the figure that was here once read as authoritative enough to
+// mislead a later reader about how much room was really left. Same reason the README does not
+// restate the gate count. Print the live figure from the budget group instead.
 // An unnamed tier would be the defect this skill tells everyone else to fix: a capability with no
 // entry point in the artifact that routes to it, reachable only by someone who already knew.
 const SKILL_MD_BASELINE_BYTES = 10290;
@@ -180,7 +183,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`],
   ['taskContract', (group) => ` The instruction file scopes work to what the user authorized: explicit authorization to advance, picking and status updates only while an authorized deliverable is being executed, a baseline failure split into pre-existing versus introduced, a commit gated on the definition of done rather than on a passing check, existing modifications and untracked files protected from any cleanup, and a read-only task that only reports harness drift (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-requirement teeth ${group.teeth ? 'ok' : 'BLIND'}; forbidden-list witness ${group.forbidWitness ? 'ok' : 'BLIND'}; old forms ${group.oldFormsRejected ? 'refused' : 'ACCEPTED'}`}).`],
   ['maintContract', (group) => ` A full audit score is not an exit condition in the maintenance reference: the score row still routes to the actual misalignment check, keeps the anti-gaming clause, and the shared content-review table states the read-only, baseline-scope, commit-authorization, existing-work and full-score rules — proven per guard, with the whole table deleted, and by the retired short-circuit row (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-guard teeth ${group.teeth ? 'ok' : 'BLIND'}; whole table removed ${group.tableRemovedRefused ? 'refused' : 'ACCEPTED'}; retired row ${group.oldRowRejected ? 'refused' : 'ACCEPTED'}`}).`],
-  ['noDeadDecls', (group) => ` This suite carries no orphan: ${group.declaredCount} top-level declarations under scripts/ are all read somewhere in the tree, the ${group.helpEntries} numbered --help entries annotate exactly the ${SELF_CHECK_GROUPS.length} live group keys in both directions, and every flag the generator documents is a flag it reads (${group.pass ? 'verified' : `unread ${(group.dead || []).join(', ') || 'none'}; ghost keys ${(group.ghostKeys || []).join(', ') || 'none'}; groups with no help entry ${(group.missingKeys || []).join(', ') || 'none'}; keys documented twice ${(group.duplicateKeys || []).join(', ') || 'none'}; documented-but-unread flags ${(group.unreadFlags || []).join(', ') || 'none'}; detector teeth decls ${group.teethDeclarations ? 'ok' : 'BLIND'}, help ${group.teethHelp ? 'ok' : 'BLIND'}, flags ${group.teethFlags ? 'ok' : 'BLIND'}`}).`]
+  ['noDeadDecls', (group) => ` This suite carries no orphan: ${group.declaredCount} top-level declarations under scripts/ are all read somewhere in the tree, the ${group.helpEntries} numbered --help entries annotate exactly the ${SELF_CHECK_GROUPS.length} live group keys in both directions, and every flag the generator documents is a flag it reads (${group.pass ? 'verified' : `unread ${(group.dead || []).join(', ') || 'none'}; ghost keys ${(group.ghostKeys || []).join(', ') || 'none'}; groups with no help entry ${(group.missingKeys || []).join(', ') || 'none'}; keys documented twice ${(group.duplicateKeys || []).join(', ') || 'none'}; documented-but-unread flags ${(group.unreadFlags || []).join(', ') || 'none'}; artifact-adding flags missing from SKILL.md ${(group.undocumentedFlags || []).join(', ') || 'none'} (baseline ${group.artifactFlagBaseline} files); lying fixtures ${(group.lyingFlags || []).join(', ') || 'none'}; detector teeth decls ${group.teethDeclarations ? 'ok' : 'BLIND'}, help ${group.teethHelp ? 'ok' : 'BLIND'}, flags ${group.teethFlags ? 'ok' : 'BLIND'}`}).`]
 ]);
 
 // The single behavior this skill must not have. A harness that detected governance modes, assigned
@@ -884,6 +887,8 @@ const externalSystemsIn = (text) => EXTERNAL_SYSTEM_SEEDS.filter((name) => text.
 // document, which is the keyword-stuffing anti-pattern wearing a gate's clothes. So residency is
 // judged by the required positive ("按需读") in all three files, plus an absence in the one file
 // whose job is to decide.
+const ARTIFACT_ADDING_FLAGS = ['--spec-layer'];
+
 const RESIDENT_READING = /每次(会话|启动)|必读|先读|首先阅读|启动时读取/;
 const SPEC_LAYER_ON_DEMAND = /按需读/;
 const STACK_LEAK_PATTERN = /typescript|TypeScript|package\.json|\bnode\b|\bpnpm\b|\byarn\b|pyproject|go\.mod|Cargo\.toml|pom\.xml/;
@@ -1065,8 +1070,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Maintenance contract: ${pass ? 'PASS' : 'FAIL'} — a full audit score still routes to the actual misalignment check instead of ending the review, missing: ${missing.join(', ') || 'none'}; per-guard teeth: ${teeth ? 'ok' : 'BLIND'}; whole content-review table removed: ${tableRemovedRefused ? 'ok' : 'ACCEPTED'}; retired short-circuit row refused: ${oldRowRejected ? 'ok' : 'ACCEPTED'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.noDeadDecls) {
-    const { pass, dead = [], ghostKeys = [], missingKeys = [], duplicateKeys = [], unreadFlags = [], declaredCount, helpEntries, teethDeclarations, teethHelp, teethFlags, error } = selfCheck.noDeadDecls;
-    lines.push(`  Orphan declarations: ${pass ? 'PASS' : 'FAIL'} — ${declaredCount} top-level declarations under scripts/, all read somewhere in the tree: ${dead.length === 0 ? 'ok' : `${dead.length} UNREAD (${dead.join(', ')})`}; ${helpEntries} numbered --help entries vs ${SELF_CHECK_GROUPS.length} group keys, equal in both directions: ${ghostKeys.length === 0 && missingKeys.length === 0 && duplicateKeys.length === 0 ? 'ok' : `NO (ghost: ${ghostKeys.join(', ') || 'none'}; missing entry: ${missingKeys.join(', ') || 'none'}; twice: ${duplicateKeys.join(', ') || 'none'})`}; documented-but-unread generator flags: ${unreadFlags.length === 0 ? 'none' : unreadFlags.join(', ')}; detector teeth: declarations ${teethDeclarations ? 'ok' : 'BLIND'}, help ${teethHelp ? 'ok' : 'BLIND'}, flags ${teethFlags ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
+    const { pass, dead = [], ghostKeys = [], missingKeys = [], duplicateKeys = [], unreadFlags = [], declaredCount, helpEntries, teethDeclarations, teethHelp, teethFlags, undocumentedFlags = [], lyingFlags = [], artifactFlagBaseline, error } = selfCheck.noDeadDecls;
+    lines.push(`  Orphan declarations: ${pass ? 'PASS' : 'FAIL'} — ${declaredCount} top-level declarations under scripts/, all read somewhere in the tree: ${dead.length === 0 ? 'ok' : `${dead.length} UNREAD (${dead.join(', ')})`}; ${helpEntries} numbered --help entries vs ${SELF_CHECK_GROUPS.length} group keys, equal in both directions: ${ghostKeys.length === 0 && missingKeys.length === 0 && duplicateKeys.length === 0 ? 'ok' : `NO (ghost: ${ghostKeys.join(', ') || 'none'}; missing entry: ${missingKeys.join(', ') || 'none'}; twice: ${duplicateKeys.join(', ') || 'none'})`}; documented-but-unread generator flags: ${unreadFlags.length === 0 ? 'none' : unreadFlags.join(', ')}; a flag that ADDS artifacts and is missing from SKILL.md: ${undocumentedFlags.length === 0 ? `none (baseline ${artifactFlagBaseline} files)` : `UNDOCUMENTED ${undocumentedFlags.join(', ')}`}; artifact-adding fixtures that do not actually add: ${lyingFlags.length === 0 ? 'none' : lyingFlags.join(', ')}; detector teeth: declarations ${teethDeclarations ? 'ok' : 'BLIND'}, help ${teethHelp ? 'ok' : 'BLIND'}, flags ${teethFlags ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.reportCoverage) {
     const { pass, unbound = [], missingLines = [], orphanLines = [], missingConsole = [] } = selfCheck.reportCoverage;
@@ -1513,7 +1518,57 @@ function readsFlag(code, flag) {
   return new RegExp(`args\\.${camel}\\b`).test(code);
 }
 
-function checkNoDeadDeclarations() {
+// Half 4 of the orphan hunt: a flag that changes WHAT THE USER ENDS UP HOLDING must be named in
+// SKILL.md, the document an agent reads first.
+//
+// The three halves above all run one direction — a declaration with no reader, a group key with no
+// help entry, a documented flag the code stopped reading. What none of them can see is the opposite
+// of half 3's failure: a flag that works PERFECTLY. `--spec-layer` was read by the generator,
+// advertised in its own `--help`, given two templates and a self-check group — and appeared nowhere
+// in SKILL.md, for an entire session, with the suite green throughout. Nothing was broken except the
+// document a user is supposed to learn the flag from.
+//
+// Why "adds files" is the trigger and not "is a flag": SKILL.md ends its options line with 其余见
+// `--help`, so most flags legitimately live only there, and demanding all of them would break a
+// deliberate design. A flag that adds an artifact CLASS is different — it changes what the user is
+// holding afterwards, which is the one thing the entry document exists to tell them.
+//
+// The list is a literal on purpose. Derived from the generator it would agree with the generator by
+// construction, and deleting a row would delete the check with it — the self-shrinking table this
+// suite has already been bitten by twice. The behavioural half is what stops it drifting the other
+// way: every row must really add a file when run, so a fixture that CLAIMS a flag adds artifacts and
+// does not fails on its own lie rather than passing on its own word.
+
+async function checkArtifactAddingFlagsDocumented() {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'harness-artifactflags-'));
+  const skill = await readText(path.join(skillRoot, 'SKILL.md'));
+  const baselineDir = path.join(dir, 'baseline');
+  const fileCount = async (target, extra = []) => {
+    await mkdir(target, { recursive: true });
+    await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', target, ...extra]);
+    return (await readdir(target)).length;
+  };
+  try {
+    const baseline = await fileCount(baselineDir);
+    const undocumented = [];
+    const dishonest = [];
+    for (const flag of ARTIFACT_ADDING_FLAGS) {
+      const target = path.join(dir, flag.replace(/-/g, ''));
+      const withFlag = await fileCount(target, [flag]);
+      // It must really add files, or the fixture is lying and the arm below would be asserting a
+      // property of nothing.
+      if (withFlag <= baseline) dishonest.push(`${flag} (${baseline} -> ${withFlag} files)`);
+      if (!skill.includes(flag)) undocumented.push(flag);
+    }
+    return { pass: undocumented.length === 0 && dishonest.length === 0, baseline, undocumented, dishonest };
+  } catch (error) {
+    return { pass: false, undocumented: [], dishonest: [], error: error.message };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function checkNoDeadDeclarations() {
   try {
     const own = readFileSync(fileURLToPath(import.meta.url), 'utf8');
     const generator = readFileSync(path.join(scriptDir, 'create-harness.mjs'), 'utf8');
@@ -1551,10 +1606,16 @@ function checkNoDeadDeclarations() {
     const teethFlags = readsFlag('const args = {};\n', 'ghost-flag') === false
       && readsFlag('const args = {};\nconsole.log(args.ghostFlag);\n', 'ghost-flag') === true;
 
+    // Half 4 — a flag that adds artifacts must be in SKILL.md. Only its DETAIL fields are folded in
+    // here; the verdict is recomputed into this group's own conjunction below, so the printed PASS
+    // cannot come from a sub-check nobody counted.
+    const { baseline, undocumented, dishonest } = await checkArtifactAddingFlagsDocumented();
+
     return {
       pass: dead.length === 0 && ghostKeys.length === 0 && missingKeys.length === 0
         && duplicateKeys.length === 0 && unreadFlags.length === 0
-        && teethDeclarations && teethHelp && teethFlags,
+        && teethDeclarations && teethHelp && teethFlags
+        && undocumented.length === 0 && dishonest.length === 0,
       dead,
       ghostKeys,
       missingKeys,
@@ -1564,7 +1625,10 @@ function checkNoDeadDeclarations() {
       helpEntries: help.length,
       teethDeclarations,
       teethHelp,
-      teethFlags
+      teethFlags,
+      undocumentedFlags: undocumented,
+      lyingFlags: dishonest,
+      artifactFlagBaseline: baseline
     };
   } catch (error) {
     return { pass: false, dead: [], ghostKeys: [], missingKeys: [], duplicateKeys: [], unreadFlags: [], error: error.message };
