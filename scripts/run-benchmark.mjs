@@ -474,9 +474,6 @@ const CONSOLE_GROUP_LABELS = new Map([
 // while passing on a render that dropped the clause it protects. Units are per LINE (a rule is one
 // bullet) and, for a condition on one instruction, per CLAUSE — the only reading in which "仅在…时，
 // 更新其状态" passes while an unconditional "更新其状态" beside it fails.
-const SELF_REFERENCE_TERM = '本技能';
-const selfRefLeaks = (text) => (text.includes(SELF_REFERENCE_TERM) ? [SELF_REFERENCE_TERM] : []);
-
 const AUTHORIZATION_RULE = ['显式授权', '明确要求', '显式要求', '明确授权', '只推进'];
 const PICK_AUTHORIZATION = ['授权', '明确要求', '显式要求', '用户要求', '经用户'];
 // How these two tiers word a condition, and nothing wider. The bare 不 / 未 this list used to carry
@@ -1277,9 +1274,15 @@ function stripLineComments(source) {
 // is not dead. That is also why the counts below run over the whole tree rather than one file —
 // scoping them to a single file reported all sixteen exported helpers as orphans, which is an arm
 // measuring the wrong thing rather than an arm finding anything.
+//
+// The const pattern used to demand UPPER_SNAKE_CASE, which made this arm blind to every camelCase
+// top-level const — including arrow-function helpers, the most common shape at module scope. It read
+// "every top-level name the tree declares" while quietly exempting a whole naming style, and the proof
+// is that the count sat at 165 through a change that added one: the new one was invisible to its own
+// detector. Found 10-08, and widened to every identifier a binding can legally have.
 function declaredNamesIn(source) {
   const names = new Set();
-  for (const match of source.matchAll(/^(?:export\s+)?const\s+([A-Z][A-Z0-9_]*)\s*=/gm)) names.add(match[1]);
+  for (const match of source.matchAll(/^(?:export\s+)?const\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=/gm)) names.add(match[1]);
   for (const match of source.matchAll(/^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)/gm)) names.add(match[1]);
   return [...names];
 }
