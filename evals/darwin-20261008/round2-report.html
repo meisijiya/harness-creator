@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Darwin 优化报告 · harness-creator</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --cream:#f7f5f0; --card:#fff; --line:#e9e3d6; --line-soft:#f0ece3;
+  --ink:#14171e; --body:#3a4256; --muted:#7c7a72;
+  --primary:#2f6f5e; --primary-soft:rgba(47,111,94,.08);
+  --warn:#c97b3f; --warn-soft:rgba(201,123,63,.10);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--cream); color:var(--ink);
+  font-family:'Outfit',sans-serif; font-size:15px; line-height:1.6;
+  padding:40px 24px 72px;
+}
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background:
+    radial-gradient(560px 300px at 12% -4%, rgba(47,111,94,.05), transparent 70%),
+    radial-gradient(480px 280px at 92% 4%, rgba(201,123,63,.05), transparent 70%);
+}
+.wrap{max-width:1000px;margin:0 auto;position:relative;z-index:1}
+header{margin-bottom:44px}
+.eyebrow{font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:.14em;color:var(--primary);text-transform:uppercase;margin-bottom:12px}
+h1{font-family:'DM Serif Display',serif;font-size:34px;font-weight:400;letter-spacing:-.01em;margin-bottom:14px;line-height:1.2}
+.lede{color:var(--body);max-width:64ch;font-size:15px}
+.meta{margin-top:20px;display:flex;flex-wrap:wrap;gap:8px}
+.tag{font-family:'JetBrains Mono',monospace;font-size:11.5px;padding:4px 10px;border-radius:999px;background:#fff;border:1px solid var(--line);color:var(--muted)}
+.tag b{color:var(--primary);font-weight:500}
+section{margin-bottom:48px}
+h2{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:18px;display:flex;align-items:center;gap:9px}
+h2 svg{width:16px;height:16px;color:var(--primary);flex-shrink:0}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 22px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+
+/* 预算条 */
+.gauge{margin-bottom:6px}
+.gauge-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px;gap:12px}
+.gauge-name{font-weight:600;font-size:14.5px}
+.gauge-sub{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted)}
+.gauge-track{height:22px;background:var(--line-soft);border-radius:8px;overflow:hidden;position:relative}
+.gauge-old{position:absolute;inset:0 auto 0 0;background:rgba(201,123,63,.28);border-radius:8px}
+.gauge-fill{position:absolute;inset:0 auto 0 0;background:var(--primary);border-radius:8px}
+.gauge-mark{position:absolute;top:-5px;bottom:-5px;width:2px;background:var(--ink);opacity:.5}
+.gauge-note{margin-top:8px;font-size:13px;color:var(--muted)}
+
+/* bench */
+.bench{display:grid;grid-template-columns:190px 1fr 74px;gap:14px;align-items:center;padding:7px 0}
+.bench-label{font-size:13.5px;color:var(--body)}
+.bench-track{height:14px;background:var(--line-soft);border-radius:6px;overflow:hidden}
+.bench-fill{height:100%;background:var(--primary);border-radius:6px}
+.bench-val{font-family:'JetBrains Mono',monospace;font-size:12px;text-align:right;color:var(--body)}
+
+/* 时间线 */
+.timeline{list-style:none;position:relative;padding:0;margin:0}
+.timeline::before{content:"";position:absolute;left:7px;top:8px;bottom:8px;width:2px;background:var(--primary);opacity:.3}
+.timeline li{position:relative;padding:0 0 22px 30px}
+.timeline li:last-child{padding-bottom:0}
+.timeline li::before{content:"";position:absolute;left:1px;top:5px;width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid var(--primary)}
+.timeline .hash{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--primary)}
+.timeline strong{display:block;font-size:14.5px;margin:2px 0 5px;font-weight:600}
+.timeline p{font-size:13.5px;color:var(--body)}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-weight:600;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:0 12px 9px 0;border-bottom:1px solid var(--line)}
+td{padding:11px 12px 11px 0;border-bottom:1px solid var(--line-soft);vertical-align:top;color:var(--body)}
+td.k{color:var(--ink);font-weight:500}
+tr:last-child td{border-bottom:none}
+.pill{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:11px;padding:2px 8px;border-radius:999px;background:var(--primary-soft);color:var(--primary)}
+.pill.w{background:var(--warn-soft);color:var(--warn)}
+.pill.n{background:rgba(124,122,114,.12);color:var(--muted)}
+
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.note{border-left:2px solid var(--primary);padding-left:14px;color:var(--body);font-size:13.5px}
+.note.w{border-color:var(--warn)}
+footer{border-top:1px solid var(--line);padding-top:20px;color:var(--muted);font-size:12.5px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+@media(max-width:760px){
+  .two{grid-template-columns:1fr}
+  .bench{grid-template-columns:120px 1fr 60px;gap:9px}
+  h1{font-size:27px}
+  body{padding:28px 16px 56px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Darwin Skill 2.0 · Round 2</div>
+  <h1>预算宽了 2600 字节，<br>换来四条原本没有载体的规则</h1>
+  <p class="lede">这一轮真正的产出不是分数——是给三条一直是散文的规则装上了机械载体。其中一条经实测确认会<strong>静默销毁别人写的内容</strong>。</p>
+  <div class="meta">
+    <span class="tag">分支 <b>auto-optimize/20261008-1958</b></span>
+    <span class="tag">自检 <b>21 组全 PASS</b></span>
+    <span class="tag">test-prompts <b>22 → 26</b></span>
+    <span class="tag">日期 <b>2026-10-08</b></span>
+  </div>
+</header>
+
+<section>
+  <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M19 9l-5 5-4-4-3 3"/></svg>预算：上调是显式决策，不是顺带放宽</h2>
+  <div class="card">
+    <div class="gauge">
+      <div class="gauge-top">
+        <span class="gauge-name">SKILL.md</span>
+        <span class="gauge-sub">13053 / 15435 字节 · 余 2382</span>
+      </div>
+      <div class="gauge-track">
+        <div class="gauge-old" style="width:84.6%"></div>
+        <div class="gauge-fill" style="width:84.6%"></div>
+        <div class="gauge-mark" style="left:83.3%"></div>
+      </div>
+      <p class="gauge-note">竖线 = 上调前的上限 12862（仅剩 <strong>33 字节</strong>）。今日 4 次 keep 全靠删冗余在上限内完成——删冗余撑不过一轮。</p>
+    </div>
+    <div style="margin-top:20px;padding-top:18px;border-top:1px solid var(--line-soft)">
+      <p class="note">第三次上调，方向与前两次<strong>相反</strong>。取值 1.5 不是拍脑袋：它正是 <code style="font-family:'JetBrains Mono',monospace;font-size:12px">multiplierSane</code> 既有护栏（&gt;1 且 ≤1.5）的边界，落在护栏之内而非越过。<br><br>这一笔单独提交，提交信息写明撤销 09-23 决定——因为<strong>半年后没人分得清「主动放宽的网」和「被优化磨掉的网」</strong>。花费的是克制；补偿控制仍是：乘数是只有用户决策才动的数。</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>两条散文的实测代价</h2>
+  <div class="two">
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span class="pill w">数据毁灭</span>
+      </div>
+      <strong style="display:block;font-size:15px;margin-bottom:8px">--force 静默销毁第三方块</strong>
+      <p style="font-size:13.5px;color:var(--body);margin-bottom:12px">SKILL.md 用「禁用」这种硬措辞写着「含第三方块的文件不许 --force」。实测脚本里<strong>这条规则不存在</strong>——夹具里的 <code style="font-family:'JetBrains Mono',monospace;font-size:11.5px">## Agent skills</code> 被整段抹掉，脚本还报告 WRITTEN。</p>
+      <p class="note w">唯一一条保护别人工作的规则，恰好是唯一一条没有机械载体的规则。</p>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span class="pill w">契约失配</span>
+      </div>
+      <strong style="display:block;font-size:15px;margin-bottom:8px">规范层进了启动工作流，没进产物契约</strong>
+      <p style="font-size:13.5px;color:var(--body);margin-bottom:12px">--spec-layer 生成两份文档，但生成物的「必需产物」只列两项——<strong>给开关与不给开关，该节逐字相同</strong>。</p>
+      <p class="note w">指针说的是「你可以读」，产物契约说的是「交付了什么」。上一轮修的是源文档，生成物这侧没人查。</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>四条修复与它们的机械载体</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>问题</th><th>判据</th><th>变异后</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="k">--force 销毁他人章节<br><span style="font-size:12px;color:var(--muted)">守卫加在 copyTemplate</span></td>
+          <td>模板自己定义的 H2，不是第三方<strong>名字表</strong>——名字表正是本技能在别处一律拒绝维护的东西</td>
+          <td><span class="pill">报 NO，门禁红</span></td>
+        </tr>
+        <tr>
+          <td class="k">规范层未进产物契约</td>
+          <td>开开关时产物契约必须点名；不开时必须仍不提（否则「默认逐字节不变」破了）</td>
+          <td><span class="pill">报 MISSING，门禁红</span></td>
+        </tr>
+        <tr>
+          <td class="k">Usage  Synopsis 漏 --spec-layer<br><span style="font-size:12px;color:var(--muted)">正文介绍了，Synopsis 没有</span></td>
+          <td>--help 正文出现过的每个 flag，Synopsis 必须列出</td>
+          <td><span class="pill">点名 spec-layer，红</span></td>
+        </tr>
+        <tr>
+          <td class="k">「只落两个产物」被自家开关证伪</td>
+          <td>改为「默认只落两个（--spec-layer 另加两份）」——<span style="color:var(--warn)">代理拒绝用户请求时读到的正是这一行</span></td>
+          <td><span class="pill n">措辞，无载体</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Phase 1 基线：18.3 分的差本身是结论</h2>
+  <div class="card">
+    <div class="bench">
+      <span class="bench-label">Judge A 总分</span>
+      <div class="bench-track"><div class="bench-fill" style="width:83%"></div></div>
+      <span class="bench-val">83.0</span>
+    </div>
+    <div class="bench">
+      <span class="bench-label">Judge B 总分</span>
+      <div class="bench-track"><div class="bench-fill" style="width:64.7%;background:var(--warn)"></div></div>
+      <span class="bench-val">64.7</span>
+    </div>
+    <p class="gauge-note" style="margin-top:14px">A 扣在措辞细节，B 扣在「承诺无载体」。<strong>B 更接近这个技能的病灶</strong>——它自称门禁文化，自己有洞。分差不是噪音，是两个视角的分工。</p>
+  </div>
+</section>
+
+<section>
+  <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 3v12M18 9v6M3 21h18"/></svg>本轮提交</h2>
+  <div class="card">
+    <ol class="timeline">
+      <li>
+        <span class="hash">f74cb07</span>
+        <strong>gate(skill) · 用户决策放宽上限 1.25 → 1.5</strong>
+        <p>单独提交，撤销 09-23 决定。连带修掉 README 复述 ×1.25 的漂移点。</p>
+      </li>
+      <li>
+        <span class="hash">bee6c84</span>
+        <strong>fix(gate) · --force 拒绝销毁他人章节</strong>
+        <p>判据用结构事实而非名字表；拒绝在写入前；非零退出；正向对照入断言。</p>
+      </li>
+      <li>
+        <span class="hash">9600f62</span>
+        <strong>fix(artifact) · 规范层进产物契约</strong>
+        <p>specLayer 组新增 Arm 2b，正反两面断言。顺带修 :113 的绝对化陈述。</p>
+      </li>
+      <li>
+        <span class="hash">c538b7b</span>
+        <strong>fix(docs) · 修正失准括注 + Synopsis 失配断言</strong>
+        <p>只改已失准的举例，不连坐删掉属实的三来源说法。</p>
+      </li>
+      <li>
+        <span class="hash">739119e</span>
+        <strong>chore(darwin) · 记录 + 修复上一轮遗留的 TSV 列错位</strong>
+        <p>13 条记录列数已齐整（已备份）。test-prompts 22 → 26。</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<footer>
+  <span>harness-creator · Darwin Round 2</span>
+  <span>所有修复均经变异测试验证有牙，未使用 reset --hard</span>
+</footer>
+
+</div>
+</body>
+</html>
