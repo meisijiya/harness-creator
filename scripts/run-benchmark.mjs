@@ -315,7 +315,7 @@ function maintenanceTriggerStated(text) {
 // satisfies a terms-only predicate, which is exactly what the maintenance gate's comment promises to
 // prevent and its arms do not. Declared here, ahead of the runSelfCheck() call site, for the
 // temporal-dead-zone reason this file has now paid for four times.
-const SKILL_DESIGN_TERMS = ['收尾', '按会话产出', '本技能所管的文件'];
+const SKILL_DESIGN_TERMS = ['收尾', '按会话产出', '本技能所管的文件', '不是命令队列'];
 // Verbatim from SKILL.md at 94af583, the last release before the 09-25 ruling. Fixture for the
 // negative arm only; nothing renders it any more, so it must not be kept in sync with SKILL.md.
 const SKILL_DESIGN_OLD_FORM = '- 收尾只作用于**本技能所管的文件**中本会话改动的部分，不做全仓审计；'
@@ -334,7 +334,12 @@ const SKILL_DESIGN_FORBIDDEN = ['本会话改动的部分'];
 const SKILL_DESIGN_INCOMPLETE_FORMS = [
   ['收尾', '- ＝按会话产出按需优化**本技能所管的文件**（指令文件、`init.sh`、工作规则）。'],
   ['按会话产出', '- 收尾＝按需优化**本技能所管的文件**（指令文件、`init.sh`、工作规则）。'],
-  ['本技能所管的文件', '- 收尾＝按会话产出按需优化（指令文件、`init.sh`、工作规则）。']
+  ['本技能所管的文件', '- 收尾＝按会话产出按需优化（指令文件、`init.sh`、工作规则）。'],
+  // The command-queue rule. It is here for the same reason as the three above: without a hand-written
+  // witness, deleting `不是命令队列` from SKILL_DESIGN_TERMS would silently stop testing it while every
+  // arm stayed green. The witness is the shipped line with that one phrase removed, so it is refused if
+  // and only if the phrase is genuinely required.
+  ['不是命令队列', '- 已记录的清单是上下文：本技能与生成物都不自行选活，推进哪一条需本次显式授权。']
 ];
 // Section-scoped rather than whole-file: the old wording is still quoted on purpose in the
 // maintenance reference and the README as a counter-example, and a file-wide arm would flag that
