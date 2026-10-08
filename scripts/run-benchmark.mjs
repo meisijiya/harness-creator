@@ -152,7 +152,7 @@ const DISCOVERABLE_CONTENT = [
 const SELF_CHECK_GROUPS = [
   'budget', 'agentsBudget', 'agentsDiscover', 'artifactPurity', 'maintenance', 'skillDesign',
   'wrapupOutput', 'dryRun', 'selfRefs', 'references', 'bottleneckTies', 'foreignAudit', 'blankGate',
-  'blueprint', 'agentFile', 'initGrowth', 'reportContract', 'taskContract', 'maintContract', 'noDeadDecls'
+  'blueprint', 'agentFile', 'initGrowth', 'specLayer', 'reportContract', 'taskContract', 'maintContract', 'noDeadDecls'
 ];
 
 // One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
@@ -175,8 +175,9 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['blankGate', (group) => ` A project with nothing to verify — no manifest, a manifest with no runnable script, or an explicit --commands list whose scripts the manifest does not define — gets a refusal that exits non-zero instead of reporting a pass it did not earn, the counter reopens the moment a real check runs, a comma inside a quoted command stays one command while a genuine comma-separated list still splits, an unterminated quote is refused leaving nothing behind, and the manual fallback template refuses on the same shapes (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-description slot stays a visible pending marker when the user has not stated one, while a blueprint change rewrites that slot only — the rest of the file survives byte for byte, and a shape this skill did not render is refused rather than guessed at (${group.pass ? 'verified' : `pending ${group.pendingMarked ? 'ok' : 'NO'}; no stack fill ${group.noInventedFill ? 'ok' : 'NO'}; verbatim ${group.verbatim ? 'ok' : 'NO'}; slot-only ${group.slotRewritten && group.restIntact ? 'ok' : 'NO'}; detector ${group.detectorHasTeeth ? 'has teeth' : 'BLIND'}; refusal ${group.refusalHonoured && group.refusedUntouched ? 'ok' : 'NO'}`}).`],
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`],
-  ['initGrowth', (group) => ` The gate only grows: a new check joins an existing init.sh without removing or reordering any step, a repeat is a no-op that leaves the file byte-identical, a check the gate would never actually run — or one that does not parse as shell — is refused and rolled back rather than reported as added, a one-line entry reference to a script this repository owns is appended unguarded so a missing entry turns the gate red instead of skipping it, and a gate that went red this session leaves a check behind so the lesson reaches the specification instead of only the fix (${group.pass ? 'verified' : `grew ${group.grew ? 'ok' : 'NO'}; existing steps intact ${group.preserved ? 'ok' : 'NO'}; repeat ${group.idempotent ? 'ok' : 'NO'}; dead-branch check ${group.deadBranchRefused && group.rolledBack ? 'refused and rolled back' : 'ACCEPTED'}; unparseable check ${group.unparseableRefused ? 'refused' : 'ACCEPTED'}; entry appended ${group.entryAppended ? 'ok' : 'NO'}; entry unguarded ${group.entryUnguarded ? 'ok' : 'GUARDED'}; entry repeat ${group.entryIdempotent ? 'ok' : 'NO'}; missing entry ${group.entryMissingRefused ? 'refused' : 'ACCEPTED'}; path rules ${group.entryRulesHaveTeeth ? 'ok' : 'BLIND'}; entry removed turns it red ${group.entryGateFailsWhenUnresolvable ? 'yes' : 'NO'}; red-gate lesson ${group.loopStated && group.loopIsLoadBearing ? 'recorded' : 'LOST'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}; no init.sh ${group.missingRefused ? 'refused' : 'ACCEPTED'}`}).`],
-  ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`],
+  ['initGrowth', (group) => ` The gate only grows: a new check joins an existing init.sh without removing or reordering any step, a repeat is a no-op that leaves the file byte-identical, a repeat is a no-op that leaves the file byte-identical, a check the gate would never actually run — or one that does not parse as shell — is refused and rolled back rather than reported as added, a one-line entry reference to a script this repository owns is appended unguarded so a missing entry turns the gate red instead of skipping it, and a gate that went red this session leaves a check behind so the lesson reaches the specification instead of only the fix (${group.pass ? 'verified' : `grew ${group.grew ? 'ok' : 'NO'}; existing steps intact ${group.preserved ? 'ok' : 'NO'}; repeat ${group.idempotent ? 'ok' : 'NO'}; dead-branch check ${group.deadBranchRefused && group.rolledBack ? 'refused and rolled back' : 'ACCEPTED'}; unparseable check ${group.unparseableRefused ? 'refused' : 'ACCEPTED'}; entry appended ${group.entryAppended ? 'ok' : 'NO'}; entry unguarded ${group.entryUnguarded ? 'ok' : 'GUARDED'}; entry repeat ${group.entryIdempotent ? 'ok' : 'NO'}; missing entry ${group.entryMissingRefused ? 'refused' : 'ACCEPTED'}; path rules ${group.entryRulesHaveTeeth ? 'ok' : 'BLIND'}; entry removed turns it red ${group.entryGateFailsWhenUnresolvable ? 'yes' : 'NO'}; red-gate lesson ${group.loopStated && group.loopIsLoadBearing ? 'recorded' : 'LOST'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}; no init.sh ${group.missingRefused ? 'refused' : 'ACCEPTED'}`}).`],
+  ['specLayer', (group) => ` The spec layer is opt-in and says nothing when it is off: a run without --spec-layer still produces the two artifacts and byte-identical content, the two documents exist only when the flag is given, the detected stack never becomes an answer to "what is this project", they are pointed at as read-on-demand rather than as files every session must open, and the same byte/line/working-rule ceilings still hold with the extra pointer (${group.pass ? 'verified' : `default unchanged ${group.offByDefault ? 'ok' : 'CHANGED'}; flag creates the layer ${group.onCreatesLayer ? 'ok' : 'NO'}; stack kept out of the mission ${group.noStackLeak ? 'ok' : 'LEAKED'}; read on demand ${group.onDemandNotResident ? 'ok' : 'RESIDENT'}; budget ${group.budgetHeld ? 'ok' : 'BUSTED'}; re-run skips ${group.reRunSkips ? 'ok' : 'OVERWROTE'}; flag value ${group.flagValueRefused ? 'refused' : 'ACCEPTED'}`}).`],
+['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`],
   ['taskContract', (group) => ` The instruction file scopes work to what the user authorized: explicit authorization to advance, picking and status updates only while an authorized deliverable is being executed, a baseline failure split into pre-existing versus introduced, a commit gated on the definition of done rather than on a passing check, existing modifications and untracked files protected from any cleanup, and a read-only task that only reports harness drift (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-requirement teeth ${group.teeth ? 'ok' : 'BLIND'}; forbidden-list witness ${group.forbidWitness ? 'ok' : 'BLIND'}; old forms ${group.oldFormsRejected ? 'refused' : 'ACCEPTED'}`}).`],
   ['maintContract', (group) => ` A full audit score is not an exit condition in the maintenance reference: the score row still routes to the actual misalignment check, keeps the anti-gaming clause, and the shared content-review table states the read-only, baseline-scope, commit-authorization, existing-work and full-score rules — proven per guard, with the whole table deleted, and by the retired short-circuit row (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-guard teeth ${group.teeth ? 'ok' : 'BLIND'}; whole table removed ${group.tableRemovedRefused ? 'refused' : 'ACCEPTED'}; retired row ${group.oldRowRejected ? 'refused' : 'ACCEPTED'}`}).`],
   ['noDeadDecls', (group) => ` This suite carries no orphan: ${group.declaredCount} top-level declarations under scripts/ are all read somewhere in the tree, the ${group.helpEntries} numbered --help entries annotate exactly the ${SELF_CHECK_GROUPS.length} live group keys in both directions, and every flag the generator documents is a flag it reads (${group.pass ? 'verified' : `unread ${(group.dead || []).join(', ') || 'none'}; ghost keys ${(group.ghostKeys || []).join(', ') || 'none'}; groups with no help entry ${(group.missingKeys || []).join(', ') || 'none'}; keys documented twice ${(group.duplicateKeys || []).join(', ') || 'none'}; documented-but-unread flags ${(group.unreadFlags || []).join(', ') || 'none'}; detector teeth decls ${group.teethDeclarations ? 'ok' : 'BLIND'}, help ${group.teethHelp ? 'ok' : 'BLIND'}, flags ${group.teethFlags ? 'ok' : 'BLIND'}`}).`]
@@ -456,6 +457,7 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['blueprint', 'Blueprint slot'],
   ['agentFile', 'Agent-file invariant'],
   ['initGrowth', 'init.sh growth'],
+  ['specLayer', 'Spec layer'],
   ['reportContract', 'Report contract'],
   ['taskContract', 'Task authorization'],
   ['maintContract', 'Maintenance contract'],
@@ -833,9 +835,16 @@ Runs a lightweight harness benchmark:
  24. Checks that the verification gate only grows: a new check joins an existing init.sh with every
      prior step preserved, naming one that is already there is a byte-identical no-op, a check the
      gate would never actually run is refused and rolled back rather than reported as added, and a
-     missing init.sh is refused instead of quietly created. The two arms that need a POSIX shell to
+     missing init.sh is refused instead of quietly created. A one-line entry reference to a script the
+     repository owns is appended unguarded, and removing that entry turns the gate red rather than
+     skipping it. The two arms that need a POSIX shell to
      run the gate are reported as unconfirmed, not passed, when no shell is available. [initGrowth]
-25. Produces a JSON report and optional HTML report.
+25. Checks that the spec layer is opt-in and honest: a run without --spec-layer produces the same
+     two artifacts with byte-identical content, the two documents exist only when the flag is given, a
+     repository whose stack IS detected still yields a mission containing no stack word at all, both
+     documents are pointed at as read-on-demand rather than as files every session must open, and the
+     same byte, line and working-rule ceilings still hold with the extra pointer. [specLayer]
+26. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -852,6 +861,32 @@ const evalPath = path.resolve(args.evals || path.join(skillRoot, 'evals', 'evals
 // missing feature instead of a declaration that is simply too late.
 const EXTERNAL_SYSTEM_SEEDS = ['to-tickets', 'mattpocock', 'superpowers', 'setup-matt-pocock-skills'];
 const externalSystemsIn = (text) => EXTERNAL_SYSTEM_SEEDS.filter((name) => text.includes(name));
+
+// Declared HERE, not beside the spec-layer group that reads them: `runSelfCheck()` is invoked at the
+// top level below this point, so a const sitting next to the check is still in its temporal dead zone
+// when the group reads it. This file has paid for that mistake four times; the fifth arrived the same
+// way, with a ReferenceError naming the const rather than a line — so it reads like a missing feature,
+// and it silently turns every arm after the throw into a false FAIL. An early "ok" printed above a
+// TDZ error is therefore not reassurance, which is exactly how the second attempt looked.
+//
+// ARM 3 of the spec-layer group is the one worth stating out loud: its fixture has a real manifest, so
+// a stack IS detected and `tech-stack.md` genuinely says `typescript`. It then requires `mission.md`
+// to contain no stack word at all. That is the check the whole feature could fail silently on,
+// because a filled-in-looking mission reads like an aligned answer and scores 100/100 everywhere else.
+
+// What makes a spec-layer document resident rather than optional.
+//
+// Scoped to the pointer in AGENTS.md ON PURPOSE, and the scoping is the point: AGENTS.md is where
+// residency is decided — it is the file every session reads — so an imperative there is the defect.
+// The documents themselves are allowed to DISCUSS when not to read them, and a predicate that
+// banned the vocabulary everywhere would fail on "启动工作流里没有要求每次会话都读它". That is a
+// false positive with a real cost: it teaches the author to avoid a word instead of fixing the
+// document, which is the keyword-stuffing anti-pattern wearing a gate's clothes. So residency is
+// judged by the required positive ("按需读") in all three files, plus an absence in the one file
+// whose job is to decide.
+const RESIDENT_READING = /每次(会话|启动)|必读|先读|首先阅读|启动时读取/;
+const SPEC_LAYER_ON_DEMAND = /按需读/;
+const STACK_LEAK_PATTERN = /typescript|TypeScript|package\.json|\bnode\b|\bpnpm\b|\byarn\b|pyproject|go\.mod|Cargo\.toml|pom\.xml/;
 
 // One phrase per forbidden entry, so the per-entry arm seeds each pattern through text that belongs
 // to that pattern rather than through a shared blob that several patterns would also match. Also
@@ -1013,6 +1048,10 @@ function consoleSelfCheckLines(selfCheck) {
     const { pass, grew, preserved, idempotent, deadBranchRefused, rolledBack, missingRefused, unparseableRefused, detectorHasTeeth, loopStated, loopIsLoadBearing, entryAppended, entryUnguarded, entryIdempotent, entryMissingRefused, entryRulesHaveTeeth, entryGateFailsWhenUnresolvable, skipped, error } = selfCheck.initGrowth;
     lines.push(`  init.sh growth: ${pass ? 'PASS' : 'FAIL'} — a new check joins an existing gate: ${grew ? 'ok' : 'NO'}; existing steps preserved: ${preserved ? 'ok' : 'NO'}; repeat is a byte-identical no-op: ${idempotent ? 'ok' : 'NO'}; a check the gate would never run is refused: ${deadBranchRefused ? 'ok' : 'ACCEPTED'}; and rolled back: ${rolledBack ? 'ok' : 'NO'}; a check that does not parse is refused: ${unparseableRefused ? 'ok' : 'ACCEPTED'}; no init.sh at all is refused: ${missingRefused ? 'ok' : 'ACCEPTED'}; an entry reference is one call line: ${entryAppended ? 'ok' : 'NO'}; and it is unguarded: ${entryUnguarded ? 'ok' : 'GUARDED'}; repeating it is a no-op: ${entryIdempotent ? 'ok' : 'NO'}; a missing entry is refused: ${entryMissingRefused ? 'ok' : 'ACCEPTED'}; entry path rules have teeth: ${entryRulesHaveTeeth ? 'ok' : 'BLIND'}; removing the entry turns the gate red: ${entryGateFailsWhenUnresolvable ? 'ok' : 'NO'}; a red gate leaves a check behind: ${loopStated && loopIsLoadBearing ? 'ok' : 'NO'}; detector teeth: ${detectorHasTeeth ? 'ok' : 'BLIND'}${skipped ? ` — ${skipped}` : ''}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.specLayer) {
+    const { pass, offByDefault, onCreatesLayer, noStackLeak, onDemandNotResident, budgetHeld, reRunSkips, flagValueRefused, specSize, specLines, error } = selfCheck.specLayer;
+    lines.push(`  Spec layer: ${pass ? 'PASS' : 'FAIL'} — without --spec-layer the run is unchanged: ${offByDefault ? 'ok' : 'CHANGED'}; with it the two documents exist: ${onCreatesLayer ? 'ok' : 'NO'}; the detected stack never fills the mission: ${noStackLeak ? 'ok' : 'LEAKED'}; pointed at as read-on-demand, not resident: ${onDemandNotResident ? 'ok' : 'RESIDENT'}; still inside the same budget (${specSize} bytes, ${specLines} lines): ${budgetHeld ? 'ok' : 'BUSTED'}; a re-run leaves an edited one alone: ${reRunSkips ? 'ok' : 'OVERWROTE'}; a value on the switch is refused: ${flagValueRefused ? 'ok' : 'ACCEPTED'}${error ? ` — ${error}` : ''}`);
+  }
   if (selfCheck.reportContract) {
     const { pass, honouredFlag, reported = [], claimsModel, seededCaught, error } = selfCheck.reportContract;
     lines.push(`  Report contract: ${pass ? 'PASS' : 'FAIL'} — --html honoured by the renderer: ${honouredFlag ? 'ok' : 'DROPPED (wrote to the default path)'}; report names the model's subsystem count: ${claimsModel ? 'ok' : 'NO'}; contradicting claim: ${reported.length === 0 ? 'none' : `FOUND (${reported.join(', ')})`}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
@@ -1072,6 +1111,7 @@ async function runSelfCheck() {
       blueprint: () => checkBlueprintSlot(),
       agentFile: () => checkAgentFileInvariant(),
       initGrowth: () => checkInitGrowth(),
+      specLayer: () => checkSpecLayer(),
       reportContract: () => checkReportContract(),
       taskContract: async () => (await evaluateContracts()).taskContract,
       maintContract: () => checkMaintContract(),
@@ -1196,6 +1236,117 @@ async function checkAgentFileBudget() {
     return { pass: false, error: error.message };
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
+  }
+}
+
+// The spec layer, and the switch that gates it. Six arms, because the flag has three failure modes
+// that look alike from the outside: a layer that appears when nobody asked (the default changed),
+// a project fact invented from the detected stack, and a "read on demand" file that quietly became
+// a resident one. Each gets its own arm, and the default arm is the load-bearing one — a feature
+// that only tests itself ON proves nothing about the run that never passed the flag.
+//
+// ARM 3 is the one worth stating out loud: the fixture has a real manifest, so a stack IS detected
+// and `tech-stack.md` genuinely says `typescript`. It then requires `mission.md` to contain no stack
+// word at all. That is the check the whole feature could fail silently on, because a filled-in-
+// looking mission reads like an aligned answer and would be scored 100/100 by every other group.
+
+async function checkSpecLayer() {
+  let plainDir;
+  let specDir;
+  let leakDir;
+  const result = {
+    pass: false, offByDefault: false, onCreatesLayer: false, noStackLeak: false,
+    onDemandNotResident: false, budgetHeld: false, reRunSkips: false, flagValueRefused: false
+  };
+  try {
+    const script = path.join(scriptDir, 'create-harness.mjs');
+    const manifest = JSON.stringify({ name: 'spec-fixture', version: '1.0.0', dependencies: { typescript: '^5' } });
+
+    // Arm 1: the default run. Exactly two artifacts, and the instruction file must not so much as
+    // mention the layer. The unresolved-placeholder arm is here rather than assumed: a template slot
+    // that renders to '' still sits in the source, and the day someone types the name wrong the
+    // default render ships a literal `{{SPEC_LAYER_NOTE}}` into every project that never asked.
+    plainDir = await mkdtemp(path.join(os.tmpdir(), 'harness-speclayer-off-'));
+    await execFileAsync('node', [script, '--target', plainDir]);
+    const plainFiles = (await readdir(plainDir)).sort();
+    const plainAgents = await readText(path.join(plainDir, 'AGENTS.md'));
+    result.offByDefault = plainFiles.join(',') === 'AGENTS.md,init.sh' &&
+      !/mission\.md|tech-stack\.md|SPEC_LAYER_NOTE|\{\{/.test(plainAgents);
+
+    // Arm 2: with the flag, both documents exist. Arm 6 rides along here — the spec-layer render of
+    // the instruction file is measured against the SAME budget constants as the default one, since a
+    // note that fits on the default render's line count but busts the byte ceiling is still over.
+    specDir = await mkdtemp(path.join(os.tmpdir(), 'harness-speclayer-on-'));
+    await execFileAsync('node', [script, '--target', specDir, '--spec-layer', '--blueprint', '把散落的会议录音转成可检索的逐字稿']);
+    const specFiles = (await readdir(specDir)).sort();
+    const specAgentsRaw = await readText(path.join(specDir, 'AGENTS.md'));
+    const specAgents = specAgentsRaw.replace(/\r\n/g, '\n');
+    result.onCreatesLayer = specFiles.join(',') === 'AGENTS.md,init.sh,mission.md,tech-stack.md';
+
+    const specLines = specAgents.split('\n').length;
+    const specSize = Buffer.byteLength(specAgents, 'utf8');
+    const specSection = specAgents.split(/^##\s+/m).slice(1).find((part) => part.startsWith('工作规则')) || '';
+    const specRules = specSection.split('\n').filter((line) => /^- \*\*/.test(line)).length;
+    result.budgetHeld = specSize <= AGENTS_MD_MAX_BYTES && specLines <= AGENTS_MD_MAX_LINES && specRules <= WORKING_RULES_MAX;
+    result.specSize = specSize;
+    result.specLines = specLines;
+
+    // Arm 4: the pointer exists and says "on demand". The positive is required in all three files;
+    // the absence is checked only in AGENTS.md, for the reason on the predicate.
+    const specMission = await readText(path.join(specDir, 'mission.md'));
+    const specStack = await readText(path.join(specDir, 'tech-stack.md'));
+    result.onDemandNotResident = SPEC_LAYER_ON_DEMAND.test(specAgents) && /mission\.md/.test(specAgents) &&
+      !RESIDENT_READING.test(specAgents) &&
+      SPEC_LAYER_ON_DEMAND.test(specMission) && SPEC_LAYER_ON_DEMAND.test(specStack);
+
+    // Arm 7: a re-run must not overwrite documents the project has since written in its own words.
+    // The default render's own skip rule covers this, but only for the two artifacts it knows about;
+    // a new file class that quietly skipped the check would pass every other arm here.
+    const missionPath = path.join(specDir, 'mission.md');
+    const missionBefore = await readText(missionPath);
+    await execFileAsync('node', [script, '--target', specDir, '--spec-layer']);
+    result.reRunSkips = (await readText(missionPath)) === missionBefore;
+
+    // Arm 5: a value on a switch is refused. `--spec-layer=false` reads as a value here, and quietly
+    // accepting it would make "off" mean two different things depending on how it was spelled.
+    let valueRun = { stdout: '', stderr: '' };
+    const valueDir = await mkdtemp(path.join(os.tmpdir(), 'harness-speclayer-value-'));
+    try {
+      valueRun = await execFileAsync('node', [script, '--target', valueDir, '--spec-layer=yes']);
+    } catch (error) {
+      valueRun = { stdout: error.stdout || '', stderr: error.stderr || '' };
+    }
+    result.flagValueRefused = /REFUSED/.test(valueRun.stdout + valueRun.stderr);
+    await rm(valueDir, { recursive: true, force: true });
+
+    // Arm 3, with teeth. The fixture has a manifest AND a tsconfig, so the stack is genuinely
+    // detected and tech-stack.md genuinely names it — otherwise this arm would pass on a generator
+    // that detected nothing at all, which is the same "found nothing because it looked for nothing"
+    // shape the seeded arms elsewhere in this suite exist to rule out.
+    leakDir = await mkdtemp(path.join(os.tmpdir(), 'harness-speclayer-leak-'));
+    await writeText(path.join(leakDir, 'package.json'), manifest);
+    await writeText(path.join(leakDir, 'tsconfig.json'), '{}');
+    await execFileAsync('node', [script, '--target', leakDir, '--spec-layer']);
+    const leakStack = await readText(path.join(leakDir, 'tech-stack.md'));
+    const leakMission = await readText(path.join(leakDir, 'mission.md'));
+    const stackActuallyDetected = /typescript/.test(leakStack);
+    result.noStackLeak = stackActuallyDetected && !STACK_LEAK_PATTERN.test(leakMission) &&
+      /待补/.test(leakMission);
+
+    // Same predicate as the zero-coupling group, applied to the new artifacts rather than to a
+    // fourth copy of it. A clean result from a predicate nobody seeded is worth nothing, so the
+    // seeded half is carried over from the same list the other group uses.
+    const specNamed = [...specMission, ...specStack].flatMap((text) => externalSystemsIn(text));
+    result.purityHeld = specNamed.length === 0 &&
+      EXTERNAL_SYSTEM_SEEDS.every((name) => externalSystemsIn(`${specMission}\n${specStack}\n${name}`).length === 1);
+
+    result.pass = result.offByDefault && result.onCreatesLayer && result.noStackLeak &&
+      result.onDemandNotResident && result.budgetHeld && result.reRunSkips && result.flagValueRefused;
+    return result;
+  } catch (error) {
+    return { ...result, error: error.message };
+  } finally {
+    for (const target of [plainDir, specDir, leakDir]) if (target) await rm(target, { recursive: true, force: true });
   }
 }
 

@@ -48,7 +48,7 @@ license: MIT
 
 ## 常见任务
 
-本节的 `<技能目录>` 指技能安装目录（如 `~/.agents/skills/harness-creator/`）。**不要用相对路径**——cwd 在目标仓时必然解析失败。
+本节 `<技能目录>` 指技能安装目录（**不要用相对路径**：cwd 在目标仓时必然解析失败）。
 
 | # | 任务 | 输入 → 输出 |
 |---|---|---|
@@ -99,6 +99,7 @@ node <技能目录>/scripts/run-benchmark.mjs --target /path/to/project --html /
 - 上下文预算与渐进式披露：`context-engineering-pattern.md`
 - 任务委派与并行代理：`multi-agent-pattern.md`
 - 钩子、启动、长时间运行的工作：`lifecycle-bootstrap-pattern.md`
+- 旁路观测：`bypass-observation-pattern.md`
 - harness 维护：`harness-maintenance-pattern.md`
 - 不易察觉的失败模式：`gotchas.md`
 
@@ -151,4 +152,4 @@ harness 设计中不要做的事；交付前对照一次。
 - [ ] `init.sh`（空项目下**必然失败**：占位验证带 `exit 1`，须替换为真实命令；声明无验证的除外）
 - [ ] 已文档化的验证证据或下一步
 
-工单、tracker 配置与交接产物**不在交付清单内**。无法写盘时改为提供确切的文件内容与命令。
+工单、tracker 配置与交接产物**不在交付清单内**（无 Node 或无法写盘时的处置见上表）。

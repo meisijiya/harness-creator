@@ -105,6 +105,21 @@ would verify nothing for ever while looking like a check). A bare name is normal
 both spellings name the same step and a repeat of either is the byte-identical no-op. Name the
 script, do not run it: authoring the checks this points at is the project's own work.
 
+--spec-layer adds two project documents beside the harness: mission.md (what this project is and
+what it delivers, what it does NOT do, who it is for) and tech-stack.md (what was detected, with the
+file each detection came from). It is OFF by default and a run without it produces byte-identical
+output to a run that never heard of the flag — the argument against these documents is a real one
+("what can be derived does not belong in a resident instruction file"), and a switch is the only
+form in which both positions stay true.
+
+Neither file is a resident instruction file: the generated AGENTS.md says to read them ON DEMAND,
+not every session. Project facts you did not state stay a visible 待补 marker in every file — they
+are never filled in from the detected stack, because a guessed project fact reads like an aligned
+answer and gets used to judge scope. The detected stack reaches tech-stack.md and nothing else; there
+is no code path by which a manifest can become an answer to "what is this project", and the tech
+stack may never be used to infer the mission. Both files skip when they already exist, so a re-run
+cannot overwrite documents the project has since written in its own words.
+
 Existing files are skipped unless --force is set. --force does not overwrite a file whose content
 another skill owns; it only lifts the skip on this skill's own artifacts.`);
   process.exit(0);
@@ -115,6 +130,21 @@ another skill owns; it only lifts the skip on this skill's own artifacts.`);
 // say it verified nothing, and the instruction file must say the same, so the only way to collect
 // this is to state it in both places an agent looks.
 const noVerification = Boolean(args.noVerification);
+
+// --spec-layer adds two project documents beside the harness. It is opt-in because the whole
+// argument for it is disputed in this repository's own tradition — "what can be derived is not a
+// resident instruction file" — and a switch is the only form in which both positions stay true:
+// without it the run is byte-identical to a run that never heard of the idea.
+//
+// A bare flag is refused rather than read as "on". parseArgs hands back `true` when a flag has no
+// value, and treating that as enabled is how a flag ends up silently selecting a mode the reader
+// did not name; every other branch here treats an absent value as a refusal, and this one does too.
+if (args.specLayer !== undefined && args.specLayer !== true && args.specLayer !== false) {
+  console.error(`REFUSED: --spec-layer takes no value, but it was given "${args.specLayer}".`);
+  console.error('It is a switch: either the spec layer is created or it is not. Nothing was created.');
+  process.exit(1);
+}
+const specLayer = Boolean(args.specLayer);
 
 // `--no-engineering-owner` selected a second template that named no owner, on the reasoning that
 // a directory with nothing to delegate to should not claim one. Both templates named an external
@@ -554,6 +584,15 @@ const replacements = {
   // trailing clause the reader can miss.
   NO_VERIFICATION_NOTE: noVerification
     ? '**本仓库显式声明：无验证命令**（`./init.sh` 只作启动路径，不验证任何东西）。'
+    : '',
+  // Empty string without --spec-layer, so a run that was not asked for a spec layer produces the
+  // instruction file it has always produced — byte for byte. The note rides on the existing
+  // "read the task's documents" step instead of taking a line of its own, because a spec layer is
+  // NOT a resident instruction file: telling the agent to read it every session would turn two
+  // optional documents into permanent context cost, which is the mistake this feature exists to
+  // avoid. One clause, no new line, no new rule.
+  SPEC_LAYER_NOTE: specLayer
+    ? '；规范层 `mission.md`、`tech-stack.md` **按需读**，与本次任务无关就不必打开'
     : ''
 };
 
@@ -594,6 +633,37 @@ if (force || !await exists(initPath)) {
   results.push({ path: initPath, status: 'written' });
 } else {
   results.push({ path: initPath, status: 'skipped', reason: 'exists' });
+}
+
+// The spec layer, and only when it was asked for. Same skip rule as the two artifacts above, so a
+// re-run cannot quietly rewrite documents the project has since edited in its own words — that is
+// the one behaviour an existing-file rule exists for, and the new files do not get an exception.
+//
+// Detected stack goes into tech-stack.md and NOWHERE else, in particular not into mission.md: the
+// two templates are rendered from separate maps on purpose, so there is no code path by which a
+// `package.json` can end up as an answer to "what is this project". That separation is the whole
+// guarantee, and it is why the detected values are not threaded through one shared map.
+const specReplacements = {
+  mission: {
+    BLUEPRINT: args.blueprint
+      ? String(args.blueprint)
+      : '待补——由用户陈述「这个项目是什么、最终交付什么」后填入；此字样存在即表示尚未确定'
+  },
+  'tech-stack': {
+    DETECTED_MANIFEST: project.packageJson
+      ? '`package.json`（存在）'
+      : '待补——未检测到包清单',
+    DETECTED_STACK: project.stack === 'generic'
+      ? '待补——目录里没有可识别的栈标志文件'
+      : `\`${project.stack}\`（由目录内文件名机械得出，非选型结论）`
+  }
+};
+
+if (specLayer) {
+  for (const [name, replacementsFor] of Object.entries(specReplacements)) {
+    const specPath = path.join(target, `${name}.md`);
+    results.push(await copyTemplate(`spec-layer/${name}.md`, specPath, replacementsFor, { force, dryRun }));
+  }
 }
 
 // A dry run must not claim it created anything — not writing is the entire point. "DRY RUN" leads
