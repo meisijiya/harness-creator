@@ -1084,7 +1084,7 @@ function consoleSelfCheckLines(selfCheck) {
   }
   if (selfCheck.noDeadDecls) {
     const { pass, dead = [], ghostKeys = [], missingKeys = [], duplicateKeys = [], unreadFlags = [], declaredCount, helpEntries, teethDeclarations, teethHelp, teethFlags, undocumentedFlags = [], lyingFlags = [], artifactFlagBaseline, error } = selfCheck.noDeadDecls;
-    lines.push(`  Orphan declarations: ${pass ? 'PASS' : 'FAIL'} — ${declaredCount} top-level declarations under scripts/, all read somewhere in the tree: ${dead.length === 0 ? 'ok' : `${dead.length} UNREAD (${dead.join(', ')})`}; ${helpEntries} numbered --help entries vs ${SELF_CHECK_GROUPS.length} group keys, equal in both directions: ${ghostKeys.length === 0 && missingKeys.length === 0 && duplicateKeys.length === 0 ? 'ok' : `NO (ghost: ${ghostKeys.join(', ') || 'none'}; missing entry: ${missingKeys.join(', ') || 'none'}; twice: ${duplicateKeys.join(', ') || 'none'})`}; documented-but-unread generator flags: ${unreadFlags.length === 0 ? 'none' : unreadFlags.join(', ')}; a flag that ADDS artifacts and is missing from SKILL.md: ${undocumentedFlags.length === 0 ? `none (baseline ${artifactFlagBaseline} files)` : `UNDOCUMENTED ${undocumentedFlags.join(', ')}`}; artifact-adding fixtures that do not actually add: ${lyingFlags.length === 0 ? 'none' : lyingFlags.join(', ')}; detector teeth: declarations ${teethDeclarations ? 'ok' : 'BLIND'}, help ${teethHelp ? 'ok' : 'BLIND'}, flags ${teethFlags ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
+    lines.push(`  Orphan declarations: ${pass ? 'PASS' : 'FAIL'} — ${declaredCount} top-level declarations under scripts/, all read somewhere in the tree: ${dead.length === 0 ? 'ok' : `${dead.length} UNREAD (${dead.join(', ')})`}; ${helpEntries} numbered --help entries vs ${SELF_CHECK_GROUPS.length} group keys, equal in both directions: ${ghostKeys.length === 0 && missingKeys.length === 0 && duplicateKeys.length === 0 ? 'ok' : `NO (ghost: ${ghostKeys.join(', ') || 'none'}; missing entry: ${missingKeys.join(', ') || 'none'}; twice: ${duplicateKeys.join(', ') || 'none'})`}; documented-but-unread generator flags: ${unreadFlags.length === 0 ? 'none' : unreadFlags.join(', ')}; flags missing from the Usage synopsis: ${(selfCheck.noDeadDecls.missingFromSynopsis || []).length === 0 ? 'none' : selfCheck.noDeadDecls.missingFromSynopsis.join(', ')}; a flag that ADDS artifacts and is missing from SKILL.md: ${undocumentedFlags.length === 0 ? `none (baseline ${artifactFlagBaseline} files)` : `UNDOCUMENTED ${undocumentedFlags.join(', ')}`}; artifact-adding fixtures that do not actually add: ${lyingFlags.length === 0 ? 'none' : lyingFlags.join(', ')}; detector teeth: declarations ${teethDeclarations ? 'ok' : 'BLIND'}, help ${teethHelp ? 'ok' : 'BLIND'}, flags ${teethFlags ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.reportCoverage) {
     const { pass, unbound = [], missingLines = [], orphanLines = [], missingConsole = [] } = selfCheck.reportCoverage;
@@ -1618,6 +1618,15 @@ async function checkNoDeadDeclarations() {
     const generatorCode = stripLineComments(generator);
     const unreadFlags = helpFlagsIn(generator).filter((flag) => !readsFlag(generatorCode, flag));
 
+    // Half 4: the one-line Usage synopsis against the --help body. These are two lists a human
+    // maintains by hand and nothing related connected them, so they drifted: --spec-layer was
+    // documented in the body and omitted from the synopsis for as long as both existed. The
+    // synopsis is the line someone copies when they have not read the body, so a flag missing from
+    // it is a flag that looks unsupported.
+    const usageLine = generator.match(/Usage:[^\n]*/)?.[0] || '';
+    const synopsisFlags = new Set([...usageLine.matchAll(/--([a-z][a-z-]*)/g)].map((m) => m[1]));
+    const missingFromSynopsis = helpFlagsIn(generator).filter((flag) => !synopsisFlags.has(flag));
+
     // Teeth, one planted orphan per half. A detector that finds nothing because the tree is clean
     // is indistinguishable from one that looks for nothing, which is the same reason the other
     // eighteen groups each carry a seeded side. The planted pair has to be shaped so that exactly
@@ -1640,8 +1649,10 @@ async function checkNoDeadDeclarations() {
     return {
       pass: dead.length === 0 && ghostKeys.length === 0 && missingKeys.length === 0
         && duplicateKeys.length === 0 && unreadFlags.length === 0
+        && missingFromSynopsis.length === 0
         && teethDeclarations && teethHelp && teethFlags
         && undocumented.length === 0 && dishonest.length === 0,
+      missingFromSynopsis,
       dead,
       ghostKeys,
       missingKeys,

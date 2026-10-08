@@ -29,7 +29,7 @@ const execFileAsync = promisify(execFileCallback);
 const args = parseArgs(process.argv.slice(2));
 
 if (args.help) {
-  console.log(`Usage: ${scriptCommand('create-harness.mjs')} [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--blueprint "WHAT THIS PROJECT IS"] [--commands "a,b"] [--add-check "cmd"] [--add-check-entry "./verify.sh"] [--no-verification] [--force] [--dry-run]
+  console.log(`Usage: ${scriptCommand('create-harness.mjs')} [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--blueprint "WHAT THIS PROJECT IS"] [--commands "a,b"] [--add-check "cmd"] [--add-check-entry "./verify.sh"] [--spec-layer] [--no-verification] [--force] [--dry-run]
 
 Creates a minimal production harness — the three subsystems this skill owns, no more:
   AGENTS.md or CLAUDE.md (an existing CLAUDE.md is kept and preferred)

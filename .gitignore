@@ -5,3 +5,5 @@ harness-benchmark.json
 # 与技能自身的「不建仓内进度/状态文件」是两条规则，本文件按任务书走、故在此排除出版本库。
 PROGRESS.md
 BLOCKED.md
+# 验证夹具：审查、反向验证与 darwin 取证时现造的临时目标仓，删掉即无损失
+.scratch/
