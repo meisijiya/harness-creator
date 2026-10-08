@@ -190,7 +190,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['foreignAudit', (group) => ` A repository the audit did not generate — no init.sh, no gate — cannot collect the static-check or evidence points from the word "TypeScript" or the letters inside "concise", so it no longer ranks its empty verification subsystem above instructions and scope; and a repository that does have a gate still passes both (${group.pass ? 'verified' : `gate-less ${group.bareVerification}/5 vs gated ${group.gatedVerification}/5; static ${group.staticCheckFailed ? 'ok' : 'LEAKED'}; evidence ${group.evidenceFailed ? 'ok' : 'LEAKED'}; entrypoint ${group.entrypointFailed ? 'ok' : 'LEAKED'}; gated static ${group.gatedStaticPasses ? 'ok' : 'BROKEN'}; gated evidence ${group.gatedEvidencePasses ? 'ok' : 'BROKEN'}; not overranked ${group.notOverranked ? 'ok' : 'INVERTED'}; teeth ${group.teeth ? 'ok' : 'BLIND'}`}).`],
   ['blankGate', (group) => ` A project with nothing to verify — no manifest, a manifest with no runnable script, or an explicit --commands list whose scripts the manifest does not define — gets a refusal that exits non-zero instead of reporting a pass it did not earn, the counter reopens the moment a real check runs, a comma inside a quoted command stays one command while a genuine comma-separated list still splits, an unterminated quote is refused leaving nothing behind, and the manual fallback template refuses on the same shapes (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-description slot stays a visible pending marker when the user has not stated one, while a blueprint change rewrites that slot only — the rest of the file survives byte for byte, and a shape this skill did not render is refused rather than guessed at (${group.pass ? 'verified' : `pending ${group.pendingMarked ? 'ok' : 'NO'}; no stack fill ${group.noInventedFill ? 'ok' : 'NO'}; verbatim ${group.verbatim ? 'ok' : 'NO'}; slot-only ${group.slotRewritten && group.restIntact ? 'ok' : 'NO'}; detector ${group.detectorHasTeeth ? 'has teeth' : 'BLIND'}; refusal ${group.refusalHonoured && group.refusedUntouched ? 'ok' : 'NO'}`}).`],
-  ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, and an existing instruction file is left byte-identical while its missing sections are still reported (${group.pass ? 'verified' : 'FAILED'}).`],
+  ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, an existing instruction file is left byte-identical while its missing sections are still reported, and --force refuses to render over sections it does not define — the one rule protecting another owner's block, which was prose until it destroyed a fixture — while still overwriting this skill's own render (${group.pass ? 'verified' : `FAILED (foreign block refused: ${group.forceRefused ? 'ok' : 'NO'}; own render rewritten: ${group.forceStillWritesOwn ? 'ok' : 'NO'})`}).`],
   ['initGrowth', (group) => ` The gate only grows: a new check joins an existing init.sh without removing or reordering any step, a repeat is a no-op that leaves the file byte-identical, a check the gate would never actually run — or one that does not parse as shell — is refused and rolled back rather than reported as added, a one-line entry reference to a script this repository owns is appended unguarded so a missing entry turns the gate red instead of skipping it, and a gate that went red this session leaves a check behind so the lesson reaches the specification instead of only the fix (${group.pass ? 'verified' : `grew ${group.grew ? 'ok' : 'NO'}; existing steps intact ${group.preserved ? 'ok' : 'NO'}; repeat ${group.idempotent ? 'ok' : 'NO'}; dead-branch check ${group.deadBranchRefused && group.rolledBack ? 'refused and rolled back' : 'ACCEPTED'}; unparseable check ${group.unparseableRefused ? 'refused' : 'ACCEPTED'}; entry appended ${group.entryAppended ? 'ok' : 'NO'}; entry unguarded ${group.entryUnguarded ? 'ok' : 'GUARDED'}; entry repeat ${group.entryIdempotent ? 'ok' : 'NO'}; missing entry ${group.entryMissingRefused ? 'refused' : 'ACCEPTED'}; path rules ${group.entryRulesHaveTeeth ? 'ok' : 'BLIND'}; entry removed turns it red ${group.entryGateFailsWhenUnresolvable ? 'yes' : 'NO'}; red-gate lesson ${group.loopStated && group.loopIsLoadBearing ? 'recorded' : 'LOST'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}; no init.sh ${group.missingRefused ? 'refused' : 'ACCEPTED'}`}).`],
   ['specLayer', (group) => ` The spec layer is opt-in and says nothing when it is off: a run without --spec-layer still produces the two artifacts and byte-identical content, the two documents exist only when the flag is given, the detected stack never becomes an answer to "what is this project", they are pointed at as read-on-demand rather than as files every session must open, and the same byte/line/working-rule ceilings still hold with the extra pointer (${group.pass ? 'verified' : `default unchanged ${group.offByDefault ? 'ok' : 'CHANGED'}; flag creates the layer ${group.onCreatesLayer ? 'ok' : 'NO'}; stack kept out of the mission ${group.noStackLeak ? 'ok' : 'LEAKED'}; read on demand ${group.onDemandNotResident ? 'ok' : 'RESIDENT'}; budget ${group.budgetHeld ? 'ok' : 'BUSTED'}; re-run skips ${group.reRunSkips ? 'ok' : 'OVERWROTE'}; flag value ${group.flagValueRefused ? 'refused' : 'ACCEPTED'}; zero coupling ${group.purityHeld ? 'ok' : 'NAMED OR BLIND'}`}).`],
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`],
@@ -1059,8 +1059,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Blueprint slot: ${pass ? 'PASS' : 'FAIL'} — omitted --blueprint stays a pending marker: ${pendingMarked ? 'ok' : 'NO'}; no stack-derived fill: ${noInventedFill ? 'ok' : 'NO'}; supplied blueprint reaches AGENTS.md verbatim: ${verbatim ? 'ok' : 'NO'}; a rewrite touches the slot only: ${slotRewritten && restIntact ? 'ok' : 'NO'}; detector has teeth: ${detectorHasTeeth ? 'ok' : 'BLIND'}; an unrecognised shape is refused: ${refusalHonoured && refusedUntouched ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.agentFile) {
-    const { pass, noSecondFile, choseClaude, untouched, missingReported, error } = selfCheck.agentFile;
-    lines.push(`  Agent-file invariant: ${pass ? 'PASS' : 'FAIL'} — existing CLAUDE.md means no AGENTS.md is created: ${noSecondFile && choseClaude ? 'ok' : 'NO'}; existing instruction file left byte-identical: ${untouched ? 'ok' : 'NO'}; missing sections still reported: ${missingReported ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+    const { pass, noSecondFile, choseClaude, untouched, missingReported, forceRefused, forceStillWritesOwn, error } = selfCheck.agentFile;
+    lines.push(`  Agent-file invariant: ${pass ? 'PASS' : 'FAIL'} — existing CLAUDE.md means no AGENTS.md is created: ${noSecondFile && choseClaude ? 'ok' : 'NO'}; existing instruction file left byte-identical: ${untouched ? 'ok' : 'NO'}; missing sections still reported: ${missingReported ? 'ok' : 'NO'}; --force refuses to delete another owner's sections: ${forceRefused ? 'ok' : 'NO'}; and still overwrites this skill's own render: ${forceStillWritesOwn ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.initGrowth) {
     const { pass, grew, preserved, idempotent, deadBranchRefused, rolledBack, missingRefused, unparseableRefused, detectorHasTeeth, loopStated, loopIsLoadBearing, entryAppended, entryUnguarded, entryIdempotent, entryMissingRefused, entryRulesHaveTeeth, entryGateFailsWhenUnresolvable, skipped, error } = selfCheck.initGrowth;
@@ -2660,15 +2660,69 @@ async function checkAgentFileInvariant() {
     // every time a section is renamed, while "lists nothing" is the actual defect.
     const missingReported = /\n\s*-\s*##\s/.test(agentsRun.stdout);
 
+    // The half that had no carrier. SKILL.md has always said a file holding another owner's block
+    // must not be --force overwritten, and until now that was prose: the flag overwrote
+    // unconditionally, so the one rule protecting another skill's work was the one rule nothing
+    // checked. Measured by rendering over a file with a "## Agent skills" section and finding it
+    // gone. Asserted in both directions on purpose — a guard that refuses everything would satisfy
+    // "it refuses", so the positive arm re-runs --force over a file this skill itself rendered and
+    // requires the write to still go through, which is what --force is FOR.
+    let forceRefused = false;
+    let forceStillWritesOwn = false;
+    let forceDir;
+    try {
+      forceDir = await mkdtemp(path.join(os.tmpdir(), 'harness-force-'));
+      const foreignPath = path.join(forceDir, 'AGENTS.md');
+      await writeText(foreignPath, '# AGENTS.md\n\n## Agent skills\n\nThird-party block that must survive.\n');
+      // try/catch, not `{ reject: false }`: every other arm in this file reads the outcome off a
+      // caught error's code/stdout/stderr, and mixing the two shapes means the exit code is read
+      // off an object that may not carry it. The guard under test refuses on purpose, so the
+      // rejection IS the observation.
+      let refusedCode = 0;
+      let refusedOutput = '';
+      try {
+        const done = await execFileAsync('node', [script, '--target', forceDir, '--force']);
+        refusedCode = done.code ?? 0;
+        refusedOutput = `${done.stdout || ''}${done.stderr || ''}`;
+      } catch (error) {
+        refusedCode = error.code ?? 1;
+        refusedOutput = `${error.stdout || ''}${error.stderr || ''}`;
+      }
+      const foreignSurvived = (await readText(foreignPath)).includes('Third-party block that must survive.');
+      const refusedExited = refusedCode === 1;
+      const namedTheSections = /Agent skills/.test(refusedOutput);
+
+      // Positive arm: --force over a file carrying only this skill's own sections must still write.
+      const ownDir = await mkdtemp(path.join(os.tmpdir(), 'harness-force-own-'));
+      try {
+        await execFileAsync('node', [script, '--target', ownDir]);
+        const ownPath = path.join(ownDir, 'AGENTS.md');
+        const before = await readText(ownPath);
+        await writeText(ownPath, `${before}\n\n<!-- hand edit -->\n`);
+        const allowed = await execFileAsync('node', [script, '--target', ownDir, '--force']);
+        forceStillWritesOwn = !(await readText(ownPath)).includes('hand edit') && (allowed.code ?? 0) === 0;
+      } finally {
+        await rm(ownDir, { recursive: true, force: true });
+      }
+      forceRefused = foreignSurvived && refusedExited && namedTheSections;
+    } catch {
+      forceRefused = false;
+      forceStillWritesOwn = false;
+    } finally {
+      if (forceDir) await rm(forceDir, { recursive: true, force: true });
+    }
+
     return {
-      pass: noSecondFile && choseClaude && untouched && missingReported,
+      pass: noSecondFile && choseClaude && untouched && missingReported && forceRefused && forceStillWritesOwn,
       noSecondFile,
       choseClaude,
       untouched,
-      missingReported
+      missingReported,
+      forceRefused,
+      forceStillWritesOwn
     };
   } catch (error) {
-    return { pass: false, noSecondFile: false, choseClaude: false, untouched: false, missingReported: false, error: error.message };
+    return { pass: false, noSecondFile: false, choseClaude: false, untouched: false, missingReported: false, forceRefused: false, forceStillWritesOwn: false, error: error.message };
   } finally {
     for (const target of [claudeDir, agentsDir]) if (target) await rm(target, { recursive: true, force: true });
   }

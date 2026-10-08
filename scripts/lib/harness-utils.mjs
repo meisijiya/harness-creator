@@ -84,6 +84,27 @@ export async function writeText(filePath, contents) {
   await writeFile(filePath, contents, 'utf8');
 }
 
+// The template's H2 headings are what this skill owns. A file that carries OTHER H2 sections has
+// something in it that another owner wrote — a skill's block, a platform's block, the project's
+// own conventions — and --force rendering the template over it deletes that silently. SKILL.md says
+// this case is forbidden, which for a long time was prose only: the flag overwrote unconditionally
+// and no gate covered it, so the one rule protecting another skill's work was the one rule with no
+// mechanical carrier. Measured by rendering over a file holding a "## Agent skills" section and
+// finding that section gone.
+//
+// Why the template's own headings are the test, not a list of known third-party names: a name list
+// is exactly the thing this skill refuses to maintain everywhere else — it rots the moment an
+// upstream renames — and it would also miss every block nobody has heard of yet. An H2 the template
+// does not define is the structural fact, and it is knowable without knowing who wrote it.
+//
+// Deliberately NOT refused: a file whose only H2s are ones this template defines. Such a file is
+// this skill's own earlier render, or a hand-edited version of it, and overwriting it is what
+// --force is for. Refusing those would make the flag unusable for its actual purpose.
+export function holdsForeignSections(existingMarkdown, templateMarkdown) {
+  const ours = new Set(markdownSections(templateMarkdown));
+  return markdownSections(existingMarkdown).filter((heading) => !ours.has(heading));
+}
+
 export async function copyTemplate(templateName, targetPath, replacements = {}, { force = false, dryRun = false } = {}) {
   if (!force && await exists(targetPath)) {
     return { path: targetPath, status: 'skipped', reason: 'exists' };
@@ -98,6 +119,23 @@ export async function copyTemplate(templateName, targetPath, replacements = {}, 
   for (const [key, value] of Object.entries(replacements)) {
     contents = contents.split(`{{${key}}}`).join(value);
   }
+
+  // Refuse before writing, not after: reporting "written" and then deleting someone else's work is
+  // the exact failure, so the check runs while the file is still untouched. It sits after the read
+  // because the template's headings ARE the ownership test — comparing against a name list would be
+  // the thing this skill refuses to maintain everywhere else.
+  if (force && await exists(targetPath) && templateName.endsWith('.md')) {
+    const foreign = holdsForeignSections(await readText(targetPath), contents);
+    if (foreign.length > 0) {
+      return {
+        path: targetPath,
+        status: 'refused',
+        reason: `--force would delete sections this template does not define: ${foreign.join(', ')}. `
+          + 'Merge by hand instead, or remove those sections yourself if they are genuinely obsolete.'
+      };
+    }
+  }
+
   if (!dryRun) {
     await writeText(targetPath, contents);
     if (templateName.endsWith('.sh')) {

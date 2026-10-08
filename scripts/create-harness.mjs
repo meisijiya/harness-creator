@@ -686,6 +686,20 @@ for (const result of results) {
   console.log(`${result.status.toUpperCase()} ${path.relative(target, result.path)}${result.reason ? ` (${result.reason})` : ''}`);
 }
 
+// A refused --force exits non-zero. The status line above already names the file and the sections,
+// but exit 0 on a run whose whole point was to overwrite would report success for work that
+// deliberately did not happen — the same shape the blueprint refusal and every other refusal here
+// refuses. The file is untouched, so there is no partial write to report around.
+const refusedResults = results.filter((result) => result.status === 'refused');
+if (refusedResults.length > 0) {
+  console.log('');
+  console.log('REFUSED — nothing was overwritten. Sections this template does not define belong to');
+  console.log('whoever wrote them; merge the missing sections by hand, or drop --force when the file');
+  console.log('is only stale in wording. Refused:');
+  for (const result of refusedResults) console.log(`  - ${path.relative(target, result.path)}`);
+  process.exitCode = 1;
+}
+
 // Printed whether or not the write happened, because a change to someone's instruction file should
 // be visible as before → after rather than only happening. A refusal exits non-zero: an exit-0
 // no-op would leave the user believing the blueprint changed.
