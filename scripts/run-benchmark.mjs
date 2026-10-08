@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeSync } from 'node:fs';
 import { mkdir, mkdtemp, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -170,7 +170,7 @@ const DISCOVERABLE_CONTENT = [
 const SELF_CHECK_GROUPS = [
   'budget', 'agentsBudget', 'agentsDiscover', 'artifactPurity', 'maintenance', 'skillDesign',
   'wrapupOutput', 'dryRun', 'selfRefs', 'references', 'bottleneckTies', 'foreignAudit', 'blankGate',
-  'blueprint', 'agentFile', 'initGrowth', 'specLayer', 'nextSteps', 'reportContract', 'taskContract', 'maintContract', 'noDeadDecls'
+  'blueprint', 'agentFile', 'initGrowth', 'specLayer', 'nextSteps', 'reportContract', 'taskContract', 'maintContract', 'noDeadDecls', 'gateArgs'
 ];
 
 // One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
@@ -199,7 +199,8 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`],
   ['taskContract', (group) => ` The instruction file scopes work to what the user authorized: explicit authorization to advance, picking and status updates only while an authorized deliverable is being executed, a baseline failure split into pre-existing versus introduced, a commit gated on the definition of done rather than on a passing check, existing modifications and untracked files protected from any cleanup, and a read-only task that only reports harness drift (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-requirement teeth ${group.teeth ? 'ok' : 'BLIND'}; forbidden-list witness ${group.forbidWitness ? 'ok' : 'BLIND'}; old forms ${group.oldFormsRejected ? 'refused' : 'ACCEPTED'}`}).`],
   ['maintContract', (group) => ` A full audit score is not an exit condition in the maintenance reference: the score row still routes to the actual misalignment check, keeps the anti-gaming clause, and the shared content-review table states the read-only, baseline-scope, commit-authorization, existing-work and full-score rules — proven per guard, with the whole table deleted, and by the retired short-circuit row (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-guard teeth ${group.teeth ? 'ok' : 'BLIND'}; whole table removed ${group.tableRemovedRefused ? 'refused' : 'ACCEPTED'}; retired row ${group.oldRowRejected ? 'refused' : 'ACCEPTED'}`}).`],
-  ['noDeadDecls', (group) => ` This suite carries no orphan: ${group.declaredCount} top-level declarations under scripts/ are all read somewhere in the tree, the ${group.helpEntries} numbered --help entries annotate exactly the ${SELF_CHECK_GROUPS.length} live group keys in both directions, and every flag the generator documents is a flag it reads (${group.pass ? 'verified' : `unread ${(group.dead || []).join(', ') || 'none'}; ghost keys ${(group.ghostKeys || []).join(', ') || 'none'}; groups with no help entry ${(group.missingKeys || []).join(', ') || 'none'}; keys documented twice ${(group.duplicateKeys || []).join(', ') || 'none'}; documented-but-unread flags ${(group.unreadFlags || []).join(', ') || 'none'}; artifact-adding flags missing from SKILL.md ${(group.undocumentedFlags || []).join(', ') || 'none'} (baseline ${group.artifactFlagBaseline} files); lying fixtures ${(group.lyingFlags || []).join(', ') || 'none'}; detector teeth decls ${group.teethDeclarations ? 'ok' : 'BLIND'}, help ${group.teethHelp ? 'ok' : 'BLIND'}, flags ${group.teethFlags ? 'ok' : 'BLIND'}`}).`]
+  ['noDeadDecls', (group) => ` This suite carries no orphan: ${group.declaredCount} top-level declarations under scripts/ are all read somewhere in the tree, the ${group.helpEntries} numbered --help entries annotate exactly the ${SELF_CHECK_GROUPS.length} live group keys in both directions, and every flag the generator documents is a flag it reads (${group.pass ? 'verified' : `unread ${(group.dead || []).join(', ') || 'none'}; ghost keys ${(group.ghostKeys || []).join(', ') || 'none'}; groups with no help entry ${(group.missingKeys || []).join(', ') || 'none'}; keys documented twice ${(group.duplicateKeys || []).join(', ') || 'none'}; documented-but-unread flags ${(group.unreadFlags || []).join(', ') || 'none'}; artifact-adding flags missing from SKILL.md ${(group.undocumentedFlags || []).join(', ') || 'none'} (baseline ${group.artifactFlagBaseline} files); lying fixtures ${(group.lyingFlags || []).join(', ') || 'none'}; detector teeth decls ${group.teethDeclarations ? 'ok' : 'BLIND'}, help ${group.teethHelp ? 'ok' : 'BLIND'}, flags ${group.teethFlags ? 'ok' : 'BLIND'}`}).`],
+  ['gateArgs', (group) => ` This script's own switches cannot switch it off: a non-numeric --min-score, --min-eval-score or --min-self-check-score is refused before the run starts rather than becoming NaN and turning the comparison permanently false, and --no-self-check is refused rather than skipping the only check that proves the bundled scripts still run — proven by deleting the refusal from a copy of this file in turn, while an explicit --min-score=0 still runs as the deliberate relaxation it is (${group.pass ? 'verified' : `refusal ${group.refusalsCaught}/${group.refusalsTotal}; exit ${group.refusalExits ? 'ok' : 'NO'}; teeth ${group.teethThresholds ? 'ok' : 'BLIND'}/${group.teethSelfCheck ? 'ok' : 'BLIND'}; zero still runs ${group.zeroStillRuns ? 'ok' : 'REFUSED'}; accepted ${(group.accepted || []).join(', ') || 'none'}; misreported ${(group.misreported || []).join(', ') || 'none'}`}).`]
 ]);
 
 // The single behavior this skill must not have. A harness that detected governance modes, assigned
@@ -481,7 +482,8 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['reportContract', 'Report contract'],
   ['taskContract', 'Task authorization'],
   ['maintContract', 'Maintenance contract'],
-  ['noDeadDecls', 'Orphan declarations']
+  ['noDeadDecls', 'Orphan declarations'],
+  ['gateArgs', 'Gate switches']
 ]);
 
 
@@ -734,12 +736,97 @@ async function checkMaintContract() {
     return { pass: false, missing: [], teeth: false, tableRemovedRefused: false, oldRowRejected: false, error: error.message };
   }
 }
+// The three threshold switches, one table so the refusal below, the resolved numbers and the
+// self-check that audits them cannot drift into three separate readings of the same default.
+const GATE_THRESHOLD_ARGS = [
+  { flag: '--min-score', key: 'minScore', fallback: 70 },
+  { flag: '--min-eval-score', key: 'minEvalScore', fallback: 80 },
+  { flag: '--min-self-check-score', key: 'minSelfCheckScore', fallback: 90 }
+];
+
+// Two ways this gate could be turned off without anyone touching the code, and both were measured
+// before they were closed: `Number(args.minScore || 70)` turns --min-score=abc into NaN, every
+// `score < NaN` is false, and the run exits 0 having verified nothing; --no-self-check skipped the
+// one source of truth this repository has and still reported a clean run. A threshold that can be
+// written as a word, and a gate that can be switched off, are the same defect: a value that reaches
+// the comparison without ever being validated, so the comparison itself goes quiet. Both are
+// refused here, before anything is scored, scaffolded or written.
+//
+// The refusal is a pure function over the parsed args so the self-check can feed it malformed input
+// directly; nothing here touches the filesystem, and the caller is what exits.
+function gateArgRefusals(args) {
+  const refusals = [];
+  for (const { flag, key } of GATE_THRESHOLD_ARGS) {
+    const raw = args[key];
+    if (raw === undefined) continue;
+    // parseArgs hands back `true` for a bare --flag and '' for `--flag=`. Neither is a threshold:
+    // Number(true) is 1, which passes everything, and Number('') is 0, which also passes
+    // everything. Both would be a silent widening rather than a refusal, so both are named.
+    const usable = (typeof raw === 'number' || typeof raw === 'string')
+      && String(raw).trim() !== '' && Number.isFinite(Number(raw));
+    if (usable) continue;
+    // The consequence is spelled out rather than asserted, because it is not the same failure every
+    // time: NaN makes the comparison permanently false and the run passes having checked nothing,
+    // while a value that happens to parse as a number too small (Number(true) is 1, Number('') is 0)
+    // makes the comparison permanently true and the run fails on a threshold nobody wrote down. Both
+    // are the gate deciding something the caller never said.
+    const parsed = Number(raw);
+    const consequence = Number.isNaN(parsed)
+      ? `${parsed}, and every comparison against NaN is false, so the threshold would stop existing and the run would exit 0 having checked nothing`
+      : `${parsed}, which is not the threshold you meant and would decide every comparison in the run`;
+    refusals.push(
+      `Refusing to run: ${flag} was given ${JSON.stringify(raw)}, which is not a finite number.\n`
+      + `  A threshold that was never written down is worse than no threshold: Number(${JSON.stringify(raw)}) is `
+      + `${consequence}.\n`
+      + `  Write it as a plain number, e.g. ${flag}=70 (or "${flag} 70"). An explicit 0 is accepted — it is a deliberate`
+      + ' relaxation, which is not the same thing as a threshold that never fires.'
+    );
+  }
+  // The self-check is this repository's only verdict on its own tooling: it scaffolds a throwaway
+  // harness and runs the shipped scripts end to end. A flag that skips it does not grade the target
+  // more cheaply, it removes the only statement the exit code was ever about.
+  if (args.noSelfCheck !== undefined) {
+    refusals.push(
+      'Refusing to run: --no-self-check is not a supported switch.\n'
+      + '  The self-check is the only check here that proves the bundled scripts still work end to end\n'
+      + '  rather than merely being present, so a run that skips it has verified nothing about anything.\n'
+      + '  A gate that can be switched off is not a gate. Use --self-check-only to grade the tooling and\n'
+      + '  nothing else, which is the question that flag actually answers.'
+    );
+  }
+  return refusals;
+}
+
+// Resolved only after gateArgRefusals() has cleared the run, so every value reaching the comparisons
+// is a number that was actually written down. A legal override such as --min-score=0 survives here
+// untouched: the refusal is about unreadable thresholds, not about strict ones.
+function gateThresholds(args) {
+  const resolved = {};
+  for (const { key, fallback } of GATE_THRESHOLD_ARGS) {
+    resolved[key] = args[key] === undefined ? fallback : Number(args[key]);
+  }
+  return resolved;
+}
+
 const args = parseArgs(process.argv.slice(2));
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const skillRoot = path.resolve(scriptDir, '..');
 
+// Before --help, and before the first line that reads a file or spawns a process. A refusal that
+// ran afterwards would leave a window in which a malformed invocation had already scaffolded a
+// harness and written a report — the run would be "refused" only after it had done its work.
+// Exit code 2, distinct from 1: 1 means a gate went red, 2 means this run never judged anything.
+const gateRefusals = gateArgRefusals(args);
+if (gateRefusals.length > 0) {
+  // writeSync rather than console.error: process.exit() below can drop buffered stderr on a pipe,
+  // and a refusal whose text is lost is a refusal the caller cannot act on.
+  writeSync(2, `${gateRefusals.join('\n\n')}\n\n${scriptCommand('run-benchmark.mjs')} --help lists every switch.\n`);
+  process.exit(2);
+}
+const thresholds = gateThresholds(args);
+
 if (args.help) {
-  console.log(`Usage: ${scriptCommand('run-benchmark.mjs')} [--target DIR] [--output FILE] [--html FILE] [--no-self-check] [--self-check-only]
+  console.log(`Usage: ${scriptCommand('run-benchmark.mjs')} [--target DIR] [--output FILE] [--html FILE] [--min-score N] [--min-eval-score N] [--min-self-check-score N] [--self-check-only] [--no-self-check (refused)]
 
 Runs a lightweight harness benchmark:
   1. Self-check: scaffold a throwaway harness into a temp directory and confirm it validates. This
@@ -752,6 +839,15 @@ Runs a lightweight harness benchmark:
      as intended. That is what made it impossible for this repo to carry its own ./init.sh - a gate
      that can never pass is a gate that cannot fail. Use it to ask "are the tools intact?" without
      inheriting an answer about the target.
+ 0b. --no-self-check is REFUSED, not honoured: the run prints why and exits 2 before scoring
+     anything. It used to skip the self-check and still exit 0, so a caller could turn the only
+     verification this script performs off without the exit code changing. --self-check-only is the
+     switch that answers the narrower question; --no-self-check is the one that removes the answer.
+ 0c. --min-score / --min-eval-score / --min-self-check-score must be finite numbers (defaults 70 / 80
+     / 90). A non-numeric value such as --min-score=abc used to become NaN, and every comparison against
+     NaN is false, so the threshold stopped existing while the run still exited 0. A non-numeric value
+     is now refused before the run starts; an explicit numeric 0 is still accepted as a deliberate
+     relaxation, because a threshold somebody wrote down is not the same thing as one that vanished.
  4. Checks the SKILL.md size budget (${SKILL_MD_MAX_BYTES} bytes = ${SKILL_MD_GROWTH}x the ${SKILL_MD_BASELINE_BYTES}-byte baseline). [budget]
   5. Checks the generated AGENTS.md budget against an EXTERNAL anchor: the default render must stay
      inside byte, line and working-rule caps derived from the upstream reference template, not from
@@ -870,7 +966,13 @@ Runs a lightweight harness benchmark:
      rather than to pick its own next task. The two had drifted apart, and the drift shipped: the
      generated gate selected work in the same breath as the instruction file that forbids selecting
      it. [nextSteps]
-27. Produces a JSON report and optional HTML report.
+27. Checks that this script's own switches cannot be used to switch it off. The self-check is
+     asserted by running the real script with a bad invocation and requiring a refusal and a
+     non-zero exit, three thresholds and the off switch separately, with the whole refusal logic
+     deleted from a copy in turn so a check that would pass without it is caught. --min-score=0 is
+     asserted to still run, because a refusal that also ate deliberate relaxations would be its own
+     kind of wrong. [gateArgs]
+28. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -949,7 +1051,7 @@ const selfCheckOnly = Boolean(args.selfCheckOnly);
 const harnessResult = selfCheckOnly ? null : scoreHarness(targetFiles, { references: await collectCommandReferences(target, targetFiles) });
 const evals = await readJson(evalPath);
 const evalResult = scoreEvals(evals);
-const selfCheck = args.noSelfCheck ? { skipped: true } : await runSelfCheck();
+const selfCheck = await runSelfCheck();
 const report = {
   generatedAt: new Date().toISOString(),
   target,
@@ -965,9 +1067,7 @@ const report = {
 await writeText(output, `${JSON.stringify(report, null, 2)}\n`);
 console.log(`Benchmark report written to ${output}`);
 console.log('');
-if (!selfCheck.skipped) {
-  for (const line of consoleSelfCheckLines(selfCheck)) console.log(line);
-}
+for (const line of consoleSelfCheckLines(selfCheck)) console.log(line);
 // The audit block is omitted rather than printed as a zero, so a report from this mode cannot be
 // mistaken for a harness that scored nothing — it is a report that did not score one.
 if (!selfCheckOnly) {
@@ -986,8 +1086,8 @@ if (args.html) {
 // conjunction would defeat the flag: an audit that was never run cannot fail the run that skipped it.
 const failed =
   selfCheck.pass === false ||
-  (!selfCheckOnly && harnessResult.overall < Number(args.minScore || 70)) ||
-  (!selfCheckOnly && evalResult.score < Number(args.minEvalScore || 80));
+  (!selfCheckOnly && harnessResult.overall < thresholds.minScore) ||
+  (!selfCheckOnly && evalResult.score < thresholds.minEvalScore);
 if (failed) {
   process.exitCode = 1;
 }
@@ -1007,7 +1107,7 @@ if (failed) {
 // throwing while reporting a failure.
 function consoleSelfCheckLines(selfCheck) {
   const lines = [];
-  if (!selfCheck || selfCheck.skipped) return lines;
+  if (!selfCheck) return lines;
   lines.push(`Self-check: ${selfCheck.pass ? 'PASS' : 'FAIL'} — scaffolded harness scored ${selfCheck.score}/100`);
   if (selfCheck.budget) {
     const { size, max, pass, rawSize, crlfCount, lineEndingInvariant, multiplierSane } = selfCheck.budget;
@@ -1100,6 +1200,10 @@ function consoleSelfCheckLines(selfCheck) {
     const { pass, dead = [], ghostKeys = [], missingKeys = [], duplicateKeys = [], unreadFlags = [], declaredCount, helpEntries, teethDeclarations, teethHelp, teethFlags, undocumentedFlags = [], lyingFlags = [], artifactFlagBaseline, error } = selfCheck.noDeadDecls;
     lines.push(`  Orphan declarations: ${pass ? 'PASS' : 'FAIL'} — ${declaredCount} top-level declarations under scripts/, all read somewhere in the tree: ${dead.length === 0 ? 'ok' : `${dead.length} UNREAD (${dead.join(', ')})`}; ${helpEntries} numbered --help entries vs ${SELF_CHECK_GROUPS.length} group keys, equal in both directions: ${ghostKeys.length === 0 && missingKeys.length === 0 && duplicateKeys.length === 0 ? 'ok' : `NO (ghost: ${ghostKeys.join(', ') || 'none'}; missing entry: ${missingKeys.join(', ') || 'none'}; twice: ${duplicateKeys.join(', ') || 'none'})`}; documented-but-unread generator flags: ${unreadFlags.length === 0 ? 'none' : unreadFlags.join(', ')}; flags missing from the Usage synopsis: ${(selfCheck.noDeadDecls.missingFromSynopsis || []).length === 0 ? 'none' : selfCheck.noDeadDecls.missingFromSynopsis.join(', ')}; a flag that ADDS artifacts and is missing from SKILL.md: ${undocumentedFlags.length === 0 ? `none (baseline ${artifactFlagBaseline} files)` : `UNDOCUMENTED ${undocumentedFlags.join(', ')}`}; artifact-adding fixtures that do not actually add: ${lyingFlags.length === 0 ? 'none' : lyingFlags.join(', ')}; detector teeth: declarations ${teethDeclarations ? 'ok' : 'BLIND'}, help ${teethHelp ? 'ok' : 'BLIND'}, flags ${teethFlags ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.gateArgs) {
+    const { pass, refusalsCaught = 0, refusalsTotal = 0, refusalExits, teethThresholds, teethSelfCheck, zeroStillRuns, accepted = [], misreported = [], error } = selfCheck.gateArgs;
+    lines.push(`  Gate switches: ${pass ? 'PASS' : 'FAIL'} — this script cannot be switched off: ${refusalsCaught}/${refusalsTotal} malformed invocations refused, each exiting 2: ${refusalExits ? 'ok' : 'NO'}; non-numeric thresholds still accepted once the refusal is deleted: ${teethThresholds ? 'ok' : 'BLIND'}; --no-self-check still accepted once its refusal is deleted: ${teethSelfCheck ? 'ok' : 'BLIND'}; --min-score=0 still runs: ${zeroStillRuns ? 'ok' : 'REFUSED'}${accepted.length ? `; wrongly accepted: ${accepted.join(', ')}` : ''}${misreported.length ? `; refusal without a usable message: ${misreported.join(', ')}` : ''}${error ? ` — ${error}` : ''}`);
+  }
   if (selfCheck.reportCoverage) {
     const { pass, unbound = [], missingLines = [], orphanLines = [], missingConsole = [] } = selfCheck.reportCoverage;
     lines.push(`  Report coverage: ${pass ? 'PASS' : 'FAIL'} — every self-check group is bound, gated, reported and shown on the console: ${pass ? 'ok' : `NO (unbound: ${unbound.join(', ') || 'none'}; missing report line: ${missingLines.join(', ') || 'none'}; orphan line: ${orphanLines.join(', ') || 'none'}; missing console line: ${missingConsole.join(', ') || 'none'})`}`);
@@ -1122,7 +1226,7 @@ async function runSelfCheck() {
     await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', dir]);
     const scaffolded = await loadHarnessFiles(dir);
     const scored = scoreHarness(scaffolded, { references: await collectCommandReferences(dir, scaffolded) });
-    const minScore = Number(args.minSelfCheckScore || 90);
+    const minScore = thresholds.minSelfCheckScore;
     // Driven by SELF_CHECK_GROUPS rather than a hand-written conjunction: the previous version listed
     // each group three times (call, conjunction, return object), so a new group could be computed and
     // printed while never joining the pass — a gate that reports and gates nothing.
@@ -1148,7 +1252,8 @@ async function runSelfCheck() {
       reportContract: () => checkReportContract(),
       taskContract: async () => (await evaluateContracts()).taskContract,
       maintContract: () => checkMaintContract(),
-      noDeadDecls: () => checkNoDeadDeclarations()
+      noDeadDecls: () => checkNoDeadDeclarations(),
+      gateArgs: () => checkGateArgs()
     };
     const groups = {};
     for (const key of SELF_CHECK_GROUPS) groups[key] = await groupChecks[key]();
@@ -1751,6 +1856,123 @@ async function checkNoDeadDeclarations() {
     };
   } catch (error) {
     return { pass: false, dead: [], ghostKeys: [], missingKeys: [], duplicateKeys: [], unreadFlags: [], error: error.message };
+  }
+}
+
+// Two switches that used to turn this gate off from the command line, and the proof that they no
+// longer do. Both defects were measured rather than imagined: `--self-check-only --no-self-check`
+// exited 0 with the whole self-check skipped, and `--min-score=abc` exited 0 on a target scoring
+// 20/100 because Number('abc') is NaN and every `score < NaN` is false.
+//
+// Every probe here is safe to run from inside the self-check, and that is not luck: the refusal
+// sits ahead of --help and ahead of the first file read, so a malformed invocation exits at the
+// refusal and the legal ones exit at --help. None of these spawns reaches runSelfCheck(), which is
+// what keeps a check about this script's own entry point from recursing into itself.
+//
+// The teeth are two mutants of this file with the refusal logic removed, not a fixture string: a
+// detector seeded with a hand-written sample only proves the detector reads its own fixture. Each
+// mutant is the shipped file with one branch neutered, and the arm requires it to accept the very
+// invocation the real script refuses — so if the neutering ever stops taking effect, the arm fails
+// instead of quietly asserting a refusal that no longer depends on the branch.
+async function checkGateArgs() {
+  let dir;
+  try {
+    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-gateargs-'));
+    const source = await readText(fileURLToPath(import.meta.url));
+    // The copy needs lib/harness-utils.mjs beside it or the import at the top of the file fails,
+    // and a module that cannot load would satisfy the mutant arms for the wrong reason.
+    const utilsSource = await readText(path.join(scriptDir, 'lib', 'harness-utils.mjs'));
+
+    // What a caller actually sees: the exit code and both streams, merged because the refusal is
+    // written to stderr with writeSync and a text that never arrives is not a usable refusal.
+    const run = async (target, argv) => {
+      try {
+        const done = await execFileAsync('node', [target, ...argv]);
+        return { code: done.code ?? 0, out: `${done.stdout || ''}${done.stderr || ''}` };
+      } catch (error) {
+        return { code: error.code ?? 1, out: `${error.stdout || ''}${error.stderr || ''}` };
+      }
+    };
+
+    // --help rides along on every probe so a mutant that stops refusing exits immediately at the
+    // help block instead of running the benchmark it was just proven unable to refuse.
+    const script = fileURLToPath(import.meta.url);
+    const probes = [
+      { argv: ['--min-score=abc', '--help'], flag: '--min-score', raw: 'abc' },
+      { argv: ['--min-eval-score=abc', '--help'], flag: '--min-eval-score', raw: 'abc' },
+      { argv: ['--min-self-check-score=abc', '--help'], flag: '--min-self-check-score', raw: 'abc' },
+      // parseArgs hands back `true` for a bare --flag and '' for `--flag=`; both are non-numeric
+      // and both used to widen the gate silently rather than fail it.
+      { argv: ['--min-score', '--help'], flag: '--min-score', raw: 'true' },
+      { argv: ['--min-eval-score=', '--help'], flag: '--min-eval-score', raw: '""' },
+      { argv: ['--no-self-check', '--help'], flag: '--no-self-check', raw: null }
+    ];
+
+    let refusalsCaught = 0;
+    let refusalExits = true;
+    const accepted = [];
+    const misreported = [];
+    for (const probe of probes) {
+      const result = await run(script, probe.argv);
+      // The refusal has to name the switch, quote back the value it rejected, and point at --help:
+      // a message that only says "invalid" leaves the caller guessing which token was wrong, and
+      // one that never reaches the caller is not a refusal at all.
+      const named = result.out.includes(probe.flag)
+        && (probe.raw === null || result.out.includes(probe.raw))
+        && result.out.includes('--help lists every switch');
+      if (result.code === 0) accepted.push(probe.argv.join(' '));
+      else if (result.code !== 2) refusalExits = false;
+      if (result.code !== 0 && named) refusalsCaught += 1;
+      else if (result.code !== 0) misreported.push(probe.argv.join(' '));
+    }
+
+    // The legal override, through the same path. --min-score=0 is a threshold somebody wrote on
+    // purpose, and a refusal that ate it would be indistinguishable from the defect it replaced.
+    const zero = await run(script, ['--min-score=0', '--help']);
+    const zeroStillRuns = zero.code === 0 && zero.out.includes('Usage:');
+
+    // Teeth. Each mutant is this file with one branch neutered; the arm requires it to ACCEPT the
+    // invocation the real script refuses, which is the only thing that proves the refusal above is
+    // coming from that branch rather than from an unrelated failure.
+    const writeMutant = async (name, from, to) => {
+      const sub = path.join(dir, name);
+      await mkdir(path.join(sub, 'lib'), { recursive: true });
+      await writeFile(path.join(sub, 'lib', 'harness-utils.mjs'), utilsSource);
+      const mutated = source.replace(from, to);
+      // Reported rather than assumed: a replacement that matches nothing leaves a byte-identical
+      // copy that still refuses, and the arm below would call that a neutered branch.
+      if (mutated === source) return null;
+      const mutantPath = path.join(sub, 'run-benchmark.mjs');
+      await writeFile(mutantPath, mutated);
+      return mutantPath;
+    };
+    // The anchors carry their indentation so they cannot match the string literals that name them two
+    // lines below: without it, `replace` would hit whichever occurrence came first in the file, and
+    // a mutation aimed at the wrong copy of the branch is a mutation that proves nothing.
+    const thresholdMutant = await writeMutant('no-threshold-refusal', '\n    if (usable) continue;', '\n    if (true) continue;');
+    const selfCheckMutant = await writeMutant('no-off-switch', '\n  if (args.noSelfCheck !== undefined) {', '\n  if (false) {');
+    const teethThresholds = thresholdMutant !== null && (await run(thresholdMutant, ['--min-score=abc', '--help'])).code === 0;
+    const teethSelfCheck = selfCheckMutant !== null && (await run(selfCheckMutant, ['--no-self-check', '--help'])).code === 0;
+
+    return {
+      pass: refusalsCaught === probes.length && refusalExits && accepted.length === 0
+        && misreported.length === 0 && zeroStillRuns && teethThresholds && teethSelfCheck,
+      refusalsCaught,
+      refusalsTotal: probes.length,
+      refusalExits,
+      accepted,
+      misreported,
+      zeroStillRuns,
+      teethThresholds,
+      teethSelfCheck
+    };
+  } catch (error) {
+    return {
+      pass: false, refusalsCaught: 0, refusalsTotal: 0, refusalExits: false, accepted: [],
+      misreported: [], zeroStillRuns: false, teethThresholds: false, teethSelfCheck: false, error: error.message
+    };
+  } finally {
+    if (dir) await rm(dir, { recursive: true, force: true });
   }
 }
 
@@ -3196,9 +3418,7 @@ function renderBenchmarkHtml(report) {
   const coverageLine = report.selfCheck?.reportCoverage
     ? ` Every self-check group is bound, gated and reported (${report.selfCheck.reportCoverage.pass ? 'verified' : `FAILED — unbound: ${report.selfCheck.reportCoverage.unbound.join(', ') || 'none'}; missing report line: ${report.selfCheck.reportCoverage.missingLines.join(', ') || 'none'}; orphan line: ${report.selfCheck.reportCoverage.orphanLines.join(', ') || 'none'}`}).`
     : '';
-  const selfCheckSection = report.selfCheck?.skipped
-    ? ''
-    : `<section>
+  const selfCheckSection = `<section>
       <h2>Script Self-Check <span>${report.selfCheck.pass ? 'PASS' : 'FAIL'}</span></h2>
       <p>Scaffolded a throwaway harness and scored it ${report.selfCheck.score}/100 — confirms the bundled scripts run end-to-end rather than merely being present.${coverageLine}${selfCheckLines}${report.selfCheck.error ? ` Error: ${escapeHtml(report.selfCheck.error)}` : ''}</p>
     </section>`;

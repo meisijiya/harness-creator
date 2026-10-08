@@ -5,7 +5,7 @@ description: >-
   验证关卡、范围边界、记忆持久化、上下文预算、工具权限安全以及多代理协调。
   当编码代理跨会话表现不可靠时使用本技能——忘记上下文、偏离范围、在测试通过前就声称"完成"，
   或每次会话的起始状态不一致——或在创建或评估 AGENTS.md、CLAUDE.md、init.sh 时使用。
-  状态与交接由已安装的工程 skill 承接，本技能不落这两类产物。
+  状态与交接不属本技能的子系统：它不落这两类产物，也不假定有别的体系会承接。
   即使用户从未说出 "harness" 这个词，也应使用本技能。
   用户要求更新、维护或优化 harness 组件、或要为本次会话的产出收尾时，同样使用本技能。
 license: MIT
@@ -92,12 +92,12 @@ node <技能目录>/scripts/run-benchmark.mjs --target /path/to/project --html /
 ## 何时阅读参考文档
 
 - 跨会话记忆：`memory-persistence-pattern.md`
-- 可复用工作流（技能形式）：`skill-runtime-pattern.md`
+- 可复用工作流（技能形式）、eval 与基准设计：`skill-runtime-pattern.md`
 - 权限、工具、并发：`tool-registry-pattern.md`
 - 上下文预算与渐进式披露：`context-engineering-pattern.md`
-- 任务委派与并行代理：`multi-agent-pattern.md`
+- 任务委派、并行代理与所有权边界：`multi-agent-pattern.md`
 - 钩子、启动、长时间运行的工作：`lifecycle-bootstrap-pattern.md`
-- 旁路观测：`bypass-observation-pattern.md`
+- 旁路观测、把工作规则变成检查：`bypass-observation-pattern.md`
 - harness 维护：`harness-maintenance-pattern.md`
 - 不易察觉的失败模式：`gotchas.md`
 

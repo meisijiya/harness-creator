@@ -2,7 +2,7 @@
 
 一个用于围绕 AI 编码代理构建与审计 harness 的紧凑型技能。
 
-它帮助仓库为代理提供三样必需品：指令、验证与范围边界。**状态与生命周期不由本技能提供**——它们委派给已安装的工程 skill（见「边界」）。
+它帮助仓库为代理提供三样必需品：指令、验证与范围边界。**状态与生命周期不由本技能提供**，这里也不假定有别的体系会承接它们（见「边界」）。
 
 ## Harness 哲学
 
@@ -55,7 +55,7 @@ npx skills update harness-creator
 npx skills remove harness-creator
 ```
 
-`npx skills add` 会自动探测运行时并把技能放进对应目录。手动安装时，把 `skills/harness-creator/` 复制到所用运行时的技能目录：
+`npx skills add` 会自动探测运行时并把技能放进对应目录。手动安装时，把**本仓库根目录**复制到所用运行时的技能目录——仓库根就是技能目录：`SKILL.md` 与 `scripts/`、`templates/`、`references/`、`evals/`、`agents/` 同级；`AGENTS.md` 与根 `init.sh` 是本仓自己的 harness，不属于技能载荷：
 
 | 运行时 | 技能目录 |
 |---|---|

@@ -37,6 +37,14 @@ echo "=== node --check scripts/create-harness.mjs ==="
 node --check scripts/create-harness.mjs
 RAN=1
 
+# The auditor is the one shipped script the self-check never executes: run-benchmark.mjs reads its
+# --help as text (to scan for external system names) instead of running it, so a syntax error there
+# left every gate green while the audit command was unrunnable. Syntax is the cheapest possible
+# check for that, and it is added rather than substituted: the two existing steps stay as they are.
+echo "=== node --check scripts/validate-harness.mjs ==="
+node --check scripts/validate-harness.mjs
+RAN=1
+
 if [ "$RAN" -eq 0 ]; then
   echo ""
   echo "ERROR: nothing in this harness verified anything — every check was skipped."
