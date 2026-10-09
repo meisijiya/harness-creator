@@ -1,0 +1,2 @@
+timestamp	commit	skill	old_score	new_score	status	dimension	mode	note
+2026-10-09T13:10	baseline	harness-creator	-	88.1	baseline	-	full_test	结构维 68.5/77（两 judge 均值：dim1 9/9 dim2 8/9 dim3 9/10 dim4 9/10 dim5 9/9 dim6 9/8 dim7 8/8 dim9 9/10）+ 实测维 dim8 8.5/10（with_skill 8.5 vs baseline 7.0，三 prompt 全跑）；runtime 红灯扫描 0 命中；最大缺口 dim8 3.45（has_script 静默跳过致多检查项目假绿），其次 dim7 2.4（六处工单边界复述 + 五处证据落点复述）

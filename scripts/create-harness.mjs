@@ -515,7 +515,7 @@ if (args.addCheck !== undefined || args.addCheckEntry !== undefined) {
     if (notRun.length > 0) {
       await writeText(addPath, original);
       console.error('REFUSED: --add-check, and the gate does not actually pass with what was appended:');
-      for (const entry of notRun) console.error(`  - ${entry.command}`);
+      for (const entry of notRun) console.error(`  - ${entry}`);
       console.error('The file has been put back byte for byte. A check that never runs is not coverage,');
       console.error('and neither is one that turns the gate red on the spot: both would be reported as');
       console.error('a regression net that is not one. Fix the check until it passes, then add it.');

@@ -128,7 +128,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['blankGate', (group) => ` A project with nothing to verify — no manifest, a manifest with no runnable script, or an explicit --commands list whose scripts the manifest does not define — gets a refusal that exits non-zero instead of reporting a pass it did not earn, the counter reopens the moment a real check runs, a comma inside a quoted command stays one command while a genuine comma-separated list still splits, an unterminated quote is refused leaving nothing behind, and the manual fallback template refuses on the same shapes (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-description slot stays a visible pending marker when the user has not stated one, while a blueprint change rewrites that slot only — the rest of the file survives byte for byte, and a shape this skill did not render is refused rather than guessed at (${group.pass ? 'verified' : `pending ${group.pendingMarked ? 'ok' : 'NO'}; no stack fill ${group.noInventedFill ? 'ok' : 'NO'}; verbatim ${group.verbatim ? 'ok' : 'NO'}; slot-only ${group.slotRewritten && group.restIntact ? 'ok' : 'NO'}; detector ${group.detectorHasTeeth ? 'has teeth' : 'BLIND'}; refusal ${group.refusalHonoured && group.refusedUntouched ? 'ok' : 'NO'}`}).`],
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, an existing instruction file is left byte-identical while its missing sections are still reported, and --force refuses to render over sections it does not define — the one rule protecting another owner's block, which was prose until it destroyed a fixture — while still overwriting this skill's own render (${group.pass ? 'verified' : `FAILED (foreign block refused: ${group.forceRefused ? 'ok' : 'NO'}; own render rewritten: ${group.forceStillWritesOwn ? 'ok' : 'NO'})`}).`],
-  ['initGrowth', (group) => ` The gate only grows: a new check joins an existing init.sh without removing or reordering any step, a repeat is a no-op that leaves the file byte-identical, a check the gate would never actually run — or one that does not parse as shell — is refused and rolled back rather than reported as added, a one-line entry reference to a script this repository owns is appended unguarded so a missing entry turns the gate red instead of skipping it, and a gate that went red this session leaves a check behind so the lesson reaches the specification instead of only the fix (${group.pass ? 'verified' : `grew ${group.grew ? 'ok' : 'NO'}; existing steps intact ${group.preserved ? 'ok' : 'NO'}; repeat ${group.idempotent ? 'ok' : 'NO'}; dead-branch check ${group.deadBranchRefused && group.rolledBack ? 'refused and rolled back' : 'ACCEPTED'}; unparseable check ${group.unparseableRefused ? 'refused' : 'ACCEPTED'}; entry appended ${group.entryAppended ? 'ok' : 'NO'}; entry unguarded ${group.entryUnguarded ? 'ok' : 'GUARDED'}; entry repeat ${group.entryIdempotent ? 'ok' : 'NO'}; missing entry ${group.entryMissingRefused ? 'refused' : 'ACCEPTED'}; path rules ${group.entryRulesHaveTeeth ? 'ok' : 'BLIND'}; entry removed turns it red ${group.entryGateFailsWhenUnresolvable ? 'yes' : 'NO'}; red-gate lesson ${group.loopStated && group.loopIsLoadBearing ? 'recorded' : 'LOST'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}; no init.sh ${group.missingRefused ? 'refused' : 'ACCEPTED'}`}).`],
+  ['initGrowth', (group) => ` The gate only grows: a new check joins an existing init.sh without removing or reordering any step, a repeat is a no-op that leaves the file byte-identical, a check the gate would never actually run — or one that does not parse as shell — is refused and rolled back rather than reported as added, and such a refusal names the command it refused instead of printing a placeholder where the command belongs, a one-line entry reference to a script this repository owns is appended unguarded so a missing entry turns the gate red instead of skipping it, a declared check that did not run turns the gate red instead of printing a notice beside the success tail while a script this manifest does define still gets a real step, and a gate that went red this session leaves a check behind so the lesson reaches the specification instead of only the fix (${group.pass ? 'verified' : `grew ${group.grew ? 'ok' : 'NO'}; existing steps intact ${group.preserved ? 'ok' : 'NO'}; repeat ${group.idempotent ? 'ok' : 'NO'}; dead-branch check ${group.deadBranchRefused && group.rolledBack ? 'refused and rolled back' : 'ACCEPTED'}; refusal names its command ${group.refusalNamesCommand ? 'ok' : 'PLACEHOLDER'}; name detector ${group.refusalNameHasTeeth ? 'has teeth' : 'BLIND'}; unparseable check ${group.unparseableRefused ? 'refused' : 'ACCEPTED'}; entry appended ${group.entryAppended ? 'ok' : 'NO'}; entry unguarded ${group.entryUnguarded ? 'ok' : 'GUARDED'}; entry repeat ${group.entryIdempotent ? 'ok' : 'NO'}; missing entry ${group.entryMissingRefused ? 'refused' : 'ACCEPTED'}; path rules ${group.entryRulesHaveTeeth ? 'ok' : 'BLIND'}; entry removed turns it red ${group.entryGateFailsWhenUnresolvable ? 'yes' : 'NO'}; skipped declared check ${group.declaredSkipTurnsGateRed ? 'turns it red' : 'NOTICE ONLY'}; its detector ${group.declaredSkipDetectorHasTeeth ? 'has teeth' : 'BLIND'}; declared script ${group.declaredScriptStillRuns ? 'still checked' : 'DROPPED'}; run-it ${group.declaredSkipGateIsRed && group.declaredGateIsGreen ? 'red and green' : 'NOT OBSERVED'}; red-gate lesson ${group.loopStated && group.loopIsLoadBearing ? 'recorded' : 'LOST'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}; no init.sh ${group.missingRefused ? 'refused' : 'ACCEPTED'}`}).`],
   ['specLayer', (group) => ` The spec layer is opt-in and says nothing when it is off: a run without --spec-layer still produces the two artifacts and byte-identical content, the two documents exist only when the flag is given, the detected stack never becomes an answer to "what is this project", they are pointed at as read-on-demand rather than as files every session must open, and the same byte/line/working-rule ceilings still hold with the extra pointer (${group.pass ? 'verified' : `default unchanged ${group.offByDefault ? 'ok' : 'CHANGED'}; flag creates the layer ${group.onCreatesLayer ? 'ok' : 'NO'}; stack kept out of the mission ${group.noStackLeak ? 'ok' : 'LEAKED'}; read on demand ${group.onDemandNotResident ? 'ok' : 'RESIDENT'}; budget ${group.budgetHeld ? 'ok' : 'BUSTED'}; re-run skips ${group.reRunSkips ? 'ok' : 'OVERWROTE'}; flag value ${group.flagValueRefused ? 'refused' : 'ACCEPTED'}; zero coupling ${group.purityHeld ? 'ok' : 'NAMED OR BLIND'}`}).`],
   ['nextSteps', (group) => ` The gate's closing instructions are one literal with two producers: the generated init.sh, the hand-copy fallback and this repository's own gate all carry the same next-steps block, and it tells the agent to work only on what was explicitly authorized rather than to pick its own next task — a contradiction that was shipping, because the generated gate selected work in the same breath as the instruction file that forbids it (${group.pass ? 'verified' : `generated ${group.generatorAgrees ? 'agrees' : 'DRIFTED'}; fallback ${group.fallbackAgrees ? 'agrees' : 'DRIFTED'}; own gate ${group.ownGateAgrees ? 'agrees' : 'DRIFTED'}; authorizes rather than selects ${group.authorizesRatherThanSelects ? 'ok' : 'SELECTS'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}`}).`],
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`],
@@ -249,9 +249,12 @@ function maintenanceTriggerStated(text) {
   return { stated: missing.length === 0 && leaked.length === 0, missing, leaked };
 }
 
-// Every design rule in SKILL.md was unguarded prose until this gate. The suite reads the artifact a
-// target repo receives, and SKILL.md is mentioned in this file exactly twice: a byte count
-// (checkSkillBudget) and a path-shape scan (checkSelfReferencePaths). Neither reads a word of it.
+// Every design rule in SKILL.md was unguarded prose until this gate. The suite mostly reads the
+// artifact a target repo receives, but SKILL.md itself is read in five places: a byte count
+// (checkSkillBudget), the `--spec-layer` literal (ARTIFACT_ADDING_FLAGS), the 设计规则 term set
+// (SKILL_DESIGN_TERMS), the 更新 row of the task table (WRAPUP_SKILL_ENTRY_TERMS), and a
+// path-shape scan (checkSelfReferencePaths). Three of those assert words, so prose edits are not
+// free.
 // Measured 09-25: deleting the wrap-up rule outright still yielded Self-check PASS and eval 100/100,
 // and the bytes freed by the deletion made the budget line GREENER — the cap has only a ceiling, no
 // floor, so dropping a rule is rewarded. A rule that decides whether the skill is ever invoked
@@ -562,7 +565,8 @@ const MAINT_GUARDS = [
   { name: 'baseline scope outside the run is reported', anchor: /基线/, terms: ['区分', '原有', '本次'] },
   { name: 'commit needs authorization', anchor: /提交/, terms: ['授权', '用户'] },
   { name: 'existing work survives a commit decision', anchor: /已有修改|未跟踪|既有工作|保留修改/, terms: ['保留', '保护', '不覆盖', '不回退', '不删'] },
-  { name: 'a full score still reviews content', anchor: /满分/, terms: ['内容复核'] }
+  { name: 'a full score still reviews content', anchor: /满分/, terms: ['内容复核'] },
+  { name: 'misalignment exposed but unedited still yields candidates', anchor: /失准/, terms: ['维护候选', '有证据'] }
 ];
 const MAINT_OLD_ROW = '| 审计已满分 | 报「无候选瓶颈」，不改；为刷分堆关键词是反模式 |';
 
@@ -892,10 +896,14 @@ Runs a lightweight harness benchmark:
      seeding the retired phrases and every gate staying green. [noDeadDecls]
  24. Checks that the verification gate only grows: a new check joins an existing init.sh with every
      prior step preserved, naming one that is already there is a byte-identical no-op, a check the
-     gate would never actually run is refused and rolled back rather than reported as added, and a
-     missing init.sh is refused instead of quietly created. A one-line entry reference to a script the
+     gate would never actually run is refused and rolled back rather than reported as added, and that
+     refusal has to name the command it refused rather than a placeholder where the command belongs —
+     the shared boilerplate alone cannot tell the two apart. A missing init.sh is refused instead of
+     quietly created. A one-line entry reference to a script the
      repository owns is appended unguarded, and removing that entry turns the gate red rather than
-     skipping it. The two arms that need a POSIX shell to
+     skipping it. A declared check that did not run turns the gate red instead of printing a notice
+     beside the success tail, while a script the manifest does define still gets a real step. The
+     two arms that need a POSIX shell to
      run the gate are reported as unconfirmed, not passed, when no shell is available. [initGrowth]
 25. Checks that the spec layer is opt-in and honest: a run without --spec-layer produces the same
      two artifacts with byte-identical content, the two documents exist only when the flag is given, a
@@ -1115,8 +1123,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Agent-file invariant: ${pass ? 'PASS' : 'FAIL'} — existing CLAUDE.md means no AGENTS.md is created: ${noSecondFile && choseClaude ? 'ok' : 'NO'}; existing instruction file left byte-identical: ${untouched ? 'ok' : 'NO'}; missing sections still reported: ${missingReported ? 'ok' : 'NO'}; --force refuses to delete another owner's sections: ${forceRefused ? 'ok' : 'NO'}; and still overwrites this skill's own render: ${forceStillWritesOwn ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.initGrowth) {
-    const { pass, grew, preserved, idempotent, deadBranchRefused, rolledBack, missingRefused, unparseableRefused, detectorHasTeeth, loopStated, loopIsLoadBearing, entryAppended, entryUnguarded, entryIdempotent, entryMissingRefused, entryRulesHaveTeeth, entryGateFailsWhenUnresolvable, skipped, error } = selfCheck.initGrowth;
-    lines.push(`  init.sh growth: ${pass ? 'PASS' : 'FAIL'} — a new check joins an existing gate: ${grew ? 'ok' : 'NO'}; existing steps preserved: ${preserved ? 'ok' : 'NO'}; repeat is a byte-identical no-op: ${idempotent ? 'ok' : 'NO'}; a check the gate would never run is refused: ${deadBranchRefused ? 'ok' : 'ACCEPTED'}; and rolled back: ${rolledBack ? 'ok' : 'NO'}; a check that does not parse is refused: ${unparseableRefused ? 'ok' : 'ACCEPTED'}; no init.sh at all is refused: ${missingRefused ? 'ok' : 'ACCEPTED'}; an entry reference is one call line: ${entryAppended ? 'ok' : 'NO'}; and it is unguarded: ${entryUnguarded ? 'ok' : 'GUARDED'}; repeating it is a no-op: ${entryIdempotent ? 'ok' : 'NO'}; a missing entry is refused: ${entryMissingRefused ? 'ok' : 'ACCEPTED'}; entry path rules have teeth: ${entryRulesHaveTeeth ? 'ok' : 'BLIND'}; removing the entry turns the gate red: ${entryGateFailsWhenUnresolvable ? 'ok' : 'NO'}; a red gate leaves a check behind: ${loopStated && loopIsLoadBearing ? 'ok' : 'NO'}; detector teeth: ${detectorHasTeeth ? 'ok' : 'BLIND'}${skipped ? ` — ${skipped}` : ''}${error ? ` — ${error}` : ''}`);
+    const { pass, grew, preserved, idempotent, deadBranchRefused, rolledBack, refusalNamesCommand, refusalNameHasTeeth, missingRefused, unparseableRefused, detectorHasTeeth, loopStated, loopIsLoadBearing, entryAppended, entryUnguarded, entryIdempotent, entryMissingRefused, entryRulesHaveTeeth, entryGateFailsWhenUnresolvable, declaredSkipTurnsGateRed, declaredSkipDetectorHasTeeth, declaredScriptStillRuns, declaredSkipGateIsRed, declaredGateIsGreen, skipped, error } = selfCheck.initGrowth;
+    lines.push(`  init.sh growth: ${pass ? 'PASS' : 'FAIL'} — a new check joins an existing gate: ${grew ? 'ok' : 'NO'}; existing steps preserved: ${preserved ? 'ok' : 'NO'}; repeat is a byte-identical no-op: ${idempotent ? 'ok' : 'NO'}; a check the gate would never run is refused: ${deadBranchRefused ? 'ok' : 'ACCEPTED'}; and rolled back: ${rolledBack ? 'ok' : 'NO'}; the refusal names the command it refused: ${refusalNamesCommand ? 'ok' : 'PLACEHOLDER'}; that detector has teeth: ${refusalNameHasTeeth ? 'ok' : 'BLIND'}; a check that does not parse is refused: ${unparseableRefused ? 'ok' : 'ACCEPTED'}; no init.sh at all is refused: ${missingRefused ? 'ok' : 'ACCEPTED'}; an entry reference is one call line: ${entryAppended ? 'ok' : 'NO'}; and it is unguarded: ${entryUnguarded ? 'ok' : 'GUARDED'}; repeating it is a no-op: ${entryIdempotent ? 'ok' : 'NO'}; a missing entry is refused: ${entryMissingRefused ? 'ok' : 'ACCEPTED'}; entry path rules have teeth: ${entryRulesHaveTeeth ? 'ok' : 'BLIND'}; removing the entry turns the gate red: ${entryGateFailsWhenUnresolvable ? 'ok' : 'NO'}; a declared check that did not run turns the gate red: ${declaredSkipTurnsGateRed ? 'ok' : 'NOTICE ONLY'}; that detector has teeth: ${declaredSkipDetectorHasTeeth ? 'ok' : 'BLIND'}; a script the manifest defines still gets a real step: ${declaredScriptStillRuns ? 'ok' : 'DROPPED'}; and the two gates come back red and green: ${declaredSkipGateIsRed && declaredGateIsGreen ? 'ok' : 'NOT OBSERVED'}; a red gate leaves a check behind: ${loopStated && loopIsLoadBearing ? 'ok' : 'NO'}; detector teeth: ${detectorHasTeeth ? 'ok' : 'BLIND'}${skipped ? ` — ${skipped}` : ''}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.specLayer) {
     const { pass, offByDefault, onCreatesLayer, noStackLeak, onDemandNotResident, budgetHeld, reRunSkips, flagValueRefused, purityHeld, artifactsDeclareLayer, specSize, specLines, error } = selfCheck.specLayer;
@@ -3007,15 +3015,29 @@ async function checkAgentFileInvariant() {
 //   idempotent        — naming a check that is already there changes nothing. A second copy of the
 //     same check is a gate that looks twice as covered as it is.
 //   deadBranchRefused — the check lands in a branch ./init.sh never takes, so it never runs. The
-//     generator's own anchors cannot see this: templates/init.sh nests RAN=0 inside a conditional,
-//     so both anchors are unique and correctly ordered inside a branch a Python repo never enters.
+//     generator's own anchors cannot see it: templates/init.sh reaches its refusal through an
+//     elif cascade, so both anchors are unique and correctly ordered yet every one of them sits on
+//     a path a Python repo never enters.
 //     The run must refuse AND put the file back, because "ADDED" for a check that cannot run is a
 //     regression net reported as coverage — the precise failure this mode exists to prevent.
 //
 // missingRefused is the fourth: no init.sh at all means there is no gate to grow, and creating one
-// as a side effect of an append would be the create flow smuggled into a flag that claims to touch
-// nothing else. detectorHasTeeth keeps the comparison itself honest: a predicate that cannot fail
-// would report `preserved` on any file at all, including one that lost its steps.
+//   as a side effect of an append would be the create flow smuggled into a flag that claims to touch
+//   nothing else. detectorHasTeeth keeps the comparison itself honest: a predicate that cannot fail
+//   would report `preserved` on any file at all, including one that lost its steps.
+//
+// declaredSkipTurnsGateRed is the same class of defect one level down, and it was the one the
+//   counter above could not see. RAN=0 refuses when EVERY check was skipped, which is the honest
+//   reading of "at least one ran"; it is blind to the case where the project names two checks,
+//   package.json defines one, the other is skipped with a notice, RAN=1 is set by the check that
+//   did run, and the script prints "Verification Complete" and exits 0. The user asked for two and
+//   got one plus a notice — and the audit scored that repo 100/100, because its checks are
+//   existence checks. Four arms over two fixtures, opposite verdicts: the skip branch has to record
+//   which script it was, the refusal that reads that record has to exit non-zero BEFORE the success
+//   tail, a manifest that defines both scripts must still get two real steps and record nothing, and
+//   where a shell exists the two fixtures must actually come back red and green respectively. The
+//   pair matters because each alone is satisfiable by the wrong fix: recording the skip and printing
+//   the success tail anyway passes the first two, and refusing unconditionally passes all three.
 //
 // SKIPPED, not failed, when no POSIX shell is available. This suite is pure Node by design (see
 // checkBlankProjectGate) and must not be turned into a gate that refuses everything on a host without
@@ -3041,13 +3063,18 @@ async function checkInitGrowth() {
   let missingDir;
   let unparseDir;
   let entryDir;
+  let undefDir;
+  let declaredDir;
   let probeDir = null;
   const result = {
     pass: false, grew: false, preserved: false, idempotent: false,
-    deadBranchRefused: false, rolledBack: false, missingRefused: false, detectorHasTeeth: false,
+    deadBranchRefused: false, rolledBack: false, refusalNamesCommand: false,
+    refusalNameHasTeeth: false, missingRefused: false, detectorHasTeeth: false,
     unparseableRefused: false, loopStated: false, loopIsLoadBearing: false,
     entryAppended: false, entryUnguarded: false, entryIdempotent: false,
-    entryMissingRefused: false, entryRulesHaveTeeth: false, entryGateFailsWhenUnresolvable: false
+    entryMissingRefused: false, entryRulesHaveTeeth: false, entryGateFailsWhenUnresolvable: false,
+    declaredSkipTurnsGateRed: false, declaredSkipDetectorHasTeeth: false, declaredScriptStillRuns: false,
+    declaredSkipGateIsRed: false, declaredGateIsGreen: false
   };
   try {
     const script = path.join(scriptDir, 'create-harness.mjs');
@@ -3139,6 +3166,46 @@ async function checkInitGrowth() {
     // before any write cannot satisfy this arm.
     result.deadBranchRefused = deadBefore && /never executed|does not actually pass/.test(deadOutput);
     result.rolledBack = (await readText(deadPath)) === deadHash;
+
+    // 3b. And the refusal has to NAME the command it refused, which the arm above cannot see.
+    //
+    // `deadBranchRefused` keys on the generator's shared boilerplate, and that boilerplate is one
+    // sentence reused by every refusal — so a printer that wrote a placeholder where the command
+    // belongs produced an output indistinguishable from a correct one and this arm stayed green.
+    // That is not hypothetical: the notRun collector appends plain strings while the loop that
+    // prints them reads a property off each entry, so every refused command printed as `undefined`
+    // and the only visible symptom was a refusal that refused nothing by name.
+    //
+    // Asked of the SHAPE of the printed list, not of any phrase: the bullets are the one part of the
+    // message that carries data rather than boilerplate, and the requirement is that each of them
+    // begins with a command this run actually appended. Both directions are required — every bullet
+    // accounted for by an appended command, and every appended command present in some bullet —
+    // because either half alone is satisfied by a list of placeholders or by a list that omits the
+    // command while printing something else. Rewording the boilerplate cannot move it; printing
+    // `undefined` in place of the command does.
+    const refusedCommands = ['npm run nonexistent-check'];
+    const refusalBullets = (text) => text.split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('- '))
+      .map((line) => line.slice(2).trim());
+    const namesRefused = (text, commands) => {
+      const bullets = refusalBullets(text);
+      return commands.length > 0 &&
+        commands.every((command) => bullets.some((bullet) => bullet.startsWith(command))) &&
+        bullets.every((bullet) => commands.some((command) => bullet.startsWith(command)));
+    };
+    // Mutating only the printed bullets, so the mutant differs from the artifact above in exactly
+    // the data the arm is about and keeps every word of boilerplate the refusal shares with the
+    // healthy case.
+    const retargetBullets = (text, rewrite) => text.split('\n')
+      .map((line) => (line.trim().startsWith('- ') ? `  - ${rewrite(line.trim().slice(2).trim())}` : line))
+      .join('\n');
+    result.refusalNamesCommand = namesRefused(deadOutput, refusedCommands);
+    const placeholderRefusal = retargetBullets(deadOutput, () => 'undefined');
+    const alienRefusal = retargetBullets(deadOutput, () => 'npm run a-check-this-run-never-asked-for');
+    result.refusalNameHasTeeth = result.refusalNamesCommand &&
+      !namesRefused(placeholderRefusal, refusedCommands) &&
+      !namesRefused(alienRefusal, refusedCommands);
 
     // 4. No init.sh at all: refused rather than silently creating one.
     missingDir = await mkdtemp(path.join(os.tmpdir(), 'harness-initgrowth-missing-'));
@@ -3289,13 +3356,144 @@ async function checkInitGrowth() {
     // on absence of evidence" rule the command-reference group is built on. Unset is excluded from
     // the no-shell conjunction below, alongside the other arms that need a shell to observe.
 
+    // 8. A declared check that did not run must turn the gate RED, not print a notice beside a
+    //    success tail.
+    //
+    // RAN=0 refuses when EVERY check was skipped, which is the honest reading of "at least one ran".
+    // It is blind to the case this arm exists for: a project asked for `npm test` and
+    // `npm run lint`, package.json defined only `test`, the lint step skipped, RAN=1 was set by the
+    // test that did run, and the script printed "Verification Complete" and exited 0 — a check the
+    // user explicitly named reported as covered while never running. The audit scored that repo
+    // 100/100, because its checks are existence checks and ./init.sh does exist.
+    //
+    // Asked of the RENDER, structurally, so it holds on the hosts that have no shell: a skip branch
+    // that discards the script's name cannot be refused later, so the name has to be recorded where
+    // the foot of the file can read it, and the refusal that reads it must exit non-zero BEFORE the
+    // success tail — an `exit 1` after "Verification Complete" is decoration. Two halves, and the
+    // second is the load-bearing one: a gate that records the skip and then prints its success tail
+    // anyway has satisfied the first.
+    undefDir = await mkdtemp(path.join(os.tmpdir(), 'harness-initgrowth-undef-'));
+    await writeText(path.join(undefDir, 'package.json'), JSON.stringify({
+      name: 'undef-fixture', version: '1.0.0', scripts: { test: 'echo TEST_OK' }
+    }));
+    let undefRun = { stdout: '', stderr: '' };
+    let undefCode = 0;
+    try {
+      undefRun = await execFileAsync('node', [script, '--target', undefDir, '--commands', 'npm test,npm run lint']);
+    } catch (error) {
+      undefCode = error.code === undefined ? 1 : error.code;
+      undefRun = { stdout: error.stdout || '', stderr: error.stderr || '' };
+    }
+    const undefPath = path.join(undefDir, 'init.sh');
+    const undefWritten = await exists(undefPath);
+    const undefText = undefWritten ? await readText(undefPath) : '';
+    const tailAt = (text) => text.indexOf('=== Verification Complete ===');
+    // The lint step is the one the manifest cannot resolve, so it is the step whose skip branch
+    // decides this arm. Read out of the rendered file, never out of the renderer's source: a
+    // detector derived from the code it audits agrees with that code by construction.
+    const lintSkip = (text) => {
+      const branch = text.match(/if has_script "lint"; then[\s\S]*?\nfi/);
+      return branch ? branch[0] : '';
+    };
+    // Two clauses, as functions of a FILE rather than of this render, so the teeth arm below can
+    // run the same predicate over the render with one piece taken out. Reading the artifact instead
+    // of the renderer's source is the point: a detector derived from the code it audits agrees with
+    // that code by construction.
+    const skipRecorded = (text) => /SKIPPED="\$SKIPPED[^\n]*lint/.test(lintSkip(text));
+    // The refusal, and its position. Cut the success tail off first, then look for the refusal in
+    // what remains: an `exit 1` printed AFTER "Verification Complete" is decoration, and comparing
+    // two offsets measured against different strings is how a check comes to pass on a file whose
+    // refusal sat behind the banner. Split on the condition that arms it, so a deleted branch shows
+    // up as a missing block and a branch that stopped refusing as one whose first statement is no
+    // longer a non-zero exit — the same read the blank-gate group uses on the fallback template.
+    const skipRefusedBeforeTail = (text) => {
+      const blocks = text.slice(0, tailAt(text)).split('-n "$SKIPPED"').slice(1);
+      return blocks.length >= 1 &&
+        blocks.every((block) => /^[ \t]*exit[ \t]+[1-9]\d*[ \t]*$/m.test(block.slice(0, 400)));
+    };
+    result.declaredSkipTurnsGateRed = undefWritten && undefCode === 0 &&
+      skipRecorded(undefText) && skipRefusedBeforeTail(undefText);
+
+    // Teeth, one clause at a time, on the artifact the arm above just judged. A hand-written sample
+    // would only prove the predicate reads its own fixture; this is the real render minus the one
+    // block the mutation removes. The recorder clause must still hold on it — the skip branch is
+    // untouched — while the refusal clause must lose, and each is required separately because a
+    // single all-of would be satisfied by one predicate standing in for both. Left unset rather
+    // than true when the render carries no skip branch at all: there is nothing to take out then,
+    // and an arm that reports teeth on an artifact it never damaged is the same unrun-arm-as-passed
+    // defect the entry arm above records.
+    const undefWithoutRefusal = lintSkip(undefText).length > 0
+      ? undefText.replace(/if \[ -n "\$SKIPPED" \]; then[\s\S]*?\nfi\n/, '')
+      : '';
+    result.declaredSkipDetectorHasTeeth = undefWithoutRefusal.length > 0 &&
+      skipRecorded(undefWithoutRefusal) && !skipRefusedBeforeTail(undefWithoutRefusal);
+
+    // 9. The positive control, and the direction that stops the fix collapsing into "refuse
+    // everything": a manifest that DOES define both scripts must still get both steps, both
+    // reaching RAN=1, and no name in the accumulator that would refuse it. A gate that recorded
+    // every step as skipped — or that dropped the checks it could have run — satisfies arm 8 exactly
+    // as well, and only this fixture tells the two apart. Structural here so it also holds where no
+    // shell exists; the behavioural half of both arms rides the shell probe below.
+    declaredDir = await mkdtemp(path.join(os.tmpdir(), 'harness-initgrowth-declared-'));
+    await writeText(path.join(declaredDir, 'package.json'), JSON.stringify({
+      name: 'declared-fixture', version: '1.0.0',
+      scripts: { test: 'echo TEST_OK', lint: 'echo LINT_OK' }
+    }));
+    await execFileAsync('node', [script, '--target', declaredDir, '--commands', 'npm test,npm run lint']);
+    const declaredText = await readText(path.join(declaredDir, 'init.sh'));
+    const declaredSteps = [...declaredText.matchAll(/^[ \t]*(npm test|npm run lint)$/gm)].map((match) => match[1]);
+    // The counter, not the step list: a step rendered without one would satisfy the first clause
+    // while leaving the gate unable to tell it ran. Counted with the indentation the renderer emits,
+    // the same way the prefix arms above count the markers in a file they did not write.
+    const declaredRan = declaredText.split('\n').filter((line) => line.trim() === 'RAN=1').length;
+    // And the accumulator starts empty, with every later write confined to a guard's skip branch.
+    // This is the clause that separates "runs what it has" from "records every step then refuses":
+    // the refusals above fire off a non-empty accumulator, so a project that defines both scripts
+    // must reach the success tail, not the refusal the other fixture earns. It cannot be read as
+    // "no SKIPPED line exists" — every guarded step renders one, because whether its branch is taken
+    // is a run-time fact and the file is written before the run. Nor as "every SKIPPED line is the
+    // empty initializer", which no file containing a guard could satisfy. What separates the two
+    // designs is WHERE a write may sit: an initializer at column 0, and every other write indented
+    // inside a guard, so a manifest that defines the script reaches the tail.
+    const declaredSkippedLines = declaredText.split('\n').filter((line) => /^[ \t]*SKIPPED=/.test(line));
+    const declaredRecordsNothing = declaredSkippedLines.length >= 1 &&
+      declaredSkippedLines.every((line, index) => (index === 0
+        ? /^SKIPPED=""/.test(line)
+        : /^[ \t]+SKIPPED=/.test(line)));
+    result.declaredScriptStillRuns = declaredSteps.includes('npm test') && declaredSteps.includes('npm run lint') &&
+      declaredRan >= 2 && declaredRecordsNothing;
+
+    // 9b. The behavioural half of both arms, where a shell exists. Arm 8's whole claim is about the
+    // exit status a caller sees, and a text predicate can only stand in for it. Two runs, opposite
+    // verdicts, one fixture each: the gate that cannot resolve lint must not reach the success tail,
+    // and the gate that can resolve both must. Unset rather than true when no shell answers, for the
+    // reason the entry arm above records — an unrun arm reading as a passed one is the same
+    // "absence of evidence is not evidence" defect, in the other direction.
+    if (shellAvailable) {
+      const undefRunOut = await runGateWithShell(shellCandidate, undefDir);
+      const declaredRunOut = await runGateWithShell(shellCandidate, declaredDir);
+      const tail = '=== Verification Complete ===';
+      // Both halves, and the second is the one a mutant slips through: a gate that records the skip
+      // and then `exit 0`s prints no success tail while still reporting success to whatever called
+      // it, so absence of the banner alone reads as a red gate. The exit STATUS is the claim this
+      // arm is about — the failure banner is not, because the ERR trap only fires on a command that
+      // failed, and a deliberate `exit 1` at the foot of the file is the ordinary shape here.
+      result.declaredSkipGateIsRed = !undefRunOut.unavailable && !undefRunOut.ok &&
+        !undefRunOut.stdout.includes(tail) && /lint/.test(undefRunOut.stdout);
+      result.declaredGateIsGreen = !declaredRunOut.unavailable && declaredRunOut.ok &&
+        declaredRunOut.stdout.includes(tail);
+    }
+
     const sharedArms = result.grew && result.preserved && result.idempotent && result.detectorHasTeeth &&
-      result.loopStated && result.loopIsLoadBearing;
+      result.loopStated && result.loopIsLoadBearing &&
+      result.declaredSkipTurnsGateRed && result.declaredSkipDetectorHasTeeth &&
+      result.declaredScriptStillRuns;
     result.pass = sharedArms && result.deadBranchRefused && result.rolledBack &&
+      result.refusalNamesCommand && result.refusalNameHasTeeth &&
       result.missingRefused && result.unparseableRefused &&
       result.entryAppended && result.entryUnguarded && result.entryIdempotent &&
       result.entryMissingRefused && result.entryRulesHaveTeeth &&
-      result.entryGateFailsWhenUnresolvable;
+      result.entryGateFailsWhenUnresolvable && result.declaredSkipGateIsRed && result.declaredGateIsGreen;
 
     // Arms 1 and 2 need no shell, so they run everywhere. The arms that confirm behaviour — the
     // run-it confirmation, its rollback and the syntax refusal's effect on a green gate — are exactly
@@ -3313,15 +3511,17 @@ async function checkInitGrowth() {
         result.missingRefused && result.detectorHasTeeth &&
         result.loopStated && result.loopIsLoadBearing &&
         result.entryAppended && result.entryUnguarded && result.entryIdempotent &&
-        result.entryMissingRefused && result.entryRulesHaveTeeth;
-      result.skipped = 'no POSIX shell: the run-it confirmation, its rollback, the syntax refusal\'s effect on a green gate, and "removing the entry turns the gate red" were not exercised';
+        result.entryMissingRefused && result.entryRulesHaveTeeth &&
+        result.declaredSkipTurnsGateRed && result.declaredSkipDetectorHasTeeth &&
+        result.declaredScriptStillRuns;
+      result.skipped = 'no POSIX shell: the run-it confirmation, its rollback, the syntax refusal\'s effect on a green gate, "removing the entry turns the gate red", and the two exits of the skipped-declared-check arm were not exercised';
       return result;
     }
     return result;
   } catch (error) {
     return { ...result, error: error.message };
   } finally {
-    for (const target of [growDir, deadDir, missingDir, unparseDir, entryDir, probeDir]) if (target) await rm(target, { recursive: true, force: true });
+    for (const target of [growDir, deadDir, missingDir, unparseDir, entryDir, undefDir, declaredDir, probeDir]) if (target) await rm(target, { recursive: true, force: true });
   }
 }
 
