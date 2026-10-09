@@ -384,8 +384,15 @@ set -e
 
 echo "=== Harness Initialization ==="
 
-# A script that package.json does not define yet is SKIPPED with a notice, so a
-# fresh skeleton runs cleanly; a real verification failure still aborts below.
+# Answers whether package.json still defines a script at the moment the gate runs. Generation
+# already narrowed the step list to the scripts the manifest defined (verificationCommands), so a
+# skip reaching this file means one of two things: a script was deleted or renamed after the file
+# was written, or the step came from an explicit --commands/--add-check naming a script the project
+# never had. Both are the same fact to whoever reads the gate — a check it names and then does not
+# run — so the notice below is diagnostic only and the accumulator at the foot of the file is what
+# turns a skip into a red gate. A real verification failure still aborts on its own.
+# Same contract as the manual fallback templates/init.sh, the other producer of this file, which
+# resolves its steps at run time instead of at generation time and refuses on the same condition.
 has_script() {
   [ -f package.json ] && node -e "const s=require('./package.json').scripts||{};process.exit(s[process.argv[1]]?0:1)" "$1"
 }
@@ -399,14 +406,24 @@ explain_failure() {
 }
 trap explain_failure ERR
 
-# Counts the checks that actually ran. A guarded step SKIPS with a notice when package.json does not
-# define the script yet, so before this counter existed ./init.sh could skip every check, print
-# "Verification Complete" and exit 0 having verified nothing — the gate cannot fail, and "no feature
-# may be marked done without evidence" becomes structurally unreachable on exactly the fresh skeleton
-# where it matters most. Emitted unconditionally, because the branch that reaches the success tail at
-# exit 0 must be the one that earned it. Same contract as the manual fallback templates/init.sh,
-# which is the other producer of this file and carried the counter while this one did not.
+# Counts the checks that actually ran. A guarded step SKIPS when package.json does not define the
+# script, so without this counter ./init.sh could skip every check, print "Verification Complete"
+# and exit 0 having verified nothing — the gate cannot fail, and "no feature may be marked done
+# without evidence" becomes structurally unreachable on exactly the fresh skeleton where it matters
+# most. Emitted unconditionally, because the branch that reaches the success tail at exit 0 must be
+# the one that earned it. Same contract as the manual fallback templates/init.sh, which is the other
+# producer of this file.
 RAN=0
+
+# Names the declared checks that did not run. RAN alone answers "did anything verify?", which is
+# what the refusal below asks, but not "did EVERY declared check verify?" — and the difference is
+# the whole gate: a project that defines only \`test\` yet asks for \`npm run lint\` as well runs one
+# check, satisfies RAN, and prints a success tail that reads exactly like one where lint passed. The
+# user asked for two checks and got one plus a notice, indistinguishable from two. So the skipped
+# names are kept and refused by name below, making the two questions one: declared count equals ran
+# count, or the gate is red. Accumulated rather than counted because the refusal has to say WHICH
+# check is missing — a count alone sends the reader back to the file to find out.
+SKIPPED=""
 
 ${body}
 
@@ -415,6 +432,18 @@ if [ "$RAN" -eq 0 ]; then
   echo "ERROR: nothing in this harness verified anything — every check was skipped."
   echo "This project does not define the scripts named above yet, so none of them ran."
   echo "Replace them in ./init.sh with commands this repository can really run."
+  echo "Until then ./init.sh MUST fail: a gate that cannot fail is not a gate."
+  exit 1
+fi
+
+if [ -n "$SKIPPED" ]; then
+  echo ""
+  echo "ERROR: these declared checks did not run:"
+  for missing in $SKIPPED; do
+    echo "  - $missing"
+  done
+  echo "The gate names them above, so it promised them. Add the script, or delete the step from"
+  echo "./init.sh — a check that never runs is not a check."
   echo "Until then ./init.sh MUST fail: a gate that cannot fail is not a gate."
   exit 1
 fi
@@ -518,12 +547,19 @@ fi`;
     // RAN=1 sits inside the branch that really executes, never beside the SKIP notice. The counter,
     // not the notice, is what lets the assembled script tell "this check ran" apart from "this check
     // was skipped" — and a notice cannot be asserted on without asserting on our own prose.
+    // The skip branch records the script's name rather than only printing it. Printing is invisible
+    // to the exit status, which is the whole defect: a project defining only `test`, asked for
+    // `npm run lint` too, printed one SKIP line, satisfied RAN on the other check and exited 0
+    // through the success tail — so "lint was never run" and "lint passed" read identically at the
+    // only place a caller looks. SKIPPED is what the refusal at the foot of the file reads, and it
+    // makes that outcome non-zero instead of indistinguishable.
     return `if has_script "${name}"; then
   echo "=== ${escapeForEcho(command)} ==="
   ${command}
   RAN=1
 else
   echo "SKIP: ${escapeForEcho(command)} (package.json has no \\"${name}\\" script yet)"
+  SKIPPED="$SKIPPED ${name}"
 fi`;
   }
 
