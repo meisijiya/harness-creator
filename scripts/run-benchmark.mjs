@@ -35,72 +35,23 @@ const execFileAsync = promisify(execFile);
 // is enforced here rather than recorded only as a convention — a constraint with no mechanical
 // carrier is the thing this skill tells everyone else to fix.
 //
-// The baseline moved once, deliberately, and the multiplier was tightened at the same time: the
-// file had grown past the old 150%-of-7889 ceiling while gaining a capability family that has since
-// been removed again, and three independent judges confirmed that the phrase-by-phrase compression
-// paying for it had deleted real content. Rather than keep trading content for bytes, the baseline
-// is the previous stable SKILL.md and the allowance drops from 150% to 15% — the same multiplier the
-// generated AGENTS.md gets. Net effect: less headroom in absolute terms than re-interpreting the
-// old 150% against the new baseline would have given, so the ratchet keeps biting.
+// Rather than trading content for bytes forever, the baseline is the previous stable SKILL.md and the
+// allowance runs 15% over it — the same multiplier the generated AGENTS.md gets. The multiplier has
+// its own constant because it is the number a user decision moves; the baseline is not. Lowering a
+// cap is enforcement of a reduction already agreed; RAISING either number is a scope decision for
+// the user, and so is widening this multiplier.
 //
-// The baseline moved a second time, in the only direction that does not need the user: DOWN. The
-// scope reduction that removed the two governance modes, the five landing points, the extracted
-// agent-doc layer, git-tracking alignment and housekeeping took SKILL.md from 11801 to 9623 bytes.
-// Leaving the baseline where it was would have handed the deleted doctrine a 3.9 KB runway to grow
-// back into — the reduction would be undone by the next edit that "just adds one section back".
-// Lowering a cap is enforcement of a reduction already agreed; RAISING it is a scope decision for
-// the user, and so is widening this multiplier. The external comparison, for the record: upstream's
-// SKILL.md is 5188 bytes, and a Chinese rendering costs roughly 1.3x more bytes at an equal token
-// count, so 9623 is about 1.4x the upstream-equivalent — the difference is the boundary section,
-// the counterexample blacklist and the edge-case table, none of which upstream carries.
+// The external comparison, for the record: upstream's SKILL.md is 5188 bytes, and a Chinese rendering
+// costs roughly 1.3x more bytes at an equal token count, so this baseline is about 1.4x the
+// upstream-equivalent — the difference is the boundary section, the counterexample blacklist and the
+// edge-case table, none of which upstream carries.
 //
-// The multiplier was widened 1.15 -> 1.25 on 2026-09-23 BY THE USER, not by this script. The trigger
-// was a measured dead end rather than a desire for a bigger file: SKILL.md sat at 11062/11066 with
-// 4 bytes of runway, and every dimension still carrying a weighted gap (frontmatter 7, failure-mode
-// encoding 12, checkpoint design 6) needs net-new prose instead of rewording — so 4 bytes of runway
-// blocks the whole remaining queue. It gets its own constant because it is the number a user
-// decision moves; the baseline is not.
-//
-// The BASELINE moved 9623 -> 9950 on 2026-09-24, also by user decision, and for a different reason
-// than the multiplier: the scope grew rather than the prose thickening. The boundary section had to
-// route between two delegated owners (superpowers and mattpocock) on a runtime condition instead of
-// naming one. Recorded here because a raised cap with no stated reason reads, six months on, exactly
-// like an unexamined ratchet.
-//
-// 9950 -> 9820 on 2026-09-28, in the direction that does not need the user: the user removed the
-// runtime-routed second owner, so the rule that justified the raise went with it and the raise goes
-// back. It is a PARTIAL revert, and the reason is worth stating rather than burying: returning to the
-// pre-09-24 9623 would put SKILL.md 236 bytes over its ceiling, because scope added after that commit
-// (the wrap-up criterion, the blueprint rewrite path, the update task) still occupies the difference.
-// Cutting that content is a user decision, not a side effect of removing superpowers. The baseline
-// drops 130 rather than the 157 bytes the removed rule held: the ceiling is 1.25x the baseline, so
-// subtracting the content delta from the baseline would over-cut the ceiling by a quarter of it.
-// 9820 -> 10290 on 2026-09-28, the second raise and the second time for scope rather than wording:
-// the user kept this skill in charge of non-engineering working directories (documentation sets,
-// skill repositories, teaching outlines) instead of giving that up, which adds a second tier the
-// skill's own routing has to name. The ceiling is the product below, rounded — deliberately not
-// padded, because the point of a baseline is to be the tightest number the current scope justifies.
-// This comment states NO spare-byte figure on purpose: the file moves every session, so any such
-// number is stale within a day — and the figure that was here once read as authoritative enough to
-// mislead a later reader about how much room was really left. Same reason the README does not
-// restate the gate count. Print the live figure from the budget group instead.
-// An unnamed tier would be the defect this skill tells everyone else to fix: a capability with no
-// entry point in the artifact that routes to it, reachable only by someone who already knew.
-// 1.25 -> 1.5 on 2026-10-08, the third raise and the first made in the OTHER skill's favour: the user
-// is running this file through darwin-skill, whose remaining queue is the two dimensions that need
-// net-new prose rather than rewording. Measured trigger: SKILL.md sat at 12829/12862 — 33 bytes of
-// runway — and the last four keeps all came in under that ceiling by deleting redundancy, which is
-// not a strategy that survives more than one pass. 1.5 is also where `multiplierSane` already draws
-// its line and what a plain 150%-ceiling rule would ask for, so this lands ON the existing guard
-// rather than past it.
-//
-// Recorded at the same weight as the 09-23 raise because it is the same kind of move. What this
-// spends is restraint, and the compensating control is the one written above it: the multiplier is
-// the number a user decision moves, so the next raise costs a decision, not a round. Note what this
-// is NOT — it is not the gate being quietly relaxed by an optimisation pass. It is the gate being
-// relaxed, loudly, with the direction of the trade named.
+// No spare-byte figure is stated here on purpose: the file moves every session, so any such number is
+// stale within a day — and a figure that reads as authoritative enough to mislead a later reader about
+// how much room was really left is worse than none. Same reason the README does not restate the gate
+// count. Print the live figure from the budget group instead.
 const SKILL_MD_BASELINE_BYTES = 10290;
-const SKILL_MD_GROWTH = 1.5; // 1.25 -> 1.5 by user decision, 2026-10-08
+const SKILL_MD_GROWTH = 1.5; // 1.5x is where `multiplierSane` already draws its line, and what a plain 150%-ceiling rule would ask for
 const SKILL_MD_MAX_BYTES = Math.floor(SKILL_MD_BASELINE_BYTES * SKILL_MD_GROWTH);
 
 // The generated instruction file gets the same treatment, for the same reason and with more at
@@ -108,28 +59,12 @@ const SKILL_MD_MAX_BYTES = Math.floor(SKILL_MD_BASELINE_BYTES * SKILL_MD_GROWTH)
 // full at every session start. Measured on a default render (no --blueprint, no --commands)
 // because the cap must not depend on what a project happens to fill in.
 //
-// The anchor is EXTERNAL, not a ratchet around whatever this template currently renders at. The
-// previous version set the baseline to the current render (8692 B) and the ceiling to 115% of it,
-// which was two failures in one: it turned a 3.6x-oversized file into the compliant baseline, and
-// it left no direction of travel except upward. A cap whose floor is the status quo can only ever
-// ratify. It now anchors on the upstream reference template (2438 B, 68 lines, ~423 tokens) plus
-// an allowance for CJK encoding — the same file costs roughly 1.3x more bytes in Chinese at an
-// equal token count — and lines are capped on the lecture's own 50–200 guidance, which is
-// language-neutral where bytes are not. Raising either number is a scope decision for the user,
-// not a side effect of the template growing.
-//
-// Raised 3200 -> 3680 on 2026-09-24 by user decision, and it was flagged rather than buried back
-// then: it is precisely the move the paragraph above warns against. The anchor WAS external (the
-// upstream template plus a CJK allowance) and the scope itself then changed — the file began routing
-// between two delegated owners on a runtime condition. What kept it from being a ratchet was that the
-// delta was anchored to the rule that required it rather than to whatever the template rendered at.
-//
-// 3680 -> 3510 on 2026-09-28 for the same discipline in reverse: the user removed the second owner, so
-// the rule that required the delta is gone and the delta goes back with it. Partial, not full — 3200
-// would put the render 201 bytes over its ceiling, because the scope added after 09-24 (the wrap-up
-// criterion rewrite, the blueprint path) is still there and cutting it needs the user's ruling. The
-// drop is 170 against 346 bytes of removed content: the ceiling runs at 1.15x the baseline, so
-// subtracting the content delta from the baseline would over-cut the ceiling.
+// The anchor is EXTERNAL, not a ratchet around whatever this template currently renders at. A cap
+// whose floor is the status quo can only ever ratify; this one anchors on the upstream reference
+// template (2438 B, 68 lines, ~423 tokens) plus an allowance for CJK encoding — the same file costs
+// roughly 1.3x more bytes in Chinese at an equal token count — and lines are capped on the lecture's
+// own 50–200 guidance, which is language-neutral where bytes are not. Raising either number is a
+// scope decision for the user, not a side effect of the template growing.
 const AGENTS_MD_BASELINE_BYTES = 3510;
 const AGENTS_MD_MAX_BYTES = Math.floor(AGENTS_MD_BASELINE_BYTES * 1.15);
 const AGENTS_MD_MAX_LINES = 90;
@@ -522,6 +457,11 @@ const PICK_VERB = ['挑', '领', '选', '取'];
 const NEGATION = ['不', '非', '勿', '不得', '无需'];
 const PROTECTED = ['已有修改', '既有修改', '未跟踪', '他人的', '别人的'];
 const DESTRUCTIVE = ['覆盖', '回退', '删除', '丢弃', '清理'];
+// Docs describing the present, in whatever phrasing the templates use. Each group holds
+// interchangeable alternatives on purpose: withoutTerms deletes all of them, so a requirement stays
+// honest while a render is free to say 只写现状 instead of 只描述当前状态.
+const DOC_PRESENT = ['只描述当前状态', '只写当前状态', '只描述现状', '按当前状态写'];
+const DOC_NO_HISTORY = ['不追加变更历史', '不记录变更历史', '不留变更历史', '不写变更历史'];
 
 // One row per rule the entry-path validator claims to enforce, each naming the rule it stands for.
 // Held as a literal rather than derived from the source on purpose: a fixture list built by asking
@@ -573,6 +513,7 @@ const TASK_CONTRACT = [
   { name: 'a commit is gated on the definition of done', kind: 'clause', anchor: /提交/, exclude: COMMIT_READER, groups: [AUTHORIZATION_RULE, COMMIT_DONE, COMMIT_SCOPE] },
   { name: 'no unconditional commit instruction', kind: 'everyClause', anchor: /提交/, exclude: COMMIT_READER, groups: [COMMIT_CONDITION] },
   { name: 'existing work is protected', kind: 'line', anchor: /保护|已有修改|未跟踪|他人的/, groups: [PROTECTED, DESTRUCTIVE] },
+  { name: 'docs state the present, not the change log', kind: 'line', anchor: /文档|说明|注释/, groups: [DOC_PRESENT, DOC_NO_HISTORY] },
   { name: 'harness drift lands inside the authorized scope', kind: 'line', anchor: /候选改动/, groups: [['授权范围', '授权', '本次范围']] },
   // The wrap-up trigger fires on what the session EXPOSED, and a review session exposes plenty
   // without being authorized to change anything: "列出后落地" turned a question into an edit.
@@ -602,6 +543,7 @@ const TASK_OLD_FORMS = [
   ['no unconditional commit instruction', '- 不写入记录，直接提交所有改动'],
   ['a status update is conditional', '- 不提交改动，直接更新工单状态'],
   ['existing work is protected', `- **${CLEAN_STATE_OLD}**：下次会话必须能立即运行 \`./init.sh\``],
+  ['docs state the present, not the change log', '更新文档时记录本次修改，并保留旧方案作为对照'],
   ['harness drift lands inside the authorized scope', WRAPUP_OLD_STEP],
   ['a read-only task only reports', WRAPUP_OLD_STEP],
   ['no clean-state framing', `- **${CLEAN_STATE_OLD}**：下次会话必须能立即运行 \`./init.sh\``]
