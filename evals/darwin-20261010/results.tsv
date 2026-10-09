@@ -1,0 +1,18 @@
+timestamp	commit	skill	old_score	new_score	status	dimension	note	eval_mode
+2026-10-10T00:23	baseline	harness-creator	-	结构71.4/77	baseline	-	dim1-7,9 由 StructA 打分(dim1 9.5 dim2 8.5 dim3 9.5 dim4 9.5 dim5 9.0 dim6 9.5 dim7 9.5 dim9 10.0); dim8 三 prompt × 双臂实跑=7.5; runtime 红灯 0; 软化词 0; AI 腔词 0; 预算 15371/15435	full_test
+2026-10-10T00:23	-	harness-creator	-	-	finding	dim8	HIGH 已复现: 默认分层无开关, --dry-run 计划 4 个文件而用户授权 2 个, with_skill 臂只能全部不建; BaseA 臂(无技能)反而建出两个。「默认开启」被写成了「默认否决」	full_test
+2026-10-10T00:23	-	harness-creator	-	-	finding	dim7	已复现: SKILL.md:151 黑名单第2行教「命令+结果摘要或 CI 链接」, 而 run-benchmark.mjs:576 TASK_OLD_FORMS 把该句列为必须 FAIL; 「CI 链接」在四个产物模板 0 命中; EVIDENCE_NEEDLES 只要求命中「证据」之一故门禁看不见	full_test
+2026-10-10T00:23	-	harness-creator	-	-	note	dim8	paired 实跑对照: 技能增益在「载体 vs 人工发现」(B 臂门禁直接报 defined but not wired, baseline 靠自己写脚本比对) 与「写盘前 CHECKPOINT + 幂等」; C 臂两法打平(baseline 独立推出近似方案), A 臂 baseline 更能交付——skill 的边界纪律代价是它不肯越权写盘	full_test
+2026-10-10T01:10	9462f9c	harness-creator	-	2-1 better (margin clear×1 slight×2)	keep	dim8 授权边界 + dim7 退役措辞	paired 三 judge 同 call 读 b958596 与 9462f9c: PairedA/PairedC 判 better, PairedB 判 worse(--no-agents-layer 有效但默认路径启动句语义退化); 2-1 多数决 keep。偏离声明: vote 比 2-1 非 3-0, 故按多数而非全票	paired
+2026-10-10T01:10	9462f9c	harness-creator	-	-	finding	dim8	三 judge 各自独立证伪同一条: switchClearsRoute 的 /^\s*2\. \*\*/ 恒真, LAYER_ROUTE 无条件输出时整轮自检仍 exit 0 报 ok。已改为断言路由词消失, 变异重新打红	paired
+2026-10-10T02:05	d071a97	harness-creator	-	-	fixed	dim5	paired new_problems 回流: LAYER_ROUTE 原插在文档清单后, 默认渲染成「…任务记录、细则」(细则成了第四个要打开的文档名), 改前是「按「细则」与「必需产物」指向」。每会话必读第一行, 而当时所有臂都报 ok 因为文件确实存在。插入点移到动词前 + 新增 defaultRouteReadable 臂	full_test
+2026-10-10T02:05	d071a97	harness-creator	-	-	fixed	dim4	五步里的 🔴 CHECKPOINT 上一轮为省 20 字节降成「获批」, 全文其余四处仍用 🔴, 而被降级的恰是删除动作那一步。已恢复	full_test
+2026-10-10T02:05	d071a97	harness-creator	-	-	fixed	dim8	黑名单新句「无锚不得标完成」是绝对的, 但 --no-verification 生成的 init.sh 不打印锚(实跑 grep=0), 合法形态永远无法满足。补例外与交付清单对齐	full_test
+2026-10-10T02:05	d071a97	harness-creator	-	-	fixed	dim6	## 细则 挪进占位符后 diffSections 读裸模板点不出该节; --blueprint 与追加互斥致两份细则落盘却无人指向、缺失报告也不再提示。改为与渲染后模板比较, 实跑确认 ## 细则 回到报告里	full_test
+2026-10-10T02:05	d071a97	harness-creator	-	-	fixed	dim7	产物口径漂移: SKILL.md 异常表仍写「默认只落两个产物」与新增的默认下沉细则正面冲突; README 另有两处同族旧口径。三处一并改成实际默认	full_test
+2026-10-10T02:05	d071a97	harness-creator	-	-	fixed	dim7	本仓 AGENTS.md 仍带被自己列为退役的证据句(模板上轮已改本仓产物未重生成), 同一仓库里「禁止的旧句」与「仍在教的旧句」并存。已同步	full_test
+2026-10-10T02:05	d071a97	harness-creator	-	-	verified	dim5	latent: {{LAYER_ARTIFACTS}} 是 {{SPEC_LAYER_ARTIFACTS}} 的子串, split/join 只因声明顺序在前才没截断产物行。改占位符名去掉依赖, 而非写注释记录它	full_test
+2026-10-10T02:05	d071a97	harness-creator	-	-	note	budget	TrimAudit 逐处核实清出 329B 冗余(5 处, 每条附门禁零命中 grep 自证), 本轮修复又净增, SKILL.md 已无冗余可删。按用户裁定上限 1.5×→1.6×, 常量处写明为哪些缺陷付账; multiplierSane 原硬编码 1.5 改为跟随常量——否则这次放宽会以错误的原因失败	full_test
+2026-10-10T02:05	d071a97	harness-creator	-	-	verified	-	终态验收: self-check exit 0 全绿(含新增 defaultRouteReadable 臂); check-links OK(17 links); validate-harness 100/100; 手工兜底 init.sh 在 Git Bash 实跑两形态(真仓 exit 0 打印本仓 sha / 无提交 exit 1)	full_test
+2026-10-10T02:05	-	harness-creator	-	-	open	dim2	Judge 指出「更新 harness」第 2-5 步只有名字串, 无逐步产出物, 加权缺口 1.80 与 dim5 并列。本轮未做: 预算刚放宽到 1.6×, 且两条主改进需净增约 414B, 宜先观察新上限是否够用再动	full_test
+2026-10-10T02:05	-	harness-creator	-	-	open	dim8	安装副本仍落后: C:/Users/22923/.agents/skills/harness-creator/SKILL.md 14521B, 缺 Evidence anchor 与 ## 细则。dim8 实测的 with_skill 臂必须显式指向仓库 HEAD, 否则评的不是被优化的那一代。刷新用 npx skills update harness-creator, 需用户决定	full_test
