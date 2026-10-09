@@ -32,7 +32,7 @@ const execFileAsync = promisify(execFileCallback);
 const args = parseArgs(process.argv.slice(2));
 
 if (args.help) {
-  console.log(`Usage: ${scriptCommand('create-harness.mjs')} [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--blueprint "WHAT THIS PROJECT IS"] [--commands "a,b"] [--add-check "cmd"] [--add-check-entry "./verify.sh"] [--spec-layer] [--no-verification] [--force] [--dry-run]
+  console.log(`Usage: ${scriptCommand('create-harness.mjs')} [--target DIR] [--agent-file AGENTS.md|CLAUDE.md] [--package-manager npm|pnpm|yarn|bun] [--blueprint "WHAT THIS PROJECT IS"] [--commands "a,b"] [--add-check "cmd"] [--add-check-entry "./verify.sh"] [--spec-layer] [--no-agents-layer] [--no-verification] [--force] [--dry-run]
 
 Creates a minimal production harness — the three subsystems this skill owns, no more:
   AGENTS.md or CLAUDE.md (an existing CLAUDE.md is kept and preferred)
@@ -123,6 +123,12 @@ is no code path by which a manifest can become an answer to "what is this projec
 stack may never be used to infer the mission. Both files skip when they already exist, so a re-run
 cannot overwrite documents the project has since written in its own words.
 
+By default the harness also writes two detail documents under docs/agents/ — verification rules and
+maintenance rules — and the instruction file routes to them instead of carrying their paragraphs.
+--no-agents-layer writes neither, and the routing section disappears with them: a file that pointed
+at docs/agents/*.md that were never written is worse than a file with no detail layer at all. Use it
+when you have authorized an exact file list, or when docs/agents/ is your own.
+
 Existing files are skipped unless --force is set. --force does not overwrite a file whose content
 another skill owns; it only lifts the skip on this skill's own artifacts.`);
   process.exit(0);
@@ -148,6 +154,22 @@ if (args.specLayer !== undefined && args.specLayer !== true && args.specLayer !=
   process.exit(1);
 }
 const specLayer = Boolean(args.specLayer);
+
+// --no-agents-layer suppresses the two detail documents under docs/agents/. The layer is ON by
+// default because the argument for it is the one this skill is built on — a resident instruction
+// file should carry routes, not paragraphs — and a switch nobody flips buys nothing. But "on by
+// default" must not mean "the only way out is to overrule the agent": a user who authorizes exactly
+// two files, or who keeps docs/agents/ for their own, otherwise has no way to say so, and the only
+// compliant move left is to build nothing at all. That turns a default into a veto.
+//
+// Same shape as --spec-layer: a bare flag is refused rather than read as a value, so naming it
+// never silently selects something the reader did not name.
+if (args.noAgentsLayer !== undefined && args.noAgentsLayer !== true && args.noAgentsLayer !== false) {
+  console.error(`REFUSED: --no-agents-layer takes no value, but it was given "${args.noAgentsLayer}".`);
+  console.error('It is a switch: either the detail layer is written or it is not. Nothing was created.');
+  process.exit(1);
+}
+const noAgentsLayer = Boolean(args.noAgentsLayer);
 
 // `--no-engineering-owner` selected a second template that named no owner, on the reasoning that
 // a directory with nothing to delegate to should not claim one. Both templates named an external
@@ -563,6 +585,10 @@ const templateName = 'agents.md';
 // directory counts as a change. The existence probes above already tolerate a missing path.
 if (!dryRun) await mkdir(target, { recursive: true });
 
+// One copy of the navigation block, read once. It is substituted into the rendered template AND
+// appended into instruction files this skill did not render, so those two paths cannot disagree.
+const layerSectionText = noAgentsLayer ? '' : (await readText(path.join(TEMPLATE_DIR, 'agents-layer-section.md'))).trim();
+
 const replacements = {
   AGENT_FILE_NAME: agentFile,
   // The project blueprint: what this project is and what it delivers. NOT product form, NOT an
@@ -605,7 +631,22 @@ const replacements = {
   // move by a byte.
   SPEC_LAYER_ARTIFACTS: specLayer
     ? '- `mission.md`、`tech-stack.md` — 规范层：项目事实与栈证据，**按需读**，各格只由用户陈述或文件证据填入'
-    : ''
+    : '',
+
+  // The detail layer is on by default and has an off switch, so all three of these go empty
+  // together when it is off. Leaving any of them populated would be worse than having no switch at
+  // all: the file would route an agent to `docs/agents/*.md` that were never written, and the agent
+  // spends a failed open deciding whether the rule is missing or the path is wrong.
+  //
+  // LAYER_SECTION is read from templates/agents-layer-section.md rather than written here, because
+  // the same text is appended into instruction files this skill did not render (LAYER_APPEND
+  // below). Two copies of one navigation block would drift, and the copy nobody regenerates is the
+  // one that goes stale.
+  LAYER_SECTION: noAgentsLayer ? '' : `\n${layerSectionText}`,
+  LAYER_ROUTE: noAgentsLayer ? '' : '、细则',
+  LAYER_ARTIFACTS: noAgentsLayer
+    ? ''
+    : '- `docs/agents/harness-creator-verification.md`、`docs/agents/harness-creator-maintenance.md` — 细则层：判据与处置动作，**按需读**\n'
 };
 
 const results = [];
@@ -719,8 +760,10 @@ const AGENTS_LAYER_FILES = {
   'agents-layer/maintenance.md': 'docs/agents/harness-creator-maintenance.md'
 };
 
-for (const [template, relative] of Object.entries(AGENTS_LAYER_FILES)) {
-  results.push(await copyTemplate(template, path.join(target, relative), {}, { force, dryRun }));
+if (!noAgentsLayer) {
+  for (const [template, relative] of Object.entries(AGENTS_LAYER_FILES)) {
+    results.push(await copyTemplate(template, path.join(target, relative), {}, { force, dryRun }));
+  }
 }
 
 // A dry run must not claim it created anything — not writing is the entire point. "DRY RUN" leads

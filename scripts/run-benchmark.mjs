@@ -1146,8 +1146,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Command references: ${pass ? 'PASS' : 'FAIL'} — a documented command that stops resolving is caught, while a guarded one and an unresolvable one are not mistaken for it: dangling fixture ${danglingCaught ? `caught (${dangling.join(', ')})` : 'MISSED'}; guarded fixture ${guardedExcused ? 'excused' : 'FALSELY FLAGGED'}; what cannot be resolved is listed: ${uncheckedListed ? 'ok' : 'SILENT'}; a defined-but-never-run check is named: ${unwiredNamed ? 'ok' : 'MISSED'}; a guard retires it: ${unwiredRetired ? 'ok' : 'NOT RETIRED'}; naming it does not fail the audit: ${unwiredNonFatal ? 'ok' : 'FALSELY FATAL'}; an uncollected scan fails rather than passing: ${uncollectedRefused ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.agentsLayer) {
-    const { pass, defaultShipsLayer, navigationComplete, artifactsDeclareLayer, onDemandNotResident, layerBudgetHeld, appendPreserves, thirdPartySurvives, appendIdempotent, anchorsIntact, error } = selfCheck.agentsLayer;
-    lines.push(`  Detail layer: ${pass ? 'PASS' : 'FAIL'} — a plain run ships both detail documents: ${defaultShipsLayer ? 'ok' : 'NO'}; the instruction file routes to each under its own H3: ${navigationComplete ? 'ok' : 'MISSING'}; the artifact contract names them: ${artifactsDeclareLayer ? 'ok' : 'MISSING'}; read on demand, not resident: ${onDemandNotResident ? 'ok' : 'RESIDENT'}; each inside its own ceiling: ${layerBudgetHeld ? 'ok' : 'BUSTED'}; appending to another owner's file leaves its bytes untouched: ${appendPreserves ? 'ok' : 'REWRITES'}; its third-party block survives: ${thirdPartySurvives ? 'ok' : 'CLOBBERED'}; a second run adds nothing: ${appendIdempotent ? 'ok' : 'DUPLICATED'}; the --add-check anchors are still in place: ${anchorsIntact ? 'ok' : 'BROKEN'}${error ? ` — ${error}` : ''}`);
+const { pass, defaultShipsLayer, navigationComplete, artifactsDeclareLayer, onDemandNotResident, layerBudgetHeld, appendPreserves, thirdPartySurvives, appendIdempotent, anchorsIntact, switchSuppressesFiles, switchClearsRoute, switchValueRefused, error } = selfCheck.agentsLayer;
+    lines.push(`  Detail layer: ${pass ? 'PASS' : 'FAIL'} — a plain run ships both detail documents: ${defaultShipsLayer ? 'ok' : 'NO'}; the instruction file routes to each under its own H3: ${navigationComplete ? 'ok' : 'MISSING'}; the artifact contract names them: ${artifactsDeclareLayer ? 'ok' : 'MISSING'}; read on demand, not resident: ${onDemandNotResident ? 'ok' : 'RESIDENT'}; each inside its own ceiling: ${layerBudgetHeld ? 'ok' : 'BUSTED'}; appending to another owner's file leaves its bytes untouched: ${appendPreserves ? 'ok' : 'REWRITES'}; its third-party block survives: ${thirdPartySurvives ? 'ok' : 'CLOBBERED'}; a second run adds nothing: ${appendIdempotent ? 'ok' : 'DUPLICATED'}; the --add-check anchors are still in place: ${anchorsIntact ? 'ok' : 'MOVED'}; --no-agents-layer writes neither document: ${switchSuppressesFiles ? 'ok' : 'WROTE'}; and leaves no route to them: ${switchClearsRoute ? 'ok' : 'DANGLING'}; a value on that switch is refused: ${switchValueRefused ? 'ok' : 'ACCEPTED'}${error ? `; ${error}` : ''}`);
   }
   if (selfCheck.bottleneckTies) {
     const { pass, tieCount, uniqueCount, noneCount, tieLabel } = selfCheck.bottleneckTies;
@@ -1393,10 +1393,12 @@ async function checkAgentFileBudget() {
 async function checkAgentsLayer() {
   let dir;
   let foreignDir;
+  let offDir;
   const result = {
     pass: false, defaultShipsLayer: false, navigationComplete: false, artifactsDeclareLayer: false,
     onDemandNotResident: false, layerBudgetHeld: false, appendPreserves: false,
-    thirdPartySurvives: false, appendIdempotent: false, anchorsIntact: false
+    thirdPartySurvives: false, appendIdempotent: false, anchorsIntact: false,
+    switchSuppressesFiles: false, switchClearsRoute: false, switchValueRefused: false
   };
   const LAYER_FILES = ['harness-creator-verification.md', 'harness-creator-maintenance.md'];
   try {
@@ -1451,15 +1453,38 @@ async function checkAgentsLayer() {
     const twice = await readText(foreignPath);
     result.appendIdempotent = (twice.match(/^## 细则$/gm) || []).length === 1;
 
+    // The off switch. It exists because "on by default" must not mean "the only way out is to
+    // overrule the agent" — a user who authorized exactly two files had no way to say so, and the
+    // only compliant move left was to build nothing. Two things must hold, and the second is the
+    // one that gets forgotten: suppressing the files is easy, but an instruction file still naming
+    // docs/agents/*.md routes an agent to a file that was never written, which costs a failed open
+    // and leaves it guessing whether the rule or the path is missing. So the route must go too.
+    offDir = await mkdtemp(path.join(os.tmpdir(), 'harness-layer-off-'));
+    await execFileAsync('node', [script, '--target', offDir, '--no-agents-layer']);
+    const offFiles = await readdir(path.join(offDir, 'docs', 'agents')).catch(() => []);
+    result.switchSuppressesFiles = offFiles.length === 0;
+    const offAgents = await readText(path.join(offDir, 'AGENTS.md'));
+    result.switchClearsRoute = !LAYER_FILES.some((name) => offAgents.includes(name))
+      && !/^## 细则$/m.test(offAgents) && /^\s*2\. \*\*/m.test(offAgents);
+
+    // A bare flag is a switch. Handing it a value would otherwise let "--no-agents-layer=false"
+    // read as an instruction to write the layer the caller just asked to omit.
+    const valueRun = await execFileAsync('node', [script, '--target', offDir, '--no-agents-layer=false'])
+      .then(() => 0)
+      .catch((error) => error.code ?? 1);
+    result.switchValueRefused = valueRun !== 0;
+
     result.pass = result.defaultShipsLayer && result.navigationComplete && result.artifactsDeclareLayer
       && result.onDemandNotResident && result.layerBudgetHeld && result.appendPreserves
-      && result.thirdPartySurvives && result.appendIdempotent && result.anchorsIntact;
+      && result.thirdPartySurvives && result.appendIdempotent && result.anchorsIntact
+      && result.switchSuppressesFiles && result.switchClearsRoute && result.switchValueRefused;
     return result;
   } catch (error) {
     return { ...result, pass: false, error: error.message };
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
     if (foreignDir) await rm(foreignDir, { recursive: true, force: true });
+    if (offDir) await rm(offDir, { recursive: true, force: true });
   }
 }
 
