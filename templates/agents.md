@@ -18,7 +18,7 @@
 编写代码前：
 
 1. **确认现场**：运行 `pwd`、`git status --short`，识别已有修改及未跟踪文件
-2. **完整阅读本文件**，按「细则」与「必需产物」指向打开与本次任务相关的文档：`README`、架构与规格、本项目已有的任务记录{{SPEC_LAYER_NOTE}}
+2. **完整阅读本文件**，按{{LAYER_ROUTE}}「必需产物」指向打开与本次任务相关的文档：`README`、架构与规格、本项目已有的任务记录{{SPEC_LAYER_NOTE}}
 3. **运行 `./init.sh`** 验证基线
 4. **查看最近提交**：运行 `git log --oneline -5`
 
@@ -34,23 +34,11 @@
 - **保护已有工作**：不为清理工作区覆盖、回退或删除已有修改及未跟踪文件；只收好本次工作，保持标准验证入口可用
 - **文档只描述当前状态**：文档与代码注释只写当前实现，不追加变更历史、作废决策或已结束的阶段编号；把 A 改成 B 就把 A 改掉，不并列两段
 
-## 细则
-
-### 验证与证据
-
-判据、证据锚与未接线检查见 `docs/agents/harness-creator-verification.md`。
-
-### harness 维护
-
-两栏清单、A/B 删减证据与净变化报法见 `docs/agents/harness-creator-maintenance.md`。
-
-两份都按需读，与本次任务无关就不必打开。
-
+{{LAYER_SECTION}}
 ## 必需产物
 
 - `init.sh` — 标准启动与验证路径
-- `docs/agents/harness-creator-verification.md`、`docs/agents/harness-creator-maintenance.md` — 细则层：判据与处置动作，**按需读**
-{{SPEC_LAYER_ARTIFACTS}}
+{{LAYER_ARTIFACTS_LINE}}{{SPEC_LAYER_ARTIFACTS}}
 
 ## 完成定义
 
