@@ -17,7 +17,7 @@
 
 ### 钩子信任是全有或全无
 
-如果工作区不受信任，**所有钩子都跳过** —— 不只是可疑的那些。会话作用域的钩子是临时的，会话结束时清理。
+如果工作区不受信任，**所有钩子都跳过** —— 不只是可疑的那些。会话作用域的钩子是临时的，会话结束时清理。（来源：Claude Code best practices，https://code.claude.com/docs/en/best-practices）
 
 ```typescript
 // Example: Hook dispatch with trust gate
@@ -68,7 +68,7 @@ async function dispatchHook(
 阶段 4：加载安全敏感子系统（遥测、机密环境变量）
 ```
 
-**关键拐点**：安全敏感子系统在信任建立之前不得激活。
+**关键拐点**：安全敏感子系统在信任建立之前不得激活。（来源：Claude Code best practices，https://code.claude.com/docs/en/best-practices）
 
 ## 何时使用
 
@@ -206,7 +206,7 @@ class AgentBootstrap {
 
 1. **钩子信任是全有或全无** —— 一个不受信任的钩子会禁用整个扩展系统
 2. **大多数异步工作跳过"pending"状态** —— 工作单元直接注册为"running"
-3. **驱逐需要通知** —— 终止的工作单元只有在父级收到通知后才可被 GC
+3. **驱逐需要通知** —— 终止的工作单元只有在父级收到通知后才可被 GC（来源：Harness design for long-running application development，https://www.anthropic.com/engineering/harness-design-for-long-running-apps）
 4. **快速路径分发** —— 记忆化的调用方必须处理并发调用而不重复运行阶段
 5. **钩子类型必须互不相交** —— 不要创建重叠的钩子作用域
 

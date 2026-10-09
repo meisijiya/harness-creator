@@ -8,7 +8,7 @@
 - 并发工具调用引发的竞态条件
 - 权限配置错误导致的静默策略违规
 
-解决方案是**默认关闭（fail-closed）的注册表**，配合显式的并发分类与多来源权限流水线。
+解决方案是**默认关闭（fail-closed）的注册表**，配合显式的并发分类与多来源权限流水线。（来源：Claude Code best practices，https://code.claude.com/docs/en/best-practices）
 
 ## 黄金法则
 
@@ -47,6 +47,7 @@
 ```
 策略（组织级）→ 用户设置 → 项目规则 → 本地覆盖 → 会话授权
 ```
+（来源：Claude Code best practices，https://code.claude.com/docs/en/best-practices）
 
 ## 何时使用
 
@@ -133,7 +134,7 @@ async function evaluatePermission(
 
 ### 防绕过规则
 
-某些路径或操作永远不应自动批准：
+某些路径或操作永远不应自动批准：（来源：Claude Code best practices，https://code.claude.com/docs/en/best-practices）
 
 ```yaml
 # Protected paths (never auto-approve)

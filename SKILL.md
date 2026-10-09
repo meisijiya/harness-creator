@@ -102,6 +102,8 @@ node <技能目录>/scripts/validate-harness.mjs --target /path/to/project
 
 ## 何时阅读参考文档
 
+`references/` 下每份 pattern 文档的关键机制主张都标了出处（标题与链接）。主张与出处一起读——出处让规则可被查证而不只是被接受，链接腐烂由 `node <技能目录>/scripts/check-links.mjs` 在 `./init.sh` 里判定。
+
 - 跨会话记忆：`memory-persistence-pattern.md`
 - 可复用工作流（技能形式）、eval 与基准设计：`skill-runtime-pattern.md`
 - 权限、工具、并发：`tool-registry-pattern.md`
@@ -111,6 +113,8 @@ node <技能目录>/scripts/validate-harness.mjs --target /path/to/project
 - 旁路观测、把工作规则变成检查：`bypass-observation-pattern.md`
 - harness 维护：`harness-maintenance-pattern.md`
 - 不易察觉的失败模式：`gotchas.md`
+
+生成物把细则下沉到 `docs/agents/`：`harness-creator-verification.md`（判据、证据锚与未接线检查的处置）与 `harness-creator-maintenance.md`（两栏清单、A/B 删减证据与净变化报法）。指令文件只作路由入口，两份细则按需读。
 
 ## 异常与边界条件
 

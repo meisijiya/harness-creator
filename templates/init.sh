@@ -29,6 +29,32 @@ trap explain_failure ERR
 # (scripts/lib/harness-utils.mjs), which is the other producer of this file.
 RAN=0
 
+# What the evidence below is evidence OF. A gate that prints "tests pass" tells the reader the
+# checks ran; it does not tell them WHICH version they ran against, so a record of green written
+# last week and read today is indistinguishable from one written against today's code. Anchoring to
+# a commit is what makes that distinction mechanical instead of a matter of trusting the note.
+#
+# A repository with no commit has no anchor, and there is no honest substitute: "HEAD" and "now" are
+# the same string in every record, which is precisely the thing this refuses. So it refuses here,
+# before any check runs, and says which single command supplies what is missing.
+#
+# `git rev-parse HEAD` alone succeeds in a directory that owns no repository: git walks UP until it
+# finds one, so a project nested inside another repo silently anchors to its PARENT's commit — an
+# evidence line naming a version whose code was never checked. `--show-prefix` is what tells the
+# two apart: it is EMPTY exactly when the current directory is the repository root, and holds the
+# path-to-root otherwise. A comparison against `pwd` cannot be used here — on Windows git prints
+# `D:/repo` while bash prints `/d/repo`, so that guard would refuse every real repository.
+if ! ANCHOR="$(git rev-parse --short HEAD 2>/dev/null)" || [ -n "$(git rev-parse --show-prefix 2>/dev/null)" ]; then
+  echo ""
+  echo "ERROR: this harness anchors its evidence to a commit, and this directory has none of its"
+  echo "own — either it is not a git repository, or it sits inside one and would otherwise record"
+  echo "that outer repository's commit as if it had verified this code."
+  echo "Make this directory a repository root, then re-run ./init.sh:"
+  echo "  git init && git add -A && git commit -m 'Initial commit'"
+  echo "Without a commit of its own there is nothing for the evidence to be evidence of."
+  exit 1
+fi
+
 # The refusal every manifest branch below shares for one specific outcome: the check ran and had
 # nothing to check. It lives here rather than inline in six places because the wording and the exit
 # status are load-bearing together, and the exit status is what makes the gate a gate. $1 is the
@@ -240,6 +266,9 @@ if [ "$RAN" -eq 0 ]; then
 fi
 
 echo "=== Verification Complete ==="
+echo ""
+echo "Evidence anchor: $ANCHOR (the commit these checks ran against)"
+echo "Record it with the result, or the record cannot say what it verified."
 echo ""
 echo "Next steps:"
 echo "1. Read AGENTS.md for the startup path, the invariants and where work is recorded"

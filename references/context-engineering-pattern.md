@@ -18,7 +18,7 @@
 1. **SELECT（选择）** —— 即时加载上下文，而非一次性全量加载
 2. **WRITE（写回）** —— 代理写回持久化存储（记忆、状态、规则）
 3. **COMPRESS（压缩）** —— 会话中途对较早轮次做响应式压缩
-4. **ISOLATE（隔离）** —— 委派的工作不得污染父上下文
+4. **ISOLATE（隔离）** —— 委派的工作不得污染父上下文（来源：Harness design for long-running application development，https://www.anthropic.com/engineering/harness-design-for-long-running-apps）
 
 ### 渐进式披露
 
@@ -37,7 +37,7 @@
 
 ### 指令文件的抽离与维护
 
-指令文件（`AGENTS.md`/`CLAUDE.md`）是**常驻成本**：每次会话都被完整读取。所以它是**路由层**，不是手册——只写路由与不变量，情境性详规按需加载。
+指令文件（`AGENTS.md`/`CLAUDE.md`）是**常驻成本**：每次会话都被完整读取。所以它是**路由层**，不是手册——只写路由与不变量，情境性详规按需加载。（来源：Claude Code best practices，https://code.claude.com/docs/en/best-practices）
 
 **落层判据**：问「每次动作都可能需要它吗」——
 
@@ -87,7 +87,7 @@
 **关键动作：**
 - 审计每轮当前的上下文成本
 - 对每个变长块施加硬上限
-- 添加截断恢复指引（"调用 list_files 获取完整输出"）
+- 添加截断恢复指引（"调用 list_files 获取完整输出"）（来源：OpenAI Harness engineering，https://openai.com/index/harness-engineering/）
 
 ### 压缩模式（Compress）
 

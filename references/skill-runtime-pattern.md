@@ -18,7 +18,7 @@
 
 ## 运行时形态
 
-生产级技能应采用渐进式披露：
+生产级技能应采用渐进式披露：（来源：pstack guide，https://github.com/cursor/plugins/blob/main/pstack/docs/guide/README.md）
 
 1. `SKILL.md` 的 frontmatter 说明技能应在何时触发。
 2. 正文给出最短的可靠工作流。
@@ -44,7 +44,7 @@
 - `expected_output`：产物形态与边界，写「哪几个文件、多不多不少」，不写「质量高」。
 - `expectations`：至少三条可观察判据。
 
-判据必须是可判定的事实。「只创建 AGENTS.md 与 init.sh，不新增目录层」可判定，「回答清晰」不可判定。形容词一旦不可判定，评估就退回「看起来对」，而「看起来对」恰好是代理最容易投其所好的地方。
+判据必须是可判定的事实。「只创建 AGENTS.md 与 init.sh，不新增目录层」可判定，「回答清晰」不可判定。形容词一旦不可判定，评估就退回「看起来对」，而「看起来对」恰好是代理最容易投其所好的地方。（来源：pstack guide，https://github.com/cursor/plugins/blob/main/pstack/docs/guide/README.md）
 
 本仓 `evals/evals.json` 的 22 例就是这个形态，每例含 prompt / expected_output / expectations，`files` 字段一律为空数组：刻意不指定要读哪些文件，避免 eval 退化成存在性检查。
 

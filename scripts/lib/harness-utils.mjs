@@ -105,6 +105,32 @@ export function holdsForeignSections(existingMarkdown, templateMarkdown) {
   return markdownSections(existingMarkdown).filter((heading) => !ours.has(heading));
 }
 
+// One H2 section of a rendered document, heading included. Cutting a section out of the RENDER rather
+// than keeping a second copy of it in a template is what stops the two from drifting: a maintenance
+// rule that exists in the template but not in the file the agent reads is a rule nobody follows, and
+// nothing else in this pipeline would notice.
+export function extractSection(markdown, title) {
+  const lines = markdown.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === title || line.trim() === title.replace(/^#+\s*/, ''));
+  if (start === -1) return '';
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i += 1) {
+    if (/^##\s+\S/.test(lines[i])) { end = i; break; }
+  }
+  return lines.slice(start, end).join('\n').replace(/\s+$/, '');
+}
+
+// The template plus its replacements, as the text that will be written. Shared with the section
+// extraction above so a section cut out of a render and the render itself can never disagree about
+// what the replacements produced.
+export function renderTemplate(templateName, contents, replacements = {}) {
+  let rendered = contents;
+  for (const [key, value] of Object.entries(replacements)) {
+    rendered = rendered.split(`{{${key}}}`).join(value);
+  }
+  return rendered;
+}
+
 export async function copyTemplate(templateName, targetPath, replacements = {}, { force = false, dryRun = false } = {}) {
   if (!force && await exists(targetPath)) {
     return { path: targetPath, status: 'skipped', reason: 'exists' };
@@ -116,9 +142,7 @@ export async function copyTemplate(templateName, targetPath, replacements = {}, 
   // The template is still read under dryRun on purpose: a missing or unreadable template should fail
   // during the preview, not surface for the first time on the real write.
   let contents = await readText(path.join(TEMPLATE_DIR, templateName));
-  for (const [key, value] of Object.entries(replacements)) {
-    contents = contents.split(`{{${key}}}`).join(value);
-  }
+  contents = renderTemplate(templateName, contents, replacements);
 
   // Refuse before writing, not after: reporting "written" and then deleting someone else's work is
   // the exact failure, so the check runs while the file is still untouched. It sits after the read
@@ -163,6 +187,35 @@ export function diffSections(templateMarkdown, existingMarkdown) {
   const existing = existingMarkdown.toLowerCase();
   return markdownSections(templateMarkdown)
     .filter((section) => !existing.includes(section.replace(/^#+\s*/, '').toLowerCase()));
+}
+
+// Appends ONE section to an instruction file that already exists. This is the narrow exception to
+// the rule above, and the narrowness is the whole point: diffSections refuses to write because a text
+// match cannot tell whether an existing section already covers the same ground in different words,
+// and appending on that guess produces a second startup path that contradicts the first. Here the
+// caller passes exactly one section and has already decided it belongs — so the only question left
+// is whether it is already there, which is decidable without judgement.
+//
+// A present section is skipped whole. Merging at the sub-heading level is NOT attempted: "does this
+// file already cover verification guidance under a different heading" is the same undecidable
+// question one level down, and a partial merge is the failure this refuses. The gap is reported by
+// the caller's section diff instead, for a person or an agent to close by hand.
+export function appendSectionIfMissing(existingMarkdown, sectionMarkdown) {
+  const heading = markdownSections(sectionMarkdown)[0];
+  if (!heading) return { status: 'refused', reason: 'the section to append has no H2 heading' };
+  const title = heading.replace(/^#+\s*/, '').toLowerCase();
+  const present = markdownSections(existingMarkdown).some((found) => found.replace(/^#+\s*/, '').toLowerCase() === title);
+  if (present) return { status: 'skipped', reason: `section exists: ${title}` };
+
+  // A CRLF checkout gets CRLF back, so appending does not convert the file it is appending to.
+  const carriageReturn = /\r\n/.test(existingMarkdown) ? '\r' : '';
+  const section = sectionMarkdown
+    .replace(/\r?\n/g, `\n${carriageReturn}`)
+    .replace(/\n+$/, '');
+  return {
+    status: 'appended',
+    markdown: `${existingMarkdown.replace(/\s+$/, '')}\n${carriageReturn}\n${carriageReturn}${section}\n`
+  };
 }
 
 // The blueprint is the one slot the user owns and rewrites as the project's plain description
@@ -415,6 +468,33 @@ trap explain_failure ERR
 # producer of this file.
 RAN=0
 
+# What the evidence below is evidence OF. The gate answers "did the checks run?"; it cannot answer
+# "which version did they run against?", so a record of green read today is indistinguishable from
+# one written last week against code that has since changed. A commit anchor separates them without
+# trusting the note.
+#
+# A repository with no commit has no anchor and no honest substitute —
+# "HEAD" is the same string in every record — so the gate refuses here, BEFORE any check runs, and
+# names the one command that supplies what is missing. Anchoring after the checks would defeat it:
+# the commit could move while they ran, and the record would name a version nobody verified.
+#
+# \`git rev-parse HEAD\` alone succeeds inside a directory that owns no repository: git walks UP and
+# answers with the PARENT's commit, so a project nested in another repo would print an anchor naming
+# a version whose code was never checked. \`--show-prefix\` is what tells the two apart — it is EMPTY
+# exactly when the current directory is the repository root. A comparison against \`pwd\` cannot be
+# used here: on Windows git prints \`D:/repo\` while bash prints \`/d/repo\`, so that guard would refuse
+# every real repository.
+if ! ANCHOR="$(git rev-parse --short HEAD 2>/dev/null)" || [ -n "$(git rev-parse --show-prefix 2>/dev/null)" ]; then
+  echo ""
+  echo "ERROR: this harness anchors its evidence to a commit, and this directory has none of its"
+  echo "own — either it is not a git repository, or it sits inside one and would otherwise record"
+  echo "that outer repository's commit as if it had verified this code."
+  echo "Make this directory a repository root, then re-run ./init.sh:"
+  echo "  git init && git add -A && git commit -m 'Initial commit'"
+  echo "Without a commit of its own there is nothing for the evidence to be evidence of."
+  exit 1
+fi
+
 # Names the declared checks that did not run. RAN alone answers "did anything verify?", which is
 # what the refusal below asks, but not "did EVERY declared check verify?" — and the difference is
 # the whole gate: a project that defines only \`test\` yet asks for \`npm run lint\` as well runs one
@@ -449,6 +529,9 @@ if [ -n "$SKIPPED" ]; then
 fi
 
 echo "=== Verification Complete ==="
+echo ""
+echo "Evidence anchor: $ANCHOR (the commit these checks ran against)"
+echo "Record it with the result, or the record cannot say what it verified."
 echo ""
 echo "Next steps:"
 ${nextSteps.map((line) => `echo "${line}"`).join('\n')}
@@ -734,6 +817,12 @@ export function dedupe(values) {
 // flagging their absence would fail a correct harness — and a scorer that fails a correct outcome is
 // worse than no scorer.
 const MANIFEST_MANAGERS = new Set(['npm', 'pnpm', 'yarn', 'bun']);
+// Scripts a project can define and a harness can run. A project that defines one of these and whose
+// init.sh never mentions it has a check nobody wired up: the gate can then pass on the subset that
+// IS wired, which is how a repo whose lint has never run reaches exit 0 with everything green.
+// The names are the same ones initScriptFromCommands probes for, so the list and the generator
+// cannot drift apart silently.
+const VERIFY_SCRIPT_NAMES = ['check', 'typecheck', 'lint', 'test', 'build'];
 // Requires a `./` prefix or an embedded slash. A bare `build.sh` in prose usually names a file the
 // reader is expected to have, not one this harness promises exists; flagging it is the
 // false-positive shape described above. Executable extensions only, for the same reason.
@@ -792,6 +881,7 @@ export async function collectCommandReferences(root, files) {
   const dangling = [];
   const guarded = [];
   const unchecked = [];
+  const unwired = [];
   const push = (bucket, value) => { if (!bucket.includes(value)) bucket.push(value); };
 
   for (const [source, text] of sources) {
@@ -847,7 +937,26 @@ export async function collectCommandReferences(root, files) {
     }
   }
 
-  return { resolved, dangling, guarded, unchecked };
+  // What the project CAN run that this harness never wired up. A guard (`has_script "lint"`) counts
+  // as wired: the gate reaches that script on a repo that has it, and skips with a notice on one
+  // that does not. Silence counts as NOT wired, which is the defect this bucket exists to name.
+  //
+  // A check the target repo's own gate runs is not a defect in anything THIS skill shipped, so it
+  // never affects `pass` — it is reported, exactly like `unchecked`. Only an unparseable manifest is
+  // silent: it proves nothing either way, and the same reasoning that sends script references to
+  // `unchecked` rather than `dangling` applies here.
+  if (manifestScripts) {
+    for (const name of VERIFY_SCRIPT_NAMES) {
+      if (!Object.prototype.hasOwnProperty.call(manifestScripts, name)) continue;
+      if (guardedScripts.has(name)) continue;
+      const referenced = sources.some(([, text]) =>
+        new RegExp(`(?:^|[\\s;&|])(?:npm|pnpm|yarn|bun)\\s+(?:run\\s+)?${name}(?![\\w:.-])`).test(text));
+      if (referenced) continue;
+      unwired.push(`${detectPackageManager(root)} run ${name}`);
+    }
+  }
+
+  return { resolved, dangling, guarded, unchecked, unwired };
 }
 
 // One sentence, because both reporting surfaces print `check.message` verbatim. The unchecked list
@@ -856,9 +965,13 @@ function referencesCheck(references, message = 'Documented commands resolve') {
   if (!references) {
     return { pass: false, message: `${message} (reference scan not collected — unverified, not resolved)` };
   }
-  const { resolved = [], dangling = [], guarded = [], unchecked: uncheckedRefs = [] } = references;
+  const { resolved = [], dangling = [], guarded = [], unchecked: uncheckedRefs = [], unwired: unwiredRefs = [] } = references;
   const parts = [`${resolved.length} resolved`, `${guarded.length} guarded`];
   if (uncheckedRefs.length) parts.push(`${uncheckedRefs.length} not statically checkable: ${uncheckedRefs.join(', ')}`);
+  // Reported, never fatal: these are checks the target project defines and this harness does not
+  // run. Failing the audit on them would score the project's choice as this skill's defect, so the
+  // list is on the record and the verdict stays where it was.
+  if (unwiredRefs.length) parts.push(`${unwiredRefs.length} defined but not wired: ${unwiredRefs.join(', ')}`);
   if (dangling.length) parts.unshift(`DANGLING: ${dangling.join(', ')}`);
   return { pass: dangling.length === 0, message: `${message} (${parts.join('; ')})` };
 }

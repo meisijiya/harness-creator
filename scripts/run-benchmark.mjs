@@ -74,6 +74,13 @@ const AGENTS_MD_MAX_LINES = 90;
 // do not invent entries, do not start work unasked) rather than an assignment of new work — which
 // is what this skill is allowed to ship into someone else's repo.
 const WORKING_RULES_MAX = 8;
+// The detail layer's own ceilings. Separate from the instruction file's because the two answer
+// different questions: that file is read in full every session, these are opened only when their
+// subject comes up, so a longer document here costs far less than the same bytes there. The caps
+// still exist because a detail document that grows without bound stops being the place you open to
+// settle a question — it becomes the thing you avoid opening.
+const AGENTS_LAYER_MAX_BYTES = 8192;
+const AGENTS_LAYER_MAX_LINES = 200;
 
 // Content an instruction file must not restate, because the agent can read it from the repo
 // itself: the tree, the stack, the scripts. Every external guide leads with this, and the failure
@@ -105,7 +112,7 @@ const DISCOVERABLE_CONTENT = [
 const SELF_CHECK_GROUPS = [
   'budget', 'agentsBudget', 'agentsDiscover', 'artifactPurity', 'maintenance', 'skillDesign',
   'wrapupOutput', 'dryRun', 'selfRefs', 'references', 'bottleneckTies', 'foreignAudit', 'blankGate',
-  'blueprint', 'agentFile', 'initGrowth', 'specLayer', 'nextSteps', 'reportContract', 'taskContract', 'maintContract', 'noDeadDecls', 'gateArgs'
+  'blueprint', 'agentFile', 'initGrowth', 'specLayer', 'agentsLayer', 'nextSteps', 'reportContract', 'taskContract', 'maintContract', 'noDeadDecls', 'gateArgs'
 ];
 
 // One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
@@ -122,14 +129,15 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['wrapupOutput', (group) => ` The wrap-up procedure a maintainer actually reads carries both of its outputs: the candidate changes, and the judgment items that are handed to the user instead of being decided — the part that stops a fresh session from treating already-dead rules as live — plus a net-change report, which is what keeps blind increment from hiding in wording, and SKILL.md's task table promises that net-change report on its own so the promise survives an agent that never opens the reference (${group.pass ? 'verified' : `stated ${group.stated ? 'yes' : 'MISSING'}; missing terms ${(group.missing || []).join(', ') || 'none'}; own section ${group.heading ? 'present' : 'ABSENT'}; per-term detector ${group.teeth ? 'has teeth' : 'BLIND'}; heading requirement ${group.headingArm ? 'has teeth' : 'BLIND'}; witness coverage ${group.witnessCovers ? 'complete' : 'HOLE'}; list-shrink witness ${group.witness ? 'has teeth' : 'BLIND'}; task row ${group.entry && group.entry.row ? (group.entry.stated ? 'stated' : `MISSING (${(group.entry.missing || []).join(', ')})`) : 'NOT FOUND'}; task-row per-term detector ${group.entryTeeth ? 'has teeth' : 'BLIND'}; task-row witness ${group.entryWitness ? 'has teeth' : 'BLIND'}`}).`],
   ['dryRun', (group) => ` --dry-run writes nothing, reports the target's real state, and its plan matches the live run entry for entry (${group.pass ? 'verified' : 'FAILED'}).`],
   ['selfRefs', (group) => ` ${group.checked} shipped file(s) checked for command reachability from a target repo (${group.pass ? 'all runnable' : `relative self-reference in ${(group.offenders || []).join(', ')}`}).`],
-  ['references', (group) => ` A documented command that no longer resolves is caught rather than silently trusted: the audit resolves manifest scripts and runnable files, reports by name what it cannot resolve, and is proven in both directions (${group.pass ? 'verified' : `dangling fixture ${group.danglingCaught ? 'caught' : 'MISSED'}; guarded fixture ${group.guardedExcused ? 'excused' : 'FALSELY FLAGGED'}; unchecked bucket ${group.uncheckedListed ? 'populated' : 'SILENT'}; uncollected scan ${group.uncollectedRefused ? 'refused' : 'PASSED'}`}).`],
+  ['references', (group) => ` A documented command that no longer resolves is caught rather than silently trusted, and a check the project defines but the harness never runs is named rather than left green: the audit resolves manifest scripts and runnable files, reports by name what it cannot resolve, and is proven in both directions (${group.pass ? 'verified' : `dangling fixture ${group.danglingCaught ? 'caught' : 'MISSED'}; guarded fixture ${group.guardedExcused ? 'excused' : 'FALSELY FLAGGED'}; unchecked bucket ${group.uncheckedListed ? 'populated' : 'SILENT'}; unwired named ${group.unwiredNamed ? 'ok' : 'MISSED'}; guard retires it ${group.unwiredRetired ? 'ok' : 'NOT RETIRED'}; non-fatal ${group.unwiredNonFatal ? 'ok' : 'FALSELY FATAL'}; uncollected scan ${group.uncollectedRefused ? 'refused' : 'PASSED'}`}).`],
   ['bottleneckTies', (group) => ` The bottleneck line names ${group.tieCount} tied subsystem(s) as a tie instead of picking one (${group.pass ? 'verified' : 'FAILED'}).`],
   ['foreignAudit', (group) => ` A repository the audit did not generate — no init.sh, no gate — cannot collect the static-check or evidence points from the word "TypeScript" or the letters inside "concise", so it no longer ranks its empty verification subsystem above instructions and scope; and a repository that does have a gate still passes both (${group.pass ? 'verified' : `gate-less ${group.bareVerification}/5 vs gated ${group.gatedVerification}/5; static ${group.staticCheckFailed ? 'ok' : 'LEAKED'}; evidence ${group.evidenceFailed ? 'ok' : 'LEAKED'}; entrypoint ${group.entrypointFailed ? 'ok' : 'LEAKED'}; gated static ${group.gatedStaticPasses ? 'ok' : 'BROKEN'}; gated evidence ${group.gatedEvidencePasses ? 'ok' : 'BROKEN'}; not overranked ${group.notOverranked ? 'ok' : 'INVERTED'}; teeth ${group.teeth ? 'ok' : 'BLIND'}`}).`],
   ['blankGate', (group) => ` A project with nothing to verify — no manifest, a manifest with no runnable script, or an explicit --commands list whose scripts the manifest does not define — gets a refusal that exits non-zero instead of reporting a pass it did not earn, the counter reopens the moment a real check runs, a comma inside a quoted command stays one command while a genuine comma-separated list still splits, an unterminated quote is refused leaving nothing behind, and the manual fallback template refuses on the same shapes (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-description slot stays a visible pending marker when the user has not stated one, while a blueprint change rewrites that slot only — the rest of the file survives byte for byte, and a shape this skill did not render is refused rather than guessed at (${group.pass ? 'verified' : `pending ${group.pendingMarked ? 'ok' : 'NO'}; no stack fill ${group.noInventedFill ? 'ok' : 'NO'}; verbatim ${group.verbatim ? 'ok' : 'NO'}; slot-only ${group.slotRewritten && group.restIntact ? 'ok' : 'NO'}; detector ${group.detectorHasTeeth ? 'has teeth' : 'BLIND'}; refusal ${group.refusalHonoured && group.refusedUntouched ? 'ok' : 'NO'}`}).`],
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, an existing instruction file is left byte-identical while its missing sections are still reported, and --force refuses to render over sections it does not define — the one rule protecting another owner's block, which was prose until it destroyed a fixture — while still overwriting this skill's own render (${group.pass ? 'verified' : `FAILED (foreign block refused: ${group.forceRefused ? 'ok' : 'NO'}; own render rewritten: ${group.forceStillWritesOwn ? 'ok' : 'NO'})`}).`],
-  ['initGrowth', (group) => ` The gate only grows: a new check joins an existing init.sh without removing or reordering any step, a repeat is a no-op that leaves the file byte-identical, a check the gate would never actually run — or one that does not parse as shell — is refused and rolled back rather than reported as added, and such a refusal names the command it refused instead of printing a placeholder where the command belongs, a one-line entry reference to a script this repository owns is appended unguarded so a missing entry turns the gate red instead of skipping it, a declared check that did not run turns the gate red instead of printing a notice beside the success tail while a script this manifest does define still gets a real step, every toolchain branch of the hand-copy fallback raises its counter only on the tool's own verdict — so a project whose test suite is empty is refused by name rather than reported as verified — while the same branch stays green on a toolchain that has a test to run, and a gate that went red this session leaves a check behind so the lesson reaches the specification instead of only the fix (${group.pass ? 'verified' : `grew ${group.grew ? 'ok' : 'NO'}; existing steps intact ${group.preserved ? 'ok' : 'NO'}; repeat ${group.idempotent ? 'ok' : 'NO'}; dead-branch check ${group.deadBranchRefused && group.rolledBack ? 'refused and rolled back' : 'ACCEPTED'}; refusal names its command ${group.refusalNamesCommand ? 'ok' : 'PLACEHOLDER'}; name detector ${group.refusalNameHasTeeth ? 'has teeth' : 'BLIND'}; unparseable check ${group.unparseableRefused ? 'refused' : 'ACCEPTED'}; entry appended ${group.entryAppended ? 'ok' : 'NO'}; entry unguarded ${group.entryUnguarded ? 'ok' : 'GUARDED'}; entry repeat ${group.entryIdempotent ? 'ok' : 'NO'}; missing entry ${group.entryMissingRefused ? 'refused' : 'ACCEPTED'}; path rules ${group.entryRulesHaveTeeth ? 'ok' : 'BLIND'}; entry removed turns it red ${group.entryGateFailsWhenUnresolvable ? 'yes' : 'NO'}; skipped declared check ${group.declaredSkipTurnsGateRed ? 'turns it red' : 'NOTICE ONLY'}; its detector ${group.declaredSkipDetectorHasTeeth ? 'has teeth' : 'BLIND'}; declared script ${group.declaredScriptStillRuns ? 'still checked' : 'DROPPED'}; run-it ${group.declaredSkipGateIsRed && group.declaredGateIsGreen ? 'red and green' : 'NOT OBSERVED'}; toolchain branches earn RAN ${group.emptyToolBranchesGuarded ? 'ok' : 'UNGUARDED'}; branch detector ${group.emptyToolBranchesHaveTeeth ? 'has teeth' : 'BLIND'}; empty tool run ${group.emptyToolRunsRed ? 'red' : 'NOT OBSERVED'}; populated tool run ${group.emptyToolRunsGreen ? 'green' : 'NOT OBSERVED'}; that detector ${group.emptyToolGateTeeth ? 'has teeth' : 'BLIND'}; red-gate lesson ${group.loopStated && group.loopIsLoadBearing ? 'recorded' : 'LOST'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}; no init.sh ${group.missingRefused ? 'refused' : 'ACCEPTED'}`}).`],
+  ['initGrowth', (group) => ` The gate only grows: a new check joins an existing init.sh without removing or reordering any step, a repeat is a no-op that leaves the file byte-identical, a check the gate would never actually run — or one that does not parse as shell — is refused and rolled back rather than reported as added, and such a refusal names the command it refused instead of printing a placeholder where the command belongs, a one-line entry reference to a script this repository owns is appended unguarded so a missing entry turns the gate red instead of skipping it, a declared check that did not run turns the gate red instead of printing a notice beside the success tail while a script this manifest does define still gets a real step, every toolchain branch of the hand-copy fallback raises its counter only on the tool's own verdict — so a project whose test suite is empty is refused by name rather than reported as verified — while the same branch stays green on a toolchain that has a test to run, and a gate that went red this session leaves a check behind so the lesson reaches the specification instead of only the fix (${group.pass ? 'verified' : `grew ${group.grew ? 'ok' : 'NO'}; existing steps intact ${group.preserved ? 'ok' : 'NO'}; repeat ${group.idempotent ? 'ok' : 'NO'}; dead-branch check ${group.deadBranchRefused && group.rolledBack ? 'refused and rolled back' : 'ACCEPTED'}; refusal names its command ${group.refusalNamesCommand ? 'ok' : '     '}; name detector ${group.refusalNameHasTeeth ? 'has teeth' : 'BLIND'}; unparseable check ${group.unparseableRefused ? 'refused' : 'ACCEPTED'}; entry appended ${group.entryAppended ? 'ok' : 'NO'}; entry unguarded ${group.entryUnguarded ? 'ok' : 'GUARDED'}; entry repeat ${group.entryIdempotent ? 'ok' : 'NO'}; missing entry ${group.entryMissingRefused ? 'refused' : 'ACCEPTED'}; path rules ${group.entryRulesHaveTeeth ? 'ok' : 'BLIND'}; entry removed turns it red ${group.entryGateFailsWhenUnresolvable ? 'yes' : 'NO'}; skipped declared check ${group.declaredSkipTurnsGateRed ? 'turns it red' : 'NOTICE ONLY'}; its detector ${group.declaredSkipDetectorHasTeeth ? 'has teeth' : 'BLIND'}; declared script ${group.declaredScriptStillRuns ? 'still checked' : 'DROPPED'}; run-it ${group.declaredSkipGateIsRed && group.declaredGateIsGreen ? 'red and green' : 'NOT OBSERVED'}; toolchain branches earn RAN ${group.emptyToolBranchesGuarded ? 'ok' : 'UNGUARDED'}; branch detector ${group.emptyToolBranchesHaveTeeth ? 'has teeth' : 'BLIND'}; empty tool run ${group.emptyToolRunsRed ? 'red' : 'NOT OBSERVED'}; populated tool run ${group.emptyToolRunsGreen ? 'green' : 'NOT OBSERVED'}; that detector ${group.emptyToolGateTeeth ? 'has teeth' : 'BLIND'}; red-gate lesson ${group.loopStated && group.loopIsLoadBearing ? 'recorded' : 'LOST'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}; no init.sh ${group.missingRefused ? 'refused' : 'ACCEPTED'}`}).`],
   ['specLayer', (group) => ` The spec layer is opt-in and says nothing when it is off: a run without --spec-layer still produces the two artifacts and byte-identical content, the two documents exist only when the flag is given, the detected stack never becomes an answer to "what is this project", they are pointed at as read-on-demand rather than as files every session must open, and the same byte/line/working-rule ceilings still hold with the extra pointer (${group.pass ? 'verified' : `default unchanged ${group.offByDefault ? 'ok' : 'CHANGED'}; flag creates the layer ${group.onCreatesLayer ? 'ok' : 'NO'}; stack kept out of the mission ${group.noStackLeak ? 'ok' : 'LEAKED'}; read on demand ${group.onDemandNotResident ? 'ok' : 'RESIDENT'}; budget ${group.budgetHeld ? 'ok' : 'BUSTED'}; re-run skips ${group.reRunSkips ? 'ok' : 'OVERWROTE'}; flag value ${group.flagValueRefused ? 'refused' : 'ACCEPTED'}; zero coupling ${group.purityHeld ? 'ok' : 'NAMED OR BLIND'}`}).`],
+  ['agentsLayer', (group) => ` The instruction file is a router and the detail lives beside it: a default run ships both detail documents with no switch, the instruction file names each of them under its own H3 with a one-line summary, the artifact contract lists them, all three are pointed at as read-on-demand rather than resident, and appending the section to an instruction file another owner wrote leaves that file's existing bytes untouched, survives a third party's block, and is idempotent (${group.pass ? 'verified' : `default ships ${group.defaultShipsLayer ? 'ok' : 'NO'}; navigation ${group.navigationComplete ? 'ok' : 'MISSING'}; artifact contract ${group.artifactsDeclareLayer ? 'ok' : 'MISSING'}; read on demand ${group.onDemandNotResident ? 'ok' : 'RESIDENT'}; append preserves ${group.appendPreserves ? 'ok' : 'REWRITES'}; third party survives ${group.thirdPartySurvives ? 'ok' : 'CLOBBERED'}; idempotent ${group.appendIdempotent ? 'ok' : 'DUPLICATED'}; anchors intact ${group.anchorsIntact ? 'ok' : 'BROKEN'}; budget ${group.layerBudgetHeld ? 'ok' : 'BUSTED'}`}).`],
   ['nextSteps', (group) => ` The gate's closing instructions are one literal with two producers: the generated init.sh, the hand-copy fallback and this repository's own gate all carry the same next-steps block, and it tells the agent to work only on what was explicitly authorized rather than to pick its own next task — a contradiction that was shipping, because the generated gate selected work in the same breath as the instruction file that forbids it (${group.pass ? 'verified' : `generated ${group.generatorAgrees ? 'agrees' : 'DRIFTED'}; fallback ${group.fallbackAgrees ? 'agrees' : 'DRIFTED'}; own gate ${group.ownGateAgrees ? 'agrees' : 'DRIFTED'}; authorizes rather than selects ${group.authorizesRatherThanSelects ? 'ok' : 'SELECTS'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}`}).`],
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`],
   ['taskContract', (group) => ` The instruction file scopes work to what the user authorized: explicit authorization to advance, picking and status updates only while an authorized deliverable is being executed, a baseline failure split into pre-existing versus introduced, a commit gated on the definition of done rather than on a passing check, existing modifications and untracked files protected from any cleanup, and a read-only task that only reports harness drift (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-requirement teeth ${group.teeth ? 'ok' : 'BLIND'}; forbidden-list witness ${group.forbidWitness ? 'ok' : 'BLIND'}; old forms ${group.oldFormsRejected ? 'refused' : 'ACCEPTED'}`}).`],
@@ -367,7 +375,12 @@ const sameTermSet = (terms, witnessRows) =>
 
 // Declared at module scope, ahead of the runSelfCheck() call: a const sitting next to the function
 // that reads it would still be in its temporal dead zone at that call site.
-const SELFTEXT_EXEMPT = new Set(['README.md']);
+// Two exemptions, each for a file whose relative `node scripts/…` invocation is the correct one
+// rather than a stray one: README.md carries the contributor's "run it from the repo root" command,
+// and check-links.mjs prints its own invocation in its --help usage line — the string the gate it
+// belongs to is told to run. Removing either string to satisfy the detector would delete the only
+// place a reader learns how to start the script. Both are still scanned by everything else.
+const SELFTEXT_EXEMPT = new Set(['README.md', 'scripts/check-links.mjs']);
 const RELATIVE_SELF_REFERENCE = /(?:node\s+scripts\/[a-z0-9-]+\.mjs|skills\/harness-creator\/scripts\/)/;
 
 // A path relative to the SKILL repository (e.g. a bare `skills/<skill-name>/...` prefix) is
@@ -415,6 +428,7 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['agentFile', 'Agent-file invariant'],
   ['initGrowth', 'init.sh growth'],
   ['specLayer', 'Spec layer'],
+  ['agentsLayer', 'Detail layer'],
   ['nextSteps', 'Next-steps agreement'],
   ['reportContract', 'Report contract'],
   ['taskContract', 'Task authorization'],
@@ -520,6 +534,14 @@ const TASK_CONTRACT = [
   // The wrap-up trigger fires on what the session EXPOSED, and a review session exposes plenty
   // without being authorized to change anything: "列出后落地" turned a question into an edit.
   { name: 'a read-only task only reports', kind: 'clause', anchor: /只读/, groups: [['只报告', '仅报告', '只如实报告', '只报']] },
+  // Evidence that names a command and its output answers "what ran"; it cannot answer "which
+  // version did it run against", which is the question a reader of a record from last week has.
+  // Section-scoped so the completion checklist cannot stand in for the rule, and ONE group rather
+  // than two: everyClause would demand the anchor from the rule's own title clause ("必须验证、证据
+  // 先行"), which names evidence without ever asserting anything about it. A single group fails
+  // when EITHER half is gone, which is the defect being guarded — a line carrying "Evidence anchor:"
+  // but no commit, or a commit with no anchor, is the same record that cannot say what it verified.
+  { name: 'evidence names the commit it ran against', kind: 'line', anchor: /证据|Evidence/, section: '工作规则', groups: [['Evidence anchor:', 'commit 锚', 'commit 锚点', '锚点']] },
   { name: 'no clean-state framing', kind: 'forbid', literals: [CLEAN_STATE_OLD] }
 ];
 // The sentence each requirement replaced, and the requirement that sentence must FAIL. A fixture that
@@ -548,6 +570,10 @@ const TASK_OLD_FORMS = [
   ['docs state the present, not the change log', '更新文档时记录本次修改，并保留旧方案作为对照'],
   ['harness drift lands inside the authorized scope', WRAPUP_OLD_STEP],
   ['a read-only task only reports', WRAPUP_OLD_STEP],
+  // The sentence this requirement replaced: it asked for a record and stopped there. Verbatim from
+  // the template before the anchor existed, so a render that regressed to it is caught by the arm
+  // that has to FAIL rather than by the one that must pass.
+  ['evidence names the commit it ran against', '命令与结果摘要或 CI 链接记入本项目已有的记录位置'],
   ['no clean-state framing', `- **${CLEAN_STATE_OLD}**：下次会话必须能立即运行 \`./init.sh\``]
 ];
 
@@ -565,7 +591,16 @@ const MAINT_GUARDS = [
   { name: 'commit needs authorization', anchor: /提交/, terms: ['授权', '用户'] },
   { name: 'existing work survives a commit decision', anchor: /已有修改|未跟踪|既有工作|保留修改/, terms: ['保留', '保护', '不覆盖', '不回退', '不删'] },
   { name: 'a full score still reviews content', anchor: /满分/, terms: ['内容复核'] },
-  { name: 'misalignment exposed but unedited still yields candidates', anchor: /失准/, terms: ['维护候选', '有证据'] }
+  { name: 'misalignment exposed but unedited still yields candidates', anchor: /失准/, terms: ['维护候选', '有证据'] },
+  // A deletion is the one maintenance edit that removes a brake, and "I deleted 3 lines and net is
+  // -3" is not evidence that nothing depended on them. The three terms are what makes the claim
+  // falsifiable: the same task run before and after, and the difference reported.
+  //
+  // The anchor is the ACTION column's own phrasing, not the word 删除: anyOf reads the whole table
+  // row, so a mention in the right-hand "what to check" column would satisfy the guard on its own —
+  // which is how this guard passed with its instruction rewritten to nothing. Anchoring on 先跑 A/B
+  // means only the action column can carry the requirement.
+  { name: 'deletions carry A/B evidence', anchor: /先跑 A\/B/, terms: ['前后', '对照', '删前删后'] }
 ];
 const MAINT_OLD_ROW = '| 审计已满分 | 报「无候选瓶颈」，不改；为刷分堆关键词是反模式 |';
 
@@ -911,19 +946,26 @@ Runs a lightweight harness benchmark:
      repository whose stack IS detected still yields a mission containing no stack word at all, both
      documents are pointed at as read-on-demand rather than as files every session must open, and the
      same byte, line and working-rule ceilings still hold with the extra pointer. [specLayer]
-26. Checks that the gate's closing instructions are ONE literal with two producers: the generated
+26. Checks that the detail layer ships by default and stays reachable: a plain run — no switch —
+     writes both documents, the instruction file routes to each under its own H3, the artifact
+     contract names them, all three are pointed at as read-on-demand rather than resident, each stays
+     inside its own byte and line ceiling, and the append into an instruction file another owner
+     wrote leaves that file's existing bytes untouched, keeps the third party's block, and does not
+     run twice. Also proves the RAN=0 anchors --add-check inserts between are still in place: the
+     layer rewrites the closing instructions of the very file they live in. [agentsLayer]
+27. Checks that the gate's closing instructions are ONE literal with two producers: the generated
      init.sh, the hand-copy fallback template and this repository's own ./init.sh must carry the same
      next-steps block, and it must tell the agent to work only on what was explicitly authorized
      rather than to pick its own next task. The two had drifted apart, and the drift shipped: the
      generated gate selected work in the same breath as the instruction file that forbids selecting
      it. [nextSteps]
-27. Checks that this script's own switches cannot be used to switch it off. The self-check is
+28. Checks that this script's own switches cannot be used to switch it off. The self-check is
      asserted by running the real script with a bad invocation and requiring a refusal and a
      non-zero exit, three thresholds and the off switch separately, with the whole refusal logic
      deleted from a copy in turn so a check that would pass without it is caught. --min-score=0 is
      asserted to still run, because a refusal that also ate deliberate relaxations would be its own
      kind of wrong. [gateArgs]
-28. Produces a JSON report and optional HTML report.
+29. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -1100,8 +1142,12 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Self-reference paths: ${pass ? 'PASS' : 'FAIL'} — ${checked} shipped file(s) checked${offenders.length ? `; unreachable relative path in ${offenders.join(', ')}` : ''}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.references) {
-    const { pass, danglingCaught, guardedExcused, uncheckedListed, uncollectedRefused, dangling = [], error } = selfCheck.references;
-    lines.push(`  Command references: ${pass ? 'PASS' : 'FAIL'} — a documented command that stops resolving is caught, while a guarded one and an unresolvable one are not mistaken for it: dangling fixture ${danglingCaught ? `caught (${dangling.join(', ')})` : 'MISSED'}; guarded fixture ${guardedExcused ? 'excused' : 'FALSELY FLAGGED'}; what cannot be resolved is listed: ${uncheckedListed ? 'ok' : 'SILENT'}; an uncollected scan fails rather than passing: ${uncollectedRefused ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+    const { pass, danglingCaught, guardedExcused, uncheckedListed, uncollectedRefused, unwiredNamed, unwiredRetired, unwiredNonFatal, dangling = [], error } = selfCheck.references;
+    lines.push(`  Command references: ${pass ? 'PASS' : 'FAIL'} — a documented command that stops resolving is caught, while a guarded one and an unresolvable one are not mistaken for it: dangling fixture ${danglingCaught ? `caught (${dangling.join(', ')})` : 'MISSED'}; guarded fixture ${guardedExcused ? 'excused' : 'FALSELY FLAGGED'}; what cannot be resolved is listed: ${uncheckedListed ? 'ok' : 'SILENT'}; a defined-but-never-run check is named: ${unwiredNamed ? 'ok' : 'MISSED'}; a guard retires it: ${unwiredRetired ? 'ok' : 'NOT RETIRED'}; naming it does not fail the audit: ${unwiredNonFatal ? 'ok' : 'FALSELY FATAL'}; an uncollected scan fails rather than passing: ${uncollectedRefused ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+  }
+  if (selfCheck.agentsLayer) {
+    const { pass, defaultShipsLayer, navigationComplete, artifactsDeclareLayer, onDemandNotResident, layerBudgetHeld, appendPreserves, thirdPartySurvives, appendIdempotent, anchorsIntact, error } = selfCheck.agentsLayer;
+    lines.push(`  Detail layer: ${pass ? 'PASS' : 'FAIL'} — a plain run ships both detail documents: ${defaultShipsLayer ? 'ok' : 'NO'}; the instruction file routes to each under its own H3: ${navigationComplete ? 'ok' : 'MISSING'}; the artifact contract names them: ${artifactsDeclareLayer ? 'ok' : 'MISSING'}; read on demand, not resident: ${onDemandNotResident ? 'ok' : 'RESIDENT'}; each inside its own ceiling: ${layerBudgetHeld ? 'ok' : 'BUSTED'}; appending to another owner's file leaves its bytes untouched: ${appendPreserves ? 'ok' : 'REWRITES'}; its third-party block survives: ${thirdPartySurvives ? 'ok' : 'CLOBBERED'}; a second run adds nothing: ${appendIdempotent ? 'ok' : 'DUPLICATED'}; the --add-check anchors are still in place: ${anchorsIntact ? 'ok' : 'BROKEN'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.bottleneckTies) {
     const { pass, tieCount, uniqueCount, noneCount, tieLabel } = selfCheck.bottleneckTies;
@@ -1125,7 +1171,7 @@ function consoleSelfCheckLines(selfCheck) {
   }
   if (selfCheck.initGrowth) {
     const { pass, grew, preserved, idempotent, deadBranchRefused, rolledBack, refusalNamesCommand, refusalNameHasTeeth, missingRefused, unparseableRefused, detectorHasTeeth, loopStated, loopIsLoadBearing, entryAppended, entryUnguarded, entryIdempotent, entryMissingRefused, entryRulesHaveTeeth, entryGateFailsWhenUnresolvable, declaredSkipTurnsGateRed, declaredSkipDetectorHasTeeth, declaredScriptStillRuns, declaredSkipGateIsRed, declaredGateIsGreen, emptyToolBranchesGuarded, emptyToolBranchesHaveTeeth, emptyToolRunsRed, emptyToolRunsGreen, emptyToolGateTeeth, skipped, error } = selfCheck.initGrowth;
-    lines.push(`  init.sh growth: ${pass ? 'PASS' : 'FAIL'} — a new check joins an existing gate: ${grew ? 'ok' : 'NO'}; existing steps preserved: ${preserved ? 'ok' : 'NO'}; repeat is a byte-identical no-op: ${idempotent ? 'ok' : 'NO'}; a check the gate would never run is refused: ${deadBranchRefused ? 'ok' : 'ACCEPTED'}; and rolled back: ${rolledBack ? 'ok' : 'NO'}; the refusal names the command it refused: ${refusalNamesCommand ? 'ok' : 'PLACEHOLDER'}; that detector has teeth: ${refusalNameHasTeeth ? 'ok' : 'BLIND'}; a check that does not parse is refused: ${unparseableRefused ? 'ok' : 'ACCEPTED'}; no init.sh at all is refused: ${missingRefused ? 'ok' : 'ACCEPTED'}; an entry reference is one call line: ${entryAppended ? 'ok' : 'NO'}; and it is unguarded: ${entryUnguarded ? 'ok' : 'GUARDED'}; repeating it is a no-op: ${entryIdempotent ? 'ok' : 'NO'}; a missing entry is refused: ${entryMissingRefused ? 'ok' : 'ACCEPTED'}; entry path rules have teeth: ${entryRulesHaveTeeth ? 'ok' : 'BLIND'}; removing the entry turns the gate red: ${entryGateFailsWhenUnresolvable ? 'ok' : 'NO'}; a declared check that did not run turns the gate red: ${declaredSkipTurnsGateRed ? 'ok' : 'NOTICE ONLY'}; that detector has teeth: ${declaredSkipDetectorHasTeeth ? 'ok' : 'BLIND'}; a script the manifest defines still gets a real step: ${declaredScriptStillRuns ? 'ok' : 'DROPPED'}; and the two gates come back red and green: ${declaredSkipGateIsRed && declaredGateIsGreen ? 'ok' : 'NOT OBSERVED'}; every toolchain branch earns its counter on the tool's verdict: ${emptyToolBranchesGuarded ? 'ok' : 'UNGUARDED'}; that detector has teeth: ${emptyToolBranchesHaveTeeth ? 'ok' : 'BLIND'}; an empty tool run is red: ${emptyToolRunsRed ? 'ok' : 'PASSED'}; a populated one is green: ${emptyToolRunsGreen ? 'ok' : 'REFUSED'}; removing a branch refusal turns that red green: ${emptyToolGateTeeth ? 'ok' : 'BLIND'}; a red gate leaves a check behind: ${loopStated && loopIsLoadBearing ? 'ok' : 'NO'}; detector teeth: ${detectorHasTeeth ? 'ok' : 'BLIND'}${skipped ? ` — ${skipped}` : ''}${error ? ` — ${error}` : ''}`);
+    lines.push(`  init.sh growth: ${pass ? 'PASS' : 'FAIL'} — a new check joins an existing gate: ${grew ? 'ok' : 'NO'}; existing steps preserved: ${preserved ? 'ok' : 'NO'}; repeat is a byte-identical no-op: ${idempotent ? 'ok' : 'NO'}; a check the gate would never run is refused: ${deadBranchRefused ? 'ok' : 'ACCEPTED'}; and rolled back: ${rolledBack ? 'ok' : 'NO'}; the refusal names the command it refused: ${refusalNamesCommand ? 'ok' : '     '}; that detector has teeth: ${refusalNameHasTeeth ? 'ok' : 'BLIND'}; a check that does not parse is refused: ${unparseableRefused ? 'ok' : 'ACCEPTED'}; no init.sh at all is refused: ${missingRefused ? 'ok' : 'ACCEPTED'}; an entry reference is one call line: ${entryAppended ? 'ok' : 'NO'}; and it is unguarded: ${entryUnguarded ? 'ok' : 'GUARDED'}; repeating it is a no-op: ${entryIdempotent ? 'ok' : 'NO'}; a missing entry is refused: ${entryMissingRefused ? 'ok' : 'ACCEPTED'}; entry path rules have teeth: ${entryRulesHaveTeeth ? 'ok' : 'BLIND'}; removing the entry turns the gate red: ${entryGateFailsWhenUnresolvable ? 'ok' : 'NO'}; a declared check that did not run turns the gate red: ${declaredSkipTurnsGateRed ? 'ok' : 'NOTICE ONLY'}; that detector has teeth: ${declaredSkipDetectorHasTeeth ? 'ok' : 'BLIND'}; a script the manifest defines still gets a real step: ${declaredScriptStillRuns ? 'ok' : 'DROPPED'}; and the two gates come back red and green: ${declaredSkipGateIsRed && declaredGateIsGreen ? 'ok' : 'NOT OBSERVED'}; every toolchain branch earns its counter on the tool's verdict: ${emptyToolBranchesGuarded ? 'ok' : 'UNGUARDED'}; that detector has teeth: ${emptyToolBranchesHaveTeeth ? 'ok' : 'BLIND'}; an empty tool run is red: ${emptyToolRunsRed ? 'ok' : 'PASSED'}; a populated one is green: ${emptyToolRunsGreen ? 'ok' : 'REFUSED'}; removing a branch refusal turns that red green: ${emptyToolGateTeeth ? 'ok' : 'BLIND'}; a red gate leaves a check behind: ${loopStated && loopIsLoadBearing ? 'ok' : 'NO'}; detector teeth: ${detectorHasTeeth ? 'ok' : 'BLIND'}${skipped ? ` — ${skipped}` : ''}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.specLayer) {
     const { pass, offByDefault, onCreatesLayer, noStackLeak, onDemandNotResident, budgetHeld, reRunSkips, flagValueRefused, purityHeld, artifactsDeclareLayer, specSize, specLines, error } = selfCheck.specLayer;
@@ -1199,6 +1245,7 @@ async function runSelfCheck() {
       agentFile: () => checkAgentFileInvariant(),
       initGrowth: () => checkInitGrowth(),
       specLayer: () => checkSpecLayer(),
+      agentsLayer: () => checkAgentsLayer(),
       nextSteps: () => checkNextStepsAgreement(),
       reportContract: () => checkReportContract(),
       taskContract: async () => (await evaluateContracts()).taskContract,
@@ -1339,6 +1386,83 @@ async function checkAgentFileBudget() {
 // word at all. That is the check the whole feature could fail silently on, because a filled-in-
 // looking mission reads like an aligned answer and would be scored 100/100 by every other group.
 
+// The detail layer is the one feature here with no switch: every render ships it. That makes the
+// existence arms the load-bearing ones — an opt-in feature can be proven by its absence, this one
+// can only be proven by its presence — while the append arms carry the part a default-only feature
+// actually risks, which is landing in an instruction file someone else wrote.
+async function checkAgentsLayer() {
+  let dir;
+  let foreignDir;
+  const result = {
+    pass: false, defaultShipsLayer: false, navigationComplete: false, artifactsDeclareLayer: false,
+    onDemandNotResident: false, layerBudgetHeld: false, appendPreserves: false,
+    thirdPartySurvives: false, appendIdempotent: false, anchorsIntact: false
+  };
+  const LAYER_FILES = ['harness-creator-verification.md', 'harness-creator-maintenance.md'];
+  try {
+    const script = path.join(scriptDir, 'create-harness.mjs');
+
+    dir = await mkdtemp(path.join(os.tmpdir(), 'harness-layer-'));
+    await execFileAsync('node', [script, '--target', dir]);
+    const agents = await readText(path.join(dir, 'AGENTS.md'));
+
+    const layerBodies = await Promise.all(LAYER_FILES.map((name) => readText(path.join(dir, 'docs', 'agents', name))));
+    result.defaultShipsLayer = layerBodies.every((body) => body.trim().length > 0);
+
+    // Navigation and artifact contract are separate on purpose: a layer that exists but is never
+    // named is unreachable, and one that is named in the routing section but missing from the
+    // artifact list tells the agent every session that this repo shipped two files.
+    const nav = (agents.split(/^##\s+/m).slice(1).find((part) => part.startsWith('细则')) || '');
+    result.navigationComplete = LAYER_FILES.every((name) => nav.includes(name)) &&
+      (nav.match(/^###\s+\S/gm) || []).length === LAYER_FILES.length;
+    const artifacts = (agents.split(/^##\s+/m).slice(1).find((part) => part.startsWith('必需产物')) || '');
+    result.artifactsDeclareLayer = LAYER_FILES.every((name) => artifacts.includes(name));
+
+    // Read-on-demand, not resident: the whole reason the detail moved out is that it must NOT cost
+    // every session its context. A "必读" on these files would put back what the split removed.
+    result.onDemandNotResident = SPEC_LAYER_ON_DEMAND.test(agents) && !RESIDENT_READING.test(agents) &&
+      SPEC_LAYER_ON_DEMAND.test(nav) && layerBodies.every((body) => SPEC_LAYER_ON_DEMAND.test(body));
+
+    result.layerBudgetHeld = layerBodies.every((body) => {
+      const text = body.replace(/\r\n/g, '\n');
+      return Buffer.byteLength(text, 'utf8') <= AGENTS_LAYER_MAX_BYTES && text.split('\n').length <= AGENTS_LAYER_MAX_LINES;
+    });
+
+    // The anchors --add-check inserts between. The detail layer rewrites the closing instructions
+    // of the very file those anchors live in, so this arm proves the rewrite did not move them — an
+    // --add-check that now refuses forever is a silent feature loss.
+    const init = await readText(path.join(dir, 'init.sh'));
+    const opens = init.split('\n').filter((line) => line.trim() === 'RAN=0').length;
+    const closes = init.split('\n').filter((line) => line.trim() === 'if [ "$RAN" -eq 0 ]; then').length;
+    result.anchorsIntact = opens === 1 && closes === 1 && init.indexOf('RAN=0') < init.indexOf('if [ "$RAN" -eq 0 ]; then');
+
+    // The append: a repository whose instruction file another setup skill wrote first. Every byte it
+    // already had must come back unchanged, its block must survive, and a second run must not
+    // append a second copy.
+    foreignDir = await mkdtemp(path.join(os.tmpdir(), 'harness-layer-foreign-'));
+    const foreignPath = path.join(foreignDir, 'AGENTS.md');
+    const existing = '# AGENTS.md\n\n## Agent skills\n\n### Issue tracker\n\nLocal Markdown. See `docs/agents/issue-tracker.md`.\n';
+    await writeText(foreignPath, existing);
+    await execFileAsync('node', [script, '--target', foreignDir]);
+    const appended = await readText(foreignPath);
+    result.appendPreserves = appended.startsWith(existing);
+    result.thirdPartySurvives = /## Agent skills/.test(appended) && /Local Markdown\./.test(appended);
+    await execFileAsync('node', [script, '--target', foreignDir]);
+    const twice = await readText(foreignPath);
+    result.appendIdempotent = (twice.match(/^## 细则$/gm) || []).length === 1;
+
+    result.pass = result.defaultShipsLayer && result.navigationComplete && result.artifactsDeclareLayer
+      && result.onDemandNotResident && result.layerBudgetHeld && result.appendPreserves
+      && result.thirdPartySurvives && result.appendIdempotent && result.anchorsIntact;
+    return result;
+  } catch (error) {
+    return { ...result, pass: false, error: error.message };
+  } finally {
+    if (dir) await rm(dir, { recursive: true, force: true });
+    if (foreignDir) await rm(foreignDir, { recursive: true, force: true });
+  }
+}
+
 async function checkSpecLayer() {
   let plainDir;
   let specDir;
@@ -1356,12 +1480,17 @@ async function checkSpecLayer() {
     // mention the layer. The unresolved-placeholder arm is here rather than assumed: a template slot
     // that renders to '' still sits in the source, and the day someone types the name wrong the
     // default render ships a literal `{{SPEC_LAYER_NOTE}}` into every project that never asked.
+    // The default run now also carries the detail layer, so the assertion is about the layer's ABSENCE
+// where it belongs, not about a fixed file count: what --spec-layer must not do is appear on its
+// own. Counting files would have failed here for the right reason at the wrong line, and would have
+    // kept passing if a THIRD default artifact appeared for an unrelated reason.
     plainDir = await mkdtemp(path.join(os.tmpdir(), 'harness-speclayer-off-'));
     await execFileAsync('node', [script, '--target', plainDir]);
     const plainFiles = (await readdir(plainDir)).sort();
     const plainAgents = await readText(path.join(plainDir, 'AGENTS.md'));
-    result.offByDefault = plainFiles.join(',') === 'AGENTS.md,init.sh' &&
-      !/mission\.md|tech-stack\.md|SPEC_LAYER_NOTE|\{\{/.test(plainAgents);
+    result.offByDefault = !/mission\.md|tech-stack\.md|SPEC_LAYER_NOTE|\{\{/.test(plainAgents) &&
+      !(await exists(path.join(plainDir, 'mission.md'))) &&
+      !(await exists(path.join(plainDir, 'tech-stack.md')));
 
     // Arm 2: with the flag, both documents exist. Arm 6 rides along here — the spec-layer render of
     // the instruction file is measured against the SAME budget constants as the default one, since a
@@ -1371,7 +1500,8 @@ async function checkSpecLayer() {
     const specFiles = (await readdir(specDir)).sort();
     const specAgentsRaw = await readText(path.join(specDir, 'AGENTS.md'));
     const specAgents = specAgentsRaw.replace(/\r\n/g, '\n');
-    result.onCreatesLayer = specFiles.join(',') === 'AGENTS.md,init.sh,mission.md,tech-stack.md';
+    result.onCreatesLayer = specFiles.includes('mission.md') && specFiles.includes('tech-stack.md') &&
+      specFiles.includes('AGENTS.md') && specFiles.includes('init.sh');
 
     // Arm 2b: the ARTIFACT CONTRACT, not just the files. Arm 2 asks whether the documents landed;
     // this asks whether the instruction file says so. They came apart once: --spec-layer shipped
@@ -2293,22 +2423,40 @@ async function checkCommandReferences() {
       '# X\n\n## Verification Commands\n\n- `npm run lint`\n');
     const uncheckedArm = await build('unchecked', null, '#!/bin/bash\nset -e\npytest -q\n', '# X\n');
     const uncollectedArm = await build('uncollected', null, '#!/bin/bash\nset -e\n', '# X\n');
+    // The gap the other four cannot see: a project DEFINES a check this harness never runs. The
+    // gate still passes on the subset it does run, so every other bucket here stays clean while a
+    // repo whose lint has never executed reports itself green. Two directions: unwired names it,
+    // and wrapping the same script in a guard retires the finding.
+    const unwiredArm = await build('unwired', { test: 'vitest run', lint: 'eslint .' },
+      '#!/bin/bash\nset -e\nnpm run test\n', '# X\n');
+    const unwiredGuardedArm = await build('unwired-guarded', { test: 'vitest run', lint: 'eslint .' },
+      '#!/bin/bash\nset -e\nif has_script "lint"; then\n  npm run lint\nfi\nnpm run test\n', '# X\n');
 
     const danglingCaught = danglingArm.references.dangling.includes('npm run lint')
       && danglingArm.references.dangling.includes('./scripts/ci.sh');
     const guardedExcused = guardedArm.references.dangling.length === 0
       && guardedArm.references.guarded.includes('npm run lint');
     const uncheckedListed = uncheckedArm.references.unchecked.includes('pytest');
+    const unwiredNamed = unwiredArm.references.unwired.includes('npm run lint');
+    const unwiredRetired = unwiredGuardedArm.references.unwired.length === 0;
+    // Reported, not fatal: a project choosing not to wire a check it defined is not a defect in the
+    // artifacts this skill shipped, so the audit must still pass while naming it.
+    const unwiredNonFatal = scoreHarness(unwiredArm.files, { references: unwiredArm.references })
+      .subsystems.verification.checks.some((check) => check.pass && /1 defined but not wired: npm run lint/.test(check.message));
     // Absence of evidence must not read as evidence of absence: a scan that was never collected has
     // to fail the check, not skip it.
     const uncollectedRefused = scoreHarness(uncollectedArm.files, {}).subsystems.verification.checks
       .some((check) => !check.pass && /reference scan not collected/.test(check.message));
     return {
-      pass: danglingCaught && guardedExcused && uncheckedListed && uncollectedRefused,
+      pass: danglingCaught && guardedExcused && uncheckedListed && uncollectedRefused
+        && unwiredNamed && unwiredRetired && unwiredNonFatal,
       danglingCaught,
       guardedExcused,
       uncheckedListed,
       uncollectedRefused,
+      unwiredNamed,
+      unwiredRetired,
+      unwiredNonFatal,
       dangling: danglingArm.references.dangling
     };
   } catch (error) {
@@ -2318,6 +2466,9 @@ async function checkCommandReferences() {
       guardedExcused: false,
       uncheckedListed: false,
       uncollectedRefused: false,
+      unwiredNamed: false,
+      unwiredRetired: false,
+      unwiredNonFatal: false,
       dangling: [],
       error: error.message
     };
@@ -2665,7 +2816,12 @@ async function checkBlankProjectGate() {
   const placeholder = 'echo "No package manifest detected; replace this line with your project verification command."';
   const blank = renderVerificationStep(placeholder);
   const real = renderVerificationStep('go test ./...');
+
+  // The placeholder has to REFUSE. It used to render as a plain echo, so a repository with nothing
+  // to verify ran this line, printed "Verification Complete" and exited 0 having verified nothing —
+  // and the audit scored it 100/100, because every check it runs is an existence check.
   const placeholderFails = /\bexit 1\b/.test(blank) && !/^\s*go test/m.test(blank);
+
   // The real command must render as something that runs, not as the refusal branch.
   const realRuns = !/\bexit 1\b/.test(real) && real.includes('go test ./...');
   // The no-manifest branch above was only half the trap. A repo that HAS a manifest but defines
@@ -2710,6 +2866,7 @@ async function checkBlankProjectGate() {
   // Without this arm, "refuse unconditionally" would satisfy the assertion above while making the
   // gate useless: the mirror-image failure of a gate that cannot fail.
   const explicitOpensWhenRun = /has_script\s+"test";\s*then[\s\S]*?\bRAN=1\b/.test(explicit);
+
   // The same invariant has a SECOND producer, and it went uncovered. templates/init.sh is the
   // manual fallback — what the agent copies by hand when the runtime has no Node — so none of the
   // generator probes above reach it. Measured, not assumed: replacing both of its `exit 1`
@@ -2934,10 +3091,21 @@ async function checkAgentFileInvariant() {
     const agentsPath = path.join(agentsDir, 'AGENTS.md');
     await writeText(agentsPath, existing);
     const agentsRun = await execFileAsync('node', [script, '--target', agentsDir]);
-    const untouched = (await readText(agentsPath)) === existing;
+    // The detail layer is appended, so the file legitimately grows. What must NOT happen is a single
+    // existing byte moving: the invariant is that everything already written survives verbatim, which
+    // is stronger and more checkable than "the file is unchanged" — which would forbid the append and
+    // equally forbid a silent rewrite. Compared as a prefix because the append goes to the end.
+    const afterExisting = await readText(agentsPath);
+    const untouched = afterExisting.startsWith(existing);
+    const thirdPartySurvived = /## Agent skills/.test(afterExisting) && /Third-party block that must survive\./.test(afterExisting);
+    // And the append must be idempotent, or a second run duplicates the section it just wrote.
+    await execFileAsync('node', [script, '--target', agentsDir]);
+    const twice = await readText(agentsPath);
+    const appendIdempotent = (twice.match(/^## 细则$/gm) || []).length === 1;
     // At least one missing section heading must be listed; keying on the literal names would break
     // every time a section is renamed, while "lists nothing" is the actual defect.
     const missingReported = /\n\s*-\s*##\s/.test(agentsRun.stdout);
+
 
     // The half that had no carrier. SKILL.md has always said a file holding another owner's block
     // must not be --force overwritten, and until now that was prose: the flag overwrote
@@ -2992,16 +3160,19 @@ async function checkAgentFileInvariant() {
     }
 
     return {
-      pass: noSecondFile && choseClaude && untouched && missingReported && forceRefused && forceStillWritesOwn,
+      pass: noSecondFile && choseClaude && untouched && thirdPartySurvived && appendIdempotent
+        && missingReported && forceRefused && forceStillWritesOwn,
       noSecondFile,
       choseClaude,
       untouched,
+      thirdPartySurvived,
+      appendIdempotent,
       missingReported,
       forceRefused,
       forceStillWritesOwn
     };
   } catch (error) {
-    return { pass: false, noSecondFile: false, choseClaude: false, untouched: false, missingReported: false, forceRefused: false, forceStillWritesOwn: false, error: error.message };
+    return { pass: false, noSecondFile: false, choseClaude: false, untouched: false, thirdPartySurvived: false, appendIdempotent: false, missingReported: false, forceRefused: false, forceStillWritesOwn: false, error: error.message };
   } finally {
     for (const target of [claudeDir, agentsDir]) if (target) await rm(target, { recursive: true, force: true });
   }
@@ -3077,6 +3248,19 @@ async function chmodExec(file) {
   } catch { /* the host does not model the exec bit; the run below reports what actually happened */ }
 }
 
+// The generated gate anchors its evidence to a commit, so every fixture that must reach the
+// success tail needs a repository with one. Skipping this is not a slower arm, it is a red one: the
+// gate refuses before any check runs, and an arm that never reached the tail would report on a
+// refusal instead of on the behaviour it exists to test. Identity is fixed and writes are scoped to
+// the fixture's own directory; nothing here touches the user's repository.
+async function commitFixture(dir) {
+  const git = process.platform === 'win32' ? 'git' : 'git';
+  const opts = { cwd: dir, timeout: 30000 };
+  await execFileAsync(git, ['init', '-q'], opts);
+  await execFileAsync(git, ['-c', 'user.email=fixture@example.invalid', '-c', 'user.name=fixture', 'add', '-A'], opts);
+  await execFileAsync(git, ['-c', 'user.email=fixture@example.invalid', '-c', 'user.name=fixture', 'commit', '-q', '-m', 'fixture'], opts);
+}
+
 async function checkInitGrowth() {
   let growDir;
   let deadDir;
@@ -3120,6 +3304,7 @@ async function checkInitGrowth() {
         name: 'shell-probe', version: '1.0.0', scripts: { test: 'echo SHELL_OK' }
       }));
       await execFileAsync('node', [path.join(scriptDir, 'create-harness.mjs'), '--target', probeDir]);
+      await commitFixture(probeDir);
       for (const candidate of ['bash', 'C:/Program Files/Git/bin/bash.exe']) {
         const probe = await runGateWithShell(candidate, probeDir);
         if (!probe.unavailable && probe.stdout.includes('=== Verification Complete ===')) {
@@ -3135,6 +3320,7 @@ async function checkInitGrowth() {
     growDir = await mkdtemp(path.join(os.tmpdir(), 'harness-initgrowth-'));
     await writeText(path.join(growDir, 'package.json'), manifest);
     await execFileAsync('node', [script, '--target', growDir]);
+    await commitFixture(growDir);
     const initPath = path.join(growDir, 'init.sh');
     const before = await readText(initPath);
     const beforeSteps = before.split('\n').filter((line) => /^RAN=1$/.test(line.trim())).length;
@@ -3176,6 +3362,7 @@ async function checkInitGrowth() {
     }));
     const deadPath = path.join(deadDir, 'init.sh');
     await execFileAsync('node', [script, '--target', deadDir]);
+    await commitFixture(deadDir);
     const deadHash = await readText(deadPath);
     const deadBefore = deadHash.includes('=== npm test ===');
     let deadRun = { stdout: '', stderr: '' };
@@ -3255,6 +3442,7 @@ async function checkInitGrowth() {
     unparseDir = await mkdtemp(path.join(os.tmpdir(), 'harness-initgrowth-syntax-'));
     await writeText(path.join(unparseDir, 'package.json'), manifest);
     await execFileAsync('node', [script, '--target', unparseDir]);
+    await commitFixture(unparseDir);
     const syntaxPath = path.join(unparseDir, 'init.sh');
     const syntaxHash = await readText(syntaxPath);
     let syntaxRun = { stdout: '', stderr: '' };
@@ -3308,6 +3496,7 @@ async function checkInitGrowth() {
     // at write time; a fixture that skipped this would be testing the refusal path by accident.
     await writeText(path.join(entryDir, 'verify.sh'), '#!/bin/bash\necho VERIFY_OK\n', { mode: 0o755 });
     await execFileAsync('node', [script, '--target', entryDir]);
+    await commitFixture(entryDir);
     const entryInitPath = path.join(entryDir, 'init.sh');
     const entryBefore = await readText(entryInitPath);
     let entryRun = { stdout: '', stderr: '' };
@@ -3403,6 +3592,7 @@ async function checkInitGrowth() {
     let undefCode = 0;
     try {
       undefRun = await execFileAsync('node', [script, '--target', undefDir, '--commands', 'npm test,npm run lint']);
+      await commitFixture(undefDir);
     } catch (error) {
       undefCode = error.code === undefined ? 1 : error.code;
       undefRun = { stdout: error.stdout || '', stderr: error.stderr || '' };
@@ -3463,6 +3653,7 @@ async function checkInitGrowth() {
       scripts: { test: 'echo TEST_OK', lint: 'echo LINT_OK' }
     }));
     await execFileAsync('node', [script, '--target', declaredDir, '--commands', 'npm test,npm run lint']);
+    await commitFixture(declaredDir);
     const declaredText = await readText(path.join(declaredDir, 'init.sh'));
     const declaredSteps = [...declaredText.matchAll(/^[ \t]*(npm test|npm run lint)$/gm)].map((match) => match[1]);
     // The counter, not the step list: a step rendered without one would satisfy the first clause
@@ -3683,6 +3874,7 @@ async function checkInitGrowth() {
           }
           await writeText(path.join(dir, 'init.sh'), fallbackTemplate);
           await chmodExec(path.join(dir, 'init.sh'));
+          await commitFixture(dir);
           const run = await runGateWithShell(shellCandidate, dir, {
             PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}`,
             STUB_MODE: mode
@@ -3710,6 +3902,7 @@ async function checkInitGrowth() {
       await writeText(path.join(teethDir, 'go.mod'), '');
       await writeText(path.join(teethDir, 'init.sh'), goWithoutRefusalText);
       await chmodExec(path.join(teethDir, 'init.sh'));
+      await commitFixture(teethDir);
       const teethRun = await runGateWithShell(shellCandidate, teethDir, {
         PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}`,
         STUB_MODE: 'empty'

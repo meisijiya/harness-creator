@@ -10,7 +10,7 @@
 
 - **指令记忆**（人工维护、纳入版本控制）：AGENTS.md、CLAUDE.md、项目约定
 - **自动记忆**（代理写入、持久保存）：进度日志、会话交接、发现的模式
-- **会话提取**（后台派生）：会话结束时自动分析对话记录
+- **会话提取**（后台派生）：会话结束时自动分析对话记录（来源：Effective harnesses for long-running agents，https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents）
 
 ### 两步保存不变量
 
@@ -22,7 +22,7 @@
 
 ### 本地覆盖永远优先
 
-当同一主题在多个作用域被提及时，最局部的指令优先：
+当同一主题在多个作用域被提及时，最局部的指令优先：（来源：Claude Code best practices，https://code.claude.com/docs/en/best-practices）
 
 ```
 组织级 → 用户级 → 项目级 → 本地覆盖
@@ -65,7 +65,7 @@
 1. **索引截断在触发前是静默的** —— 条目保持简短
 2. **优先级排序违反直觉** —— 本地 > 项目 > 用户 > 组织
 3. **提取时机造成竞态窗口** —— 用户可能在提取完成前就开始下一轮
-4. **可推导的内容不属于记忆** —— 架构与代码模式可从代码库重新推导
+4. **可推导的内容不属于记忆** —— 架构与代码模式可从代码库重新推导（来源：pstack skills，https://github.com/cursor/plugins/tree/main/pstack/skills）
 5. **孤立主题文件会累积** —— 建议定期清理
 
 ## 相关模式

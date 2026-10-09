@@ -4,6 +4,7 @@ import { chmod, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import {
+  appendSectionIfMissing,
   appendVerificationCheck,
   copyTemplate,
   detectAgentFile,
@@ -11,12 +12,14 @@ import {
   detectProject,
   diffSections,
   exists,
+  extractSection,
   initScriptFromCommands,
   isPlaceholderVerification,
   lineCount,
   normalizeEntryPath,
   parseArgs,
   readText,
+  renderTemplate,
   replaceBlueprintSlot,
   scriptCommand,
   statOrNull,
@@ -621,6 +624,26 @@ const blueprintUpdate = agentResult.status === 'skipped' && args.blueprint !== u
   : null;
 if (blueprintUpdate?.ok && !dryRun) await writeText(agentPath, blueprintUpdate.markdown);
 
+// The one append this skill performs. A repo that already has an instruction file — typically one
+// another setup skill wrote first, with its own navigation block and its own detail files under
+// `docs/agents/` — would otherwise never learn that the detail layer exists, because every other
+// section report leaves the merge to a human. This one section is ours, its title is fixed, and
+// appending it cannot contradict or overwrite what is already there: no existing line moves.
+//
+// Mutually exclusive with the blueprint path above, so a single run edits one thing. A file this
+// skill rendered itself already carries the section, so the repeat is a no-op rather than a second
+// copy.
+let layerAppend = null;
+if (agentResult.status === 'skipped' && args.blueprint === undefined) {
+  const rendered = renderTemplate(templateName, await readText(path.join(TEMPLATE_DIR, templateName)), replacements);
+  const section = extractSection(rendered, '## 细则');
+  if (section) {
+    layerAppend = appendSectionIfMissing(await readText(agentPath), section);
+    if (layerAppend.status === 'appended' && !dryRun) await writeText(agentPath, layerAppend.markdown);
+    results.push({ path: agentPath, status: layerAppend.status, reason: layerAppend.reason });
+  }
+}
+
 // Report, never write: a text-match append cannot tell whether the existing file already covers a
 // section in English or in another wording, and would add a second startup path — two competing
 // instruction files is the drift this skill exists to prevent. Merging is the agent's call.
@@ -673,6 +696,31 @@ if (specLayer) {
     const specPath = path.join(target, `${name}.md`);
     results.push(await copyTemplate(`spec-layer/${name}.md`, specPath, replacementsFor, { force, dryRun }));
   }
+}
+
+// The detail layer, unconditionally. The instruction file is read in full every session, so what
+// belongs there is what every session needs: the startup path, the brakes, the completion gate. The
+// judgement behind those — why evidence needs an anchor, what to do about a check the project
+// defines but the gate never runs, how a deletion earns its A/B evidence — is needed only when that
+// question comes up, and inlining it costs context on every session that will never ask it.
+//
+// No switch, because the alternative is a second convention: an opt-in layer is a layer most repos
+// never turn on, and the rules whose evidence they most need are the ones nobody opts in for. The
+// cost is two small files per repo, which is less than the cost of a 4KB instruction file read
+// hundreds of times to carry paragraphs most sessions skip.
+//
+// Paths carry this skill's prefix. `docs/agents/` is an established landing place shared with other
+// skills, so a bare `verification.md` there would collide with theirs and leave a reader unable to
+// tell whose rule they are reading. The H2 is `## 细则`, never `## Agent skills` — that title
+// belongs to another skill, and holdsForeignSections uses this template's own headings to decide
+// what `--force` may overwrite, so adopting it would disarm that guard.
+const AGENTS_LAYER_FILES = {
+  'agents-layer/verification.md': 'docs/agents/harness-creator-verification.md',
+  'agents-layer/maintenance.md': 'docs/agents/harness-creator-maintenance.md'
+};
+
+for (const [template, relative] of Object.entries(AGENTS_LAYER_FILES)) {
+  results.push(await copyTemplate(template, path.join(target, relative), {}, { force, dryRun }));
 }
 
 // A dry run must not claim it created anything — not writing is the entire point. "DRY RUN" leads

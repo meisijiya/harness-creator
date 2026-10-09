@@ -4,7 +4,7 @@
 
 单代理会遇到极限：
 - **上下文极限** —— 无法在一个会话中装下完整的调研 + 实现
-- **专业化** —— 需要独立的研究者、实现者、评审者
+- **专业化** —— 需要独立的研究者、实现者、评审者（来源：Harness design for long-running application development，https://www.anthropic.com/engineering/harness-design-for-long-running-apps）
 - **并行性** —— 希望同时探索多种方案
 
 但多代理系统会引入混乱：
@@ -49,7 +49,7 @@ const taskId = await coordinator.spawn({
 ## 何时使用
 
 - 任务太大，单代理会话装不下
-- 需要并行探索（如为多种方案做原型）
+- 需要并行探索（如为多种方案做原型）（来源：Building multi-agent systems，https://claude.com/blog/building-multi-agent-systems-when-and-how-to-use-them）
 - 需要持久的专业化队友（研究者、实现者、评审者）
 - 复杂的多阶段工作流
 
@@ -137,7 +137,7 @@ await swarm.dispatch({
 
 ## 陷阱
 
-1. **分叉的子级不得再分叉** —— 递归守卫维护单层不变量。分叉工具保留在子级工具池中（便于提示词缓存共享），但在调用时拦截。
+1. **分叉的子级不得再分叉** —— 递归守卫维护单层不变量。分叉工具保留在子级工具池中（便于提示词缓存共享），但在调用时拦截。（来源：Building multi-agent systems，https://claude.com/blog/building-multi-agent-systems-when-and-how-to-use-them）
 2. **协调者的工作者从零上下文开始** —— 只传递显式的提示词。不要假设子级能看到父级积累的调研。
 3. **蜂群队友不能派生其他队友** —— 名册扁平以防失控增长。
 4. **编写自包含的提示词** —— "根据你的发现"是反模式。协调者必须先消化。
