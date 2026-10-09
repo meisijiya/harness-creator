@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process';
 import { readFileSync, writeSync } from 'node:fs';
-import { mkdir, mkdtemp, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -128,7 +128,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['blankGate', (group) => ` A project with nothing to verify — no manifest, a manifest with no runnable script, or an explicit --commands list whose scripts the manifest does not define — gets a refusal that exits non-zero instead of reporting a pass it did not earn, the counter reopens the moment a real check runs, a comma inside a quoted command stays one command while a genuine comma-separated list still splits, an unterminated quote is refused leaving nothing behind, and the manual fallback template refuses on the same shapes (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-description slot stays a visible pending marker when the user has not stated one, while a blueprint change rewrites that slot only — the rest of the file survives byte for byte, and a shape this skill did not render is refused rather than guessed at (${group.pass ? 'verified' : `pending ${group.pendingMarked ? 'ok' : 'NO'}; no stack fill ${group.noInventedFill ? 'ok' : 'NO'}; verbatim ${group.verbatim ? 'ok' : 'NO'}; slot-only ${group.slotRewritten && group.restIntact ? 'ok' : 'NO'}; detector ${group.detectorHasTeeth ? 'has teeth' : 'BLIND'}; refusal ${group.refusalHonoured && group.refusedUntouched ? 'ok' : 'NO'}`}).`],
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, an existing instruction file is left byte-identical while its missing sections are still reported, and --force refuses to render over sections it does not define — the one rule protecting another owner's block, which was prose until it destroyed a fixture — while still overwriting this skill's own render (${group.pass ? 'verified' : `FAILED (foreign block refused: ${group.forceRefused ? 'ok' : 'NO'}; own render rewritten: ${group.forceStillWritesOwn ? 'ok' : 'NO'})`}).`],
-  ['initGrowth', (group) => ` The gate only grows: a new check joins an existing init.sh without removing or reordering any step, a repeat is a no-op that leaves the file byte-identical, a check the gate would never actually run — or one that does not parse as shell — is refused and rolled back rather than reported as added, and such a refusal names the command it refused instead of printing a placeholder where the command belongs, a one-line entry reference to a script this repository owns is appended unguarded so a missing entry turns the gate red instead of skipping it, a declared check that did not run turns the gate red instead of printing a notice beside the success tail while a script this manifest does define still gets a real step, and a gate that went red this session leaves a check behind so the lesson reaches the specification instead of only the fix (${group.pass ? 'verified' : `grew ${group.grew ? 'ok' : 'NO'}; existing steps intact ${group.preserved ? 'ok' : 'NO'}; repeat ${group.idempotent ? 'ok' : 'NO'}; dead-branch check ${group.deadBranchRefused && group.rolledBack ? 'refused and rolled back' : 'ACCEPTED'}; refusal names its command ${group.refusalNamesCommand ? 'ok' : 'PLACEHOLDER'}; name detector ${group.refusalNameHasTeeth ? 'has teeth' : 'BLIND'}; unparseable check ${group.unparseableRefused ? 'refused' : 'ACCEPTED'}; entry appended ${group.entryAppended ? 'ok' : 'NO'}; entry unguarded ${group.entryUnguarded ? 'ok' : 'GUARDED'}; entry repeat ${group.entryIdempotent ? 'ok' : 'NO'}; missing entry ${group.entryMissingRefused ? 'refused' : 'ACCEPTED'}; path rules ${group.entryRulesHaveTeeth ? 'ok' : 'BLIND'}; entry removed turns it red ${group.entryGateFailsWhenUnresolvable ? 'yes' : 'NO'}; skipped declared check ${group.declaredSkipTurnsGateRed ? 'turns it red' : 'NOTICE ONLY'}; its detector ${group.declaredSkipDetectorHasTeeth ? 'has teeth' : 'BLIND'}; declared script ${group.declaredScriptStillRuns ? 'still checked' : 'DROPPED'}; run-it ${group.declaredSkipGateIsRed && group.declaredGateIsGreen ? 'red and green' : 'NOT OBSERVED'}; red-gate lesson ${group.loopStated && group.loopIsLoadBearing ? 'recorded' : 'LOST'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}; no init.sh ${group.missingRefused ? 'refused' : 'ACCEPTED'}`}).`],
+  ['initGrowth', (group) => ` The gate only grows: a new check joins an existing init.sh without removing or reordering any step, a repeat is a no-op that leaves the file byte-identical, a check the gate would never actually run — or one that does not parse as shell — is refused and rolled back rather than reported as added, and such a refusal names the command it refused instead of printing a placeholder where the command belongs, a one-line entry reference to a script this repository owns is appended unguarded so a missing entry turns the gate red instead of skipping it, a declared check that did not run turns the gate red instead of printing a notice beside the success tail while a script this manifest does define still gets a real step, every toolchain branch of the hand-copy fallback raises its counter only on the tool's own verdict — so a project whose test suite is empty is refused by name rather than reported as verified — while the same branch stays green on a toolchain that has a test to run, and a gate that went red this session leaves a check behind so the lesson reaches the specification instead of only the fix (${group.pass ? 'verified' : `grew ${group.grew ? 'ok' : 'NO'}; existing steps intact ${group.preserved ? 'ok' : 'NO'}; repeat ${group.idempotent ? 'ok' : 'NO'}; dead-branch check ${group.deadBranchRefused && group.rolledBack ? 'refused and rolled back' : 'ACCEPTED'}; refusal names its command ${group.refusalNamesCommand ? 'ok' : 'PLACEHOLDER'}; name detector ${group.refusalNameHasTeeth ? 'has teeth' : 'BLIND'}; unparseable check ${group.unparseableRefused ? 'refused' : 'ACCEPTED'}; entry appended ${group.entryAppended ? 'ok' : 'NO'}; entry unguarded ${group.entryUnguarded ? 'ok' : 'GUARDED'}; entry repeat ${group.entryIdempotent ? 'ok' : 'NO'}; missing entry ${group.entryMissingRefused ? 'refused' : 'ACCEPTED'}; path rules ${group.entryRulesHaveTeeth ? 'ok' : 'BLIND'}; entry removed turns it red ${group.entryGateFailsWhenUnresolvable ? 'yes' : 'NO'}; skipped declared check ${group.declaredSkipTurnsGateRed ? 'turns it red' : 'NOTICE ONLY'}; its detector ${group.declaredSkipDetectorHasTeeth ? 'has teeth' : 'BLIND'}; declared script ${group.declaredScriptStillRuns ? 'still checked' : 'DROPPED'}; run-it ${group.declaredSkipGateIsRed && group.declaredGateIsGreen ? 'red and green' : 'NOT OBSERVED'}; toolchain branches earn RAN ${group.emptyToolBranchesGuarded ? 'ok' : 'UNGUARDED'}; branch detector ${group.emptyToolBranchesHaveTeeth ? 'has teeth' : 'BLIND'}; empty tool run ${group.emptyToolRunsRed ? 'red' : 'NOT OBSERVED'}; populated tool run ${group.emptyToolRunsGreen ? 'green' : 'NOT OBSERVED'}; that detector ${group.emptyToolGateTeeth ? 'has teeth' : 'BLIND'}; red-gate lesson ${group.loopStated && group.loopIsLoadBearing ? 'recorded' : 'LOST'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}; no init.sh ${group.missingRefused ? 'refused' : 'ACCEPTED'}`}).`],
   ['specLayer', (group) => ` The spec layer is opt-in and says nothing when it is off: a run without --spec-layer still produces the two artifacts and byte-identical content, the two documents exist only when the flag is given, the detected stack never becomes an answer to "what is this project", they are pointed at as read-on-demand rather than as files every session must open, and the same byte/line/working-rule ceilings still hold with the extra pointer (${group.pass ? 'verified' : `default unchanged ${group.offByDefault ? 'ok' : 'CHANGED'}; flag creates the layer ${group.onCreatesLayer ? 'ok' : 'NO'}; stack kept out of the mission ${group.noStackLeak ? 'ok' : 'LEAKED'}; read on demand ${group.onDemandNotResident ? 'ok' : 'RESIDENT'}; budget ${group.budgetHeld ? 'ok' : 'BUSTED'}; re-run skips ${group.reRunSkips ? 'ok' : 'OVERWROTE'}; flag value ${group.flagValueRefused ? 'refused' : 'ACCEPTED'}; zero coupling ${group.purityHeld ? 'ok' : 'NAMED OR BLIND'}`}).`],
   ['nextSteps', (group) => ` The gate's closing instructions are one literal with two producers: the generated init.sh, the hand-copy fallback and this repository's own gate all carry the same next-steps block, and it tells the agent to work only on what was explicitly authorized rather than to pick its own next task — a contradiction that was shipping, because the generated gate selected work in the same breath as the instruction file that forbids it (${group.pass ? 'verified' : `generated ${group.generatorAgrees ? 'agrees' : 'DRIFTED'}; fallback ${group.fallbackAgrees ? 'agrees' : 'DRIFTED'}; own gate ${group.ownGateAgrees ? 'agrees' : 'DRIFTED'}; authorizes rather than selects ${group.authorizesRatherThanSelects ? 'ok' : 'SELECTS'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}`}).`],
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`],
@@ -249,12 +249,11 @@ function maintenanceTriggerStated(text) {
   return { stated: missing.length === 0 && leaked.length === 0, missing, leaked };
 }
 
-// Every design rule in SKILL.md was unguarded prose until this gate. The suite mostly reads the
-// artifact a target repo receives, but SKILL.md itself is read in five places: a byte count
-// (checkSkillBudget), the `--spec-layer` literal (ARTIFACT_ADDING_FLAGS), the 设计规则 term set
-// (SKILL_DESIGN_TERMS), the 更新 row of the task table (WRAPUP_SKILL_ENTRY_TERMS), and a
-// path-shape scan (checkSelfReferencePaths). Three of those assert words, so prose edits are not
-// free.
+// The suite mostly reads the artifact a target repo receives, but SKILL.md itself is read in five
+// places: a byte count (checkSkillBudget), the `--spec-layer` literal (ARTIFACT_ADDING_FLAGS), the
+// 设计规则 term set (SKILL_DESIGN_TERMS), the 更新 row of the task table (WRAPUP_SKILL_ENTRY_TERMS),
+// and a path-shape scan (checkSelfReferencePaths). Three of those assert words, so prose edits are
+// not free.
 // Measured 09-25: deleting the wrap-up rule outright still yielded Self-check PASS and eval 100/100,
 // and the bytes freed by the deletion made the budget line GREENER — the cap has only a ceiling, no
 // floor, so dropping a rule is rewarded. A rule that decides whether the skill is ever invoked
@@ -902,8 +901,10 @@ Runs a lightweight harness benchmark:
      quietly created. A one-line entry reference to a script the
      repository owns is appended unguarded, and removing that entry turns the gate red rather than
      skipping it. A declared check that did not run turns the gate red instead of printing a notice
-     beside the success tail, while a script the manifest does define still gets a real step. The
-     two arms that need a POSIX shell to
+     beside the success tail, while a script the manifest does define still gets a real step. Every
+     toolchain branch of the hand-copy fallback raises its counter only on the tool's own verdict, so
+     a project with an empty test suite is refused by name rather than reported as verified, and the
+     same branch stays green on a toolchain that has a test to run. The arms that need a POSIX shell to
      run the gate are reported as unconfirmed, not passed, when no shell is available. [initGrowth]
 25. Checks that the spec layer is opt-in and honest: a run without --spec-layer produces the same
      two artifacts with byte-identical content, the two documents exist only when the flag is given, a
@@ -1123,8 +1124,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Agent-file invariant: ${pass ? 'PASS' : 'FAIL'} — existing CLAUDE.md means no AGENTS.md is created: ${noSecondFile && choseClaude ? 'ok' : 'NO'}; existing instruction file left byte-identical: ${untouched ? 'ok' : 'NO'}; missing sections still reported: ${missingReported ? 'ok' : 'NO'}; --force refuses to delete another owner's sections: ${forceRefused ? 'ok' : 'NO'}; and still overwrites this skill's own render: ${forceStillWritesOwn ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.initGrowth) {
-    const { pass, grew, preserved, idempotent, deadBranchRefused, rolledBack, refusalNamesCommand, refusalNameHasTeeth, missingRefused, unparseableRefused, detectorHasTeeth, loopStated, loopIsLoadBearing, entryAppended, entryUnguarded, entryIdempotent, entryMissingRefused, entryRulesHaveTeeth, entryGateFailsWhenUnresolvable, declaredSkipTurnsGateRed, declaredSkipDetectorHasTeeth, declaredScriptStillRuns, declaredSkipGateIsRed, declaredGateIsGreen, skipped, error } = selfCheck.initGrowth;
-    lines.push(`  init.sh growth: ${pass ? 'PASS' : 'FAIL'} — a new check joins an existing gate: ${grew ? 'ok' : 'NO'}; existing steps preserved: ${preserved ? 'ok' : 'NO'}; repeat is a byte-identical no-op: ${idempotent ? 'ok' : 'NO'}; a check the gate would never run is refused: ${deadBranchRefused ? 'ok' : 'ACCEPTED'}; and rolled back: ${rolledBack ? 'ok' : 'NO'}; the refusal names the command it refused: ${refusalNamesCommand ? 'ok' : 'PLACEHOLDER'}; that detector has teeth: ${refusalNameHasTeeth ? 'ok' : 'BLIND'}; a check that does not parse is refused: ${unparseableRefused ? 'ok' : 'ACCEPTED'}; no init.sh at all is refused: ${missingRefused ? 'ok' : 'ACCEPTED'}; an entry reference is one call line: ${entryAppended ? 'ok' : 'NO'}; and it is unguarded: ${entryUnguarded ? 'ok' : 'GUARDED'}; repeating it is a no-op: ${entryIdempotent ? 'ok' : 'NO'}; a missing entry is refused: ${entryMissingRefused ? 'ok' : 'ACCEPTED'}; entry path rules have teeth: ${entryRulesHaveTeeth ? 'ok' : 'BLIND'}; removing the entry turns the gate red: ${entryGateFailsWhenUnresolvable ? 'ok' : 'NO'}; a declared check that did not run turns the gate red: ${declaredSkipTurnsGateRed ? 'ok' : 'NOTICE ONLY'}; that detector has teeth: ${declaredSkipDetectorHasTeeth ? 'ok' : 'BLIND'}; a script the manifest defines still gets a real step: ${declaredScriptStillRuns ? 'ok' : 'DROPPED'}; and the two gates come back red and green: ${declaredSkipGateIsRed && declaredGateIsGreen ? 'ok' : 'NOT OBSERVED'}; a red gate leaves a check behind: ${loopStated && loopIsLoadBearing ? 'ok' : 'NO'}; detector teeth: ${detectorHasTeeth ? 'ok' : 'BLIND'}${skipped ? ` — ${skipped}` : ''}${error ? ` — ${error}` : ''}`);
+    const { pass, grew, preserved, idempotent, deadBranchRefused, rolledBack, refusalNamesCommand, refusalNameHasTeeth, missingRefused, unparseableRefused, detectorHasTeeth, loopStated, loopIsLoadBearing, entryAppended, entryUnguarded, entryIdempotent, entryMissingRefused, entryRulesHaveTeeth, entryGateFailsWhenUnresolvable, declaredSkipTurnsGateRed, declaredSkipDetectorHasTeeth, declaredScriptStillRuns, declaredSkipGateIsRed, declaredGateIsGreen, emptyToolBranchesGuarded, emptyToolBranchesHaveTeeth, emptyToolRunsRed, emptyToolRunsGreen, emptyToolGateTeeth, skipped, error } = selfCheck.initGrowth;
+    lines.push(`  init.sh growth: ${pass ? 'PASS' : 'FAIL'} — a new check joins an existing gate: ${grew ? 'ok' : 'NO'}; existing steps preserved: ${preserved ? 'ok' : 'NO'}; repeat is a byte-identical no-op: ${idempotent ? 'ok' : 'NO'}; a check the gate would never run is refused: ${deadBranchRefused ? 'ok' : 'ACCEPTED'}; and rolled back: ${rolledBack ? 'ok' : 'NO'}; the refusal names the command it refused: ${refusalNamesCommand ? 'ok' : 'PLACEHOLDER'}; that detector has teeth: ${refusalNameHasTeeth ? 'ok' : 'BLIND'}; a check that does not parse is refused: ${unparseableRefused ? 'ok' : 'ACCEPTED'}; no init.sh at all is refused: ${missingRefused ? 'ok' : 'ACCEPTED'}; an entry reference is one call line: ${entryAppended ? 'ok' : 'NO'}; and it is unguarded: ${entryUnguarded ? 'ok' : 'GUARDED'}; repeating it is a no-op: ${entryIdempotent ? 'ok' : 'NO'}; a missing entry is refused: ${entryMissingRefused ? 'ok' : 'ACCEPTED'}; entry path rules have teeth: ${entryRulesHaveTeeth ? 'ok' : 'BLIND'}; removing the entry turns the gate red: ${entryGateFailsWhenUnresolvable ? 'ok' : 'NO'}; a declared check that did not run turns the gate red: ${declaredSkipTurnsGateRed ? 'ok' : 'NOTICE ONLY'}; that detector has teeth: ${declaredSkipDetectorHasTeeth ? 'ok' : 'BLIND'}; a script the manifest defines still gets a real step: ${declaredScriptStillRuns ? 'ok' : 'DROPPED'}; and the two gates come back red and green: ${declaredSkipGateIsRed && declaredGateIsGreen ? 'ok' : 'NOT OBSERVED'}; every toolchain branch earns its counter on the tool's verdict: ${emptyToolBranchesGuarded ? 'ok' : 'UNGUARDED'}; that detector has teeth: ${emptyToolBranchesHaveTeeth ? 'ok' : 'BLIND'}; an empty tool run is red: ${emptyToolRunsRed ? 'ok' : 'PASSED'}; a populated one is green: ${emptyToolRunsGreen ? 'ok' : 'REFUSED'}; removing a branch refusal turns that red green: ${emptyToolGateTeeth ? 'ok' : 'BLIND'}; a red gate leaves a check behind: ${loopStated && loopIsLoadBearing ? 'ok' : 'NO'}; detector teeth: ${detectorHasTeeth ? 'ok' : 'BLIND'}${skipped ? ` — ${skipped}` : ''}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.specLayer) {
     const { pass, offByDefault, onCreatesLayer, noStackLeak, onDemandNotResident, budgetHeld, reRunSkips, flagValueRefused, purityHeld, artifactsDeclareLayer, specSize, specLines, error } = selfCheck.specLayer;
@@ -3015,9 +3016,12 @@ async function checkAgentFileInvariant() {
 //   idempotent        — naming a check that is already there changes nothing. A second copy of the
 //     same check is a gate that looks twice as covered as it is.
 //   deadBranchRefused — the check lands in a branch ./init.sh never takes, so it never runs. The
-//     generator's own anchors cannot see it: templates/init.sh reaches its refusal through an
-//     elif cascade, so both anchors are unique and correctly ordered yet every one of them sits on
-//     a path a Python repo never enters.
+//     generator's own anchors cannot see it. templates/init.sh puts its refusal anchors at column 0,
+//     after the elif cascade and outside every branch, so all seven branches reach the same
+//     shared verdict and appendVerificationCheck inserts a new check after that cascade — a Python
+//     repo enters no branch of its own yet still runs whatever was appended below the cascade.
+//     What the anchors cannot express is reachability: uniqueness and ordering hold for a step
+//     planted on a path nothing takes, so the arm below has to run the file and read the verdict.
 //     The run must refuse AND put the file back, because "ADDED" for a check that cannot run is a
 //     regression net reported as coverage — the precise failure this mode exists to prevent.
 //
@@ -3026,18 +3030,18 @@ async function checkAgentFileInvariant() {
 //   nothing else. detectorHasTeeth keeps the comparison itself honest: a predicate that cannot fail
 //   would report `preserved` on any file at all, including one that lost its steps.
 //
-// declaredSkipTurnsGateRed is the same class of defect one level down, and it was the one the
-//   counter above could not see. RAN=0 refuses when EVERY check was skipped, which is the honest
-//   reading of "at least one ran"; it is blind to the case where the project names two checks,
-//   package.json defines one, the other is skipped with a notice, RAN=1 is set by the check that
-//   did run, and the script prints "Verification Complete" and exits 0. The user asked for two and
-//   got one plus a notice — and the audit scored that repo 100/100, because its checks are
-//   existence checks. Four arms over two fixtures, opposite verdicts: the skip branch has to record
-//   which script it was, the refusal that reads that record has to exit non-zero BEFORE the success
-//   tail, a manifest that defines both scripts must still get two real steps and record nothing, and
-//   where a shell exists the two fixtures must actually come back red and green respectively. The
-//   pair matters because each alone is satisfiable by the wrong fix: recording the skip and printing
-//   the success tail anyway passes the first two, and refusing unconditionally passes all three.
+// declaredSkipTurnsGateRed is the same class of defect as deadBranchRefused, and it is the one the
+//   RAN counter cannot reach. RAN=0 refuses when EVERY check was skipped, which is the honest
+//   reading of "at least one ran"; it says nothing about the case where the project names two
+//   checks, package.json defines one, the other is skipped with a notice, RAN=1 is set by the check
+//   that did run, and the script prints "Verification Complete" and exits 0. The user asked for two
+//   and got one plus a notice. Four arms over two fixtures, opposite verdicts: the skip branch has
+//   to record which script it was, the refusal that reads that record has to exit non-zero BEFORE
+//   the success tail, a manifest that defines both scripts must still get two real steps and record
+//   nothing, and where a shell exists the two fixtures must actually come back red and green
+//   respectively. The pair matters because each alone is satisfiable by the wrong fix: recording the
+//   skip and printing the success tail anyway passes the first two, and refusing unconditionally
+//   passes all three.
 //
 // SKIPPED, not failed, when no POSIX shell is available. This suite is pure Node by design (see
 // checkBlankProjectGate) and must not be turned into a gate that refuses everything on a host without
@@ -3047,14 +3051,30 @@ async function checkAgentFileInvariant() {
 // Runs a gate with a known-good shell. Kept out of checkInitGrowth because arm 5 needs it for a
 // directory that is not the one under growth, and passing the shell in keeps the two arms on the same
 // interpreter the tool would have picked rather than re-probing and possibly landing elsewhere.
-async function runGateWithShell(shell, cwd) {
+// `env` merges over this process's environment rather than replacing it, so an arm that puts a stub
+// toolchain on PATH still gets the PATH's own directories — the interpreter, and on Windows the
+// Git-Bash mount table the absolute stub path is meaningless without.
+async function runGateWithShell(shell, cwd, env) {
+  const options = { cwd, timeout: 300000 };
+  if (env) options.env = { ...process.env, ...env };
   try {
-    const { stdout } = await execFileAsync(shell, ['./init.sh'], { cwd, timeout: 300000 });
+    const { stdout } = await execFileAsync(shell, ['./init.sh'], options);
     return { ok: true, stdout };
   } catch (error) {
     if (error.code === 'ENOENT') return { ok: false, unavailable: true, stdout: '' };
     return { ok: false, stdout: `${error.stdout || ''}${error.stderr || ''}` };
   }
+}
+
+// Makes a fixture file runnable. Needed because the fallback gate and its stub toolchain are shell
+// scripts this suite writes rather than generates, and a host that will not execute a non-executable
+// file reports every arm as red for a reason that has nothing to do with the arm. Best effort on
+// purpose: on a host where the exec bit is not what gates execution the call succeeds and the run
+// still works, and on one where it throws, the run fails and the arm says so.
+async function chmodExec(file) {
+  try {
+    await chmod(file, 0o755);
+  } catch { /* the host does not model the exec bit; the run below reports what actually happened */ }
 }
 
 async function checkInitGrowth() {
@@ -3065,6 +3085,7 @@ async function checkInitGrowth() {
   let entryDir;
   let undefDir;
   let declaredDir;
+  let emptyToolDir;
   let probeDir = null;
   const result = {
     pass: false, grew: false, preserved: false, idempotent: false,
@@ -3074,7 +3095,9 @@ async function checkInitGrowth() {
     entryAppended: false, entryUnguarded: false, entryIdempotent: false,
     entryMissingRefused: false, entryRulesHaveTeeth: false, entryGateFailsWhenUnresolvable: false,
     declaredSkipTurnsGateRed: false, declaredSkipDetectorHasTeeth: false, declaredScriptStillRuns: false,
-    declaredSkipGateIsRed: false, declaredGateIsGreen: false
+    declaredSkipGateIsRed: false, declaredGateIsGreen: false,
+    emptyToolBranchesGuarded: false, emptyToolBranchesHaveTeeth: false,
+    emptyToolRunsRed: false, emptyToolRunsGreen: false, emptyToolGateTeeth: false
   };
   try {
     const script = path.join(scriptDir, 'create-harness.mjs');
@@ -3170,11 +3193,12 @@ async function checkInitGrowth() {
     // 3b. And the refusal has to NAME the command it refused, which the arm above cannot see.
     //
     // `deadBranchRefused` keys on the generator's shared boilerplate, and that boilerplate is one
-    // sentence reused by every refusal — so a printer that wrote a placeholder where the command
-    // belongs produced an output indistinguishable from a correct one and this arm stayed green.
-    // That is not hypothetical: the notRun collector appends plain strings while the loop that
-    // prints them reads a property off each entry, so every refused command printed as `undefined`
-    // and the only visible symptom was a refusal that refused nothing by name.
+    // sentence reused by every refusal — a printer that writes a placeholder where the command
+    // belongs produces an output indistinguishable from a correct one, so this arm cannot be built
+    // out of that sentence. The two collectors on this path are separate objects with different
+    // shapes (one holds strings, one holds objects whose command is read off a property), so a
+    // mismatch between them prints `undefined` in place of the command and the refusal ends up
+    // refusing nothing by name.
     //
     // Asked of the SHAPE of the printed list, not of any phrase: the bullets are the one part of the
     // message that carries data rather than boilerplate, and the requirement is that each of them
@@ -3363,8 +3387,7 @@ async function checkInitGrowth() {
     // It is blind to the case this arm exists for: a project asked for `npm test` and
     // `npm run lint`, package.json defined only `test`, the lint step skipped, RAN=1 was set by the
     // test that did run, and the script printed "Verification Complete" and exited 0 — a check the
-    // user explicitly named reported as covered while never running. The audit scored that repo
-    // 100/100, because its checks are existence checks and ./init.sh does exist.
+    // user explicitly named reported as covered while never running.
     //
     // Asked of the RENDER, structurally, so it holds on the hosts that have no shell: a skip branch
     // that discards the script's name cannot be refused later, so the name has to be recorded where
@@ -3484,16 +3507,229 @@ async function checkInitGrowth() {
         declaredRunOut.stdout.includes(tail);
     }
 
+    // 10. Every toolchain branch of the manual fallback must raise RAN on the tool's own verdict,
+    //     never on the mere fact that the tool ran.
+    //
+    // Python/Go/Rust/Maven/Gradle/.NET all have one check that exits 0 when it has nothing to do:
+    // pytest collects zero tests and still reports exit 5 as its own "I ran and found nothing",
+    // go test passes a package with no test file, cargo test passes a crate with no test, surefire
+    // reports BUILD SUCCESS having run nothing, the Gradle test task is NO-SOURCE, and the .NET test
+    // platform says so in its own output. A branch that sets RAN after those and nothing else
+    // reports coverage for a project that has none, which is the same defect arms 8 and 9 rule out
+    // for the manifest branch. The contract the arms below hold every one of those branches to:
+    // RAN is raised only where a check verified real work, and the two ways of not doing so — nothing
+    // to check, and a check that failed — are named apart in the output.
+    //
+    // Two levels, because they fail differently. The structural arm reads the shipped file and asks
+    // each branch to reach its own refusal before RAN, so it holds on a host with no toolchain
+    // installed; its teeth arm removes one branch's refusal from the real file and requires the
+    // predicate to lose. The behavioural arms actually run the fallback twice over one fixture whose
+    // toolchain is a stub reporting the tool's own empty and populated verdicts — the empty run must
+    // refuse and the populated one must reach the success tail, and the refusal must quote the tool's
+    // reason rather than a generic sentence, so a reader can tell "no tests exist yet" from "the
+    // tests failed". A stub rather than a real toolchain, because requiring go, cargo, mvn, gradlew
+    // and dotnet to be installed would make this arm fail wholesale on hosts that have none of them,
+    // and a check nobody can run verifies nothing. Unset rather than true where no shell answers.
+    const TOOL_BRANCHES = [
+      { name: 'python', banner: 'Running Python verification', manifest: 'pyproject.toml', tool: 'pytest' },
+      { name: 'go', banner: 'Running Go verification', manifest: 'go.mod', tool: 'go test -list' },
+      { name: 'rust', banner: 'Running Rust verification', manifest: 'Cargo.toml', tool: 'cargo test' },
+      { name: 'maven', banner: 'Running Maven verification', manifest: 'pom.xml', tool: 'mvn test' },
+      { name: 'gradle', banner: 'Running Gradle verification', manifest: 'build.gradle', tool: 'Gradle test task' },
+      { name: 'dotnet', banner: 'Running .NET verification', manifest: 'App.csproj', tool: 'dotnet test' }
+    ];
+    // The block a branch owns: from its own banner to the next branch's banner, so a branch cannot
+    // be satisfied by a refusal sitting in its neighbour, and RAN=1 cannot be satisfied by one
+    // sitting in the package.json branch above. Anchored on the banner rather than on the manifest
+    // test because the .NET branch selects its project by glob (`ls *.csproj || ls *.sln`) rather
+    // than by a `-f` test, and an anchor one branch does not use would read that branch as absent
+    // and report the group red for a file that is in fact guarded.
+    const branchBlock = (text, branch) => {
+      const start = text.indexOf(branch.banner);
+      if (start < 0) return '';
+      const rest = text.slice(start);
+      const stops = TOOL_BRANCHES
+        .filter((other) => other !== branch)
+        .map((other) => rest.indexOf(other.banner))
+        .filter((index) => index >= 0);
+      const tail = rest.indexOf('\nelse\n');
+      if (tail >= 0) stops.push(tail);
+      return stops.length > 0 ? rest.slice(0, Math.min(...stops)) : rest;
+    };
+    // Raised only after the branch's own refusal, and both refusal paths present. Three clauses
+    // because each is satisfiable alone: a branch can carry the refusals and still set RAN first (a
+    // pass nobody earned), carry one refusal and miss the other (a failing check reported as an
+    // empty one), or set RAN inside the guard rather than after it.
+    const branchEarnsRan = (text, branch) => {
+      const block = branchBlock(text, branch);
+      if (!block) return false;
+      const refusals = [
+        block.includes('refuse_nothing_to_check'),
+        block.includes('refuse_check_failed')
+      ];
+      const ranAt = block.indexOf('RAN=1');
+      const refusalsComplete = block.lastIndexOf('refuse_') < block.lastIndexOf('fi');
+      return refusals.every(Boolean) && ranAt > block.lastIndexOf('refuse_') && refusalsComplete;
+    };
+    const fallbackTemplate = (await readText(path.join(skillRoot, FALLBACK_INIT_TEMPLATE))).replace(/\r\n/g, '\n');
+    result.emptyToolBranchesGuarded = TOOL_BRANCHES.every((branch) => branchEarnsRan(fallbackTemplate, branch));
+    // Teeth on the shipped file rather than on a sample: one branch's empty-test refusal is deleted
+    // and the arm must go red on that branch alone. A hand-written sample would only prove the
+    // predicate reads its own fixture.
+    const goBranch = TOOL_BRANCHES[1];
+    const goBlock = branchBlock(fallbackTemplate, goBranch);
+    const goWithoutRefusal = goBlock.replace(
+      /[ \t]*if[ \t]+!?[ \t]*printf[^\n]*\n[ \t]*refuse_nothing_to_check[^\n]*\n[ \t]*fi\n/m, ''
+    );
+    result.emptyToolBranchesHaveTeeth = result.emptyToolBranchesGuarded &&
+      goWithoutRefusal.length > 0 && goWithoutRefusal !== goBlock &&
+      !branchEarnsRan(fallbackTemplate.replace(goBlock, goWithoutRefusal), goBranch);
+
+    if (shellAvailable) {
+      // One stub toolchain, two of its verdicts. Each stub replays what the real tool prints when it
+      // has no test to run and when it has a passing one, so the branch under test is reading the
+      // tool's own answer rather than a shape this suite invented. STUB_MODE chooses which, because
+      // two fixtures per branch is twelve directories for a claim that is about the split.
+      const STUB_TOOLS = {
+        go: [
+          'if [ "$1" = test ] && [ "$2" = -list ]; then',
+          '  [ "$STUB_MODE" = empty ] && exit 0',
+          '  echo "ok  example.com/pkg"',
+          '  echo "TestAdd"',
+          '  exit 0',
+          'fi',
+          'exit 0'
+        ],
+        cargo: [
+          'if [ "$1" = test ] && [ "$2" = "--" ]; then',
+          '  [ "$STUB_MODE" = empty ] && exit 0',
+          '  echo "app::tests::add: test"',
+          '  exit 0',
+          'fi',
+          'exit 0'
+        ],
+        mvn: [
+          'if [ "$STUB_MODE" = empty ]; then',
+          '  echo "No tests to run."',
+          'else',
+          '  echo "Tests run: 1, Failures: 0, Errors: 0, Skipped: 0"',
+          'fi',
+          'exit 0'
+        ],
+        dotnet: [
+          'if [ "$STUB_MODE" = empty ]; then',
+          '  echo "No test is available in bin/Debug/net8.0/App.dll"',
+          '  exit 1',
+          'fi',
+          'echo "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1"',
+          'exit 0'
+        ]
+      };
+      // gradlew is invoked as ./gradlew from the project directory, so it is a project file rather
+      // than a PATH entry; the fixture below writes it beside the manifest.
+      const GRADLEW = [
+        'if [ "$STUB_MODE" = empty ]; then',
+        '  echo "> Task :test NO-SOURCE"',
+        'else',
+        '  echo "> Task :test"',
+        'fi',
+        'echo "BUILD SUCCESSFUL"',
+        'exit 0'
+      ];
+      // The Python branch runs `$PY -m pytest` and `-m compileall` on a real interpreter, so its
+      // stub is a `python3` earlier on PATH that answers both sub-commands: 5 with nothing collected,
+      // which is the exit pytest itself uses for that outcome.
+      const PYTHON_STUB = [
+        'case "$1" in',
+        '  -m)',
+        '    if [ "$2" = pytest ]; then',
+        '      [ "$STUB_MODE" = empty ] && exit 5',
+        '      echo "1 passed"',
+        '      exit 0',
+        '    fi',
+        '    exit 0 ;;',
+        'esac',
+        'exit 0'
+      ];
+      const TOOL_EXEC = {
+        python: { name: 'python3', lines: PYTHON_STUB },
+        go: { name: 'go', lines: STUB_TOOLS.go },
+        rust: { name: 'cargo', lines: STUB_TOOLS.cargo },
+        maven: { name: 'mvn', lines: STUB_TOOLS.mvn },
+        dotnet: { name: 'dotnet', lines: STUB_TOOLS.dotnet },
+        gradle: { name: null, lines: GRADLEW }
+      };
+      emptyToolDir = await mkdtemp(path.join(os.tmpdir(), 'harness-initgrowth-emptytool-'));
+      const binDir = path.join(emptyToolDir, 'bin');
+      await writeText(path.join(binDir, '.keep'), '');
+      for (const branch of TOOL_BRANCHES) {
+        const tool = TOOL_EXEC[branch.name];
+        const target = tool.name ? path.join(binDir, tool.name) : null;
+        if (target) {
+          await writeText(target, `#!/bin/bash\n${tool.lines.join('\n')}\n`);
+          await chmodExec(target);
+        }
+      }
+      const tail = '=== Verification Complete ===';
+      const redByBranch = new Map();
+      const greenByBranch = new Map();
+      for (const branch of TOOL_BRANCHES) {
+        for (const mode of ['empty', 'full']) {
+          const dir = path.join(emptyToolDir, `${branch.name}-${mode}`);
+          await writeText(path.join(dir, branch.manifest), '');
+          if (branch.name === 'gradle') {
+            await writeText(path.join(dir, 'gradlew'), `#!/bin/bash\n${GRADLEW.join('\n')}\n`);
+            await chmodExec(path.join(dir, 'gradlew'));
+          }
+          await writeText(path.join(dir, 'init.sh'), fallbackTemplate);
+          await chmodExec(path.join(dir, 'init.sh'));
+          const run = await runGateWithShell(shellCandidate, dir, {
+            PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}`,
+            STUB_MODE: mode
+          });
+          if (run.unavailable) continue;
+          if (mode === 'empty') {
+            // Red for the reason the tool gave, quoted rather than paraphrased: the reader has to be
+            // able to tell a project with no tests from a project whose tests failed. Recorded per
+            // branch and required of EVERY branch, because an OR across them would let five correct
+            // branches carry one that went back to reporting an empty suite as verified.
+            const named = new RegExp(`nothing was verified — [^\\n]*${branch.tool}`);
+            redByBranch.set(branch.name, !run.ok && !run.stdout.includes(tail) && named.test(run.stdout));
+          } else {
+            greenByBranch.set(branch.name, run.ok && run.stdout.includes(tail));
+          }
+        }
+      }
+      result.emptyToolRunsRed = TOOL_BRANCHES.every((branch) => redByBranch.get(branch.name) === true);
+      result.emptyToolRunsGreen = TOOL_BRANCHES.every((branch) => greenByBranch.get(branch.name) === true);
+      // Teeth, behavioural this time: the template with one branch's empty-test refusal deleted has
+      // to come back GREEN on the very fixture that made it red, or the red above is the stub's
+      // doing rather than the branch's.
+      const teethDir = path.join(emptyToolDir, 'teeth');
+      const goWithoutRefusalText = fallbackTemplate.replace(goBlock, goWithoutRefusal);
+      await writeText(path.join(teethDir, 'go.mod'), '');
+      await writeText(path.join(teethDir, 'init.sh'), goWithoutRefusalText);
+      await chmodExec(path.join(teethDir, 'init.sh'));
+      const teethRun = await runGateWithShell(shellCandidate, teethDir, {
+        PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}`,
+        STUB_MODE: 'empty'
+      });
+      result.emptyToolGateTeeth = !teethRun.unavailable && teethRun.ok &&
+        teethRun.stdout.includes(tail);
+    }
+
     const sharedArms = result.grew && result.preserved && result.idempotent && result.detectorHasTeeth &&
       result.loopStated && result.loopIsLoadBearing &&
       result.declaredSkipTurnsGateRed && result.declaredSkipDetectorHasTeeth &&
-      result.declaredScriptStillRuns;
+      result.declaredScriptStillRuns &&
+      result.emptyToolBranchesGuarded && result.emptyToolBranchesHaveTeeth;
     result.pass = sharedArms && result.deadBranchRefused && result.rolledBack &&
       result.refusalNamesCommand && result.refusalNameHasTeeth &&
       result.missingRefused && result.unparseableRefused &&
       result.entryAppended && result.entryUnguarded && result.entryIdempotent &&
       result.entryMissingRefused && result.entryRulesHaveTeeth &&
-      result.entryGateFailsWhenUnresolvable && result.declaredSkipGateIsRed && result.declaredGateIsGreen;
+      result.entryGateFailsWhenUnresolvable && result.declaredSkipGateIsRed && result.declaredGateIsGreen &&
+      result.emptyToolRunsRed && result.emptyToolRunsGreen && result.emptyToolGateTeeth;
 
     // Arms 1 and 2 need no shell, so they run everywhere. The arms that confirm behaviour — the
     // run-it confirmation, its rollback and the syntax refusal's effect on a green gate — are exactly
@@ -3513,15 +3749,16 @@ async function checkInitGrowth() {
         result.entryAppended && result.entryUnguarded && result.entryIdempotent &&
         result.entryMissingRefused && result.entryRulesHaveTeeth &&
         result.declaredSkipTurnsGateRed && result.declaredSkipDetectorHasTeeth &&
-        result.declaredScriptStillRuns;
-      result.skipped = 'no POSIX shell: the run-it confirmation, its rollback, the syntax refusal\'s effect on a green gate, "removing the entry turns the gate red", and the two exits of the skipped-declared-check arm were not exercised';
+        result.declaredScriptStillRuns &&
+        result.emptyToolBranchesGuarded && result.emptyToolBranchesHaveTeeth;
+      result.skipped = 'no POSIX shell: the run-it confirmation, its rollback, the syntax refusal\'s effect on a green gate, "removing the entry turns the gate red", the two exits of the skipped-declared-check arm, and the empty and populated runs of every toolchain branch were not exercised';
       return result;
     }
     return result;
   } catch (error) {
     return { ...result, error: error.message };
   } finally {
-    for (const target of [growDir, deadDir, missingDir, unparseDir, entryDir, undefDir, declaredDir, probeDir]) if (target) await rm(target, { recursive: true, force: true });
+    for (const target of [growDir, deadDir, missingDir, unparseDir, entryDir, undefDir, declaredDir, emptyToolDir, probeDir]) if (target) await rm(target, { recursive: true, force: true });
   }
 }
 
