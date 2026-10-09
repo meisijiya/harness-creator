@@ -93,10 +93,13 @@ node ~/.agents/skills/harness-creator/scripts/validate-harness.mjs --target /pat
 
 ## 它会创建什么
 
-目标仓库里**默认只有两个产物**：
+目标仓库里默认落这些：
 
 - `AGENTS.md` 或 `CLAUDE.md`——**薄内核**：只写路由与不变量（项目蓝图、验证命令、启动工作流、工作规则、完成定义、会话结束）
 - `init.sh`——声称完成前必须跑通的验证门禁
+- `docs/agents/harness-creator-verification.md`、`docs/agents/harness-creator-maintenance.md`——细则层：判据与处置动作，**按需读**；指令文件只留指向它们的路由
+
+细则层可用 `--no-agents-layer` 关掉，只留前两个产物，路由节也一并消失。你已授权确切文件清单、或 `docs/agents/` 归你自己所有时，用它。
 
 工单、tracker 配置与交接产物**不在其中**：本技能不建，也不指定它们落在哪。
 
@@ -130,7 +133,7 @@ node ~/.agents/skills/harness-creator/scripts/validate-harness.mjs --target /pat
 
 需要留意的限度：审计按**产物形态**打分（带占位符同样是满分），所以一份合法的声明档也会拿到满分——「什么都没验证」这个事实由 `init.sh` 的运行输出与 `AGENTS.md` 那一行承载，**不由分数承载**。
 
-**没有档位。** 早期版本有一个 `--no-engineering-owner`，用于「没有工程阶段可以交出去」的目录，把生成物切成另一套模板。删掉承接方指向之后，两套模板的差别只剩「具名 / 不具名」，而这两者都不再存在——单一模板对文档仓和工程仓同样成立：三个子系统、两个产物、验证入口照样要求真实检查（`markdownlint-cli2`、链接检查、frontmatter 校验都算），用 `--commands` 给即可。
+**没有档位。** 早期版本有一个 `--no-engineering-owner`，用于「没有工程阶段可以交出去」的目录，把生成物切成另一套模板。删掉承接方指向之后，两套模板的差别只剩「具名 / 不具名」，而这两者都不再存在——单一模板对文档仓和工程仓同样成立：三个子系统、验证入口照样要求真实检查（`markdownlint-cli2`、链接检查、frontmatter 校验都算），用 `--commands` 给即可。
 
 ## 它会检查什么
 
@@ -206,7 +209,7 @@ harness-creator 管"harness 产物落在哪、代理怎么启动、完成怎么�
 
 ## 状态
 
-- [x] 最小化 harness 脚手架（**只出 `AGENTS.md` + `init.sh` 两个产物**）
+- [x] 最小化 harness 脚手架（默认 `AGENTS.md` + `init.sh` + 两份按需读的细则；`--no-agents-layer` 可只留前两个）
 - [x] 三子系统验证
 - [x] HTML 评估报告
 - [x] 结构性基准报告

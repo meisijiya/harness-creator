@@ -642,9 +642,20 @@ const replacements = {
   // the same text is appended into instruction files this skill did not render (LAYER_APPEND
   // below). Two copies of one navigation block would drift, and the copy nobody regenerates is the
   // one that goes stale.
-  LAYER_SECTION: noAgentsLayer ? '' : `\n${layerSectionText}`,
-  LAYER_ROUTE: noAgentsLayer ? '' : '、细则',
-  LAYER_ARTIFACTS: noAgentsLayer
+  // No leading newline: the template line already sits on its own, and a newline prefixed here would
+  // leave two blank lines before the section while starving the one after it — the render would not
+  // mean anything different, but this file's default output is held to byte-stability.
+  LAYER_SECTION: noAgentsLayer ? '' : layerSectionText,
+  // Placement matters more than the words: this sits before the verb, so 细则 reads as one more
+  // route this file offers. Appended after the document list it read as a fourth document to open,
+  // which is the opposite of what it is — and this is the line an agent reads every session.
+  LAYER_ROUTE: noAgentsLayer ? '' : '「细则」与',
+  // Named with a distinct suffix rather than sharing a prefix with SPEC_LAYER_ARTIFACTS:
+  // renderTemplate replaces by split/join in declaration order, and `{{LAYER_ARTIFACTS}}` is a
+  // substring of `{{SPEC_LAYER_ARTIFACTS}}`. It renders correctly only because the spec key is
+  // declared first — an ordering nobody would notice breaking until a product line came out with a
+  // hole in it. Renaming the placeholder removes the dependency instead of documenting it.
+  LAYER_ARTIFACTS_LINE: noAgentsLayer
     ? ''
     : '- `docs/agents/harness-creator-verification.md`、`docs/agents/harness-creator-maintenance.md` — 细则层：判据与处置动作，**按需读**\n'
 };
@@ -688,8 +699,17 @@ if (agentResult.status === 'skipped' && args.blueprint === undefined) {
 // Report, never write: a text-match append cannot tell whether the existing file already covers a
 // section in English or in another wording, and would add a second startup path — two competing
 // instruction files is the drift this skill exists to prevent. Merging is the agent's call.
+//
+// Compared against the RENDERED template, not the file on disk. The section headings a user has to
+// merge are the ones they will see after the placeholders resolve; the raw template still carries
+// `{{LAYER_SECTION}}` where `## 细则` belongs, so reading it would drop that section from the report
+// and leave the two detail documents on disk with nothing pointing at them — orphans the agent is
+// never told about. Only a run that would render the section needs it named.
 const missingAgentSections = agentResult.status === 'skipped'
-  ? diffSections(await readText(path.join(TEMPLATE_DIR, templateName)), await readText(agentPath))
+  ? diffSections(
+    renderTemplate(templateName, await readText(path.join(TEMPLATE_DIR, templateName)), replacements),
+    await readText(agentPath)
+  )
   : [];
 
 // No state artifacts are written. Writing a second record beside whatever the project already uses

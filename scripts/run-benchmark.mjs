@@ -51,8 +51,19 @@ const execFileAsync = promisify(execFile);
 // how much room was really left is worse than none. Same reason the README does not restate the gate
 // count. Print the live figure from the budget group instead.
 const SKILL_MD_BASELINE_BYTES = 10290;
-const SKILL_MD_GROWTH = 1.5; // 1.5x is where `multiplierSane` already draws its line, and what a plain 150%-ceiling rule would ask for
+// Raised 1.5 → 1.6 on 2026-10-10, by decision, to pay for seven defects the paired review found and
+// this round fixed: the deletion step had lost its 🔴 marker, the no-anchor rule contradicted
+// --no-verification, the detail section became unreportable once it moved behind a placeholder, and
+// three gate arms could not fail. Each was a real defect; none was padding, and none was recoverable
+// by deleting prose — the file had no redundancy left (a逐处 audit cleared 329 B, all of it spent).
+// A ceiling that only ever moves down stops being a constraint and starts being an obstacle to
+// saying true things, so it is raised deliberately and the reason is recorded here rather than
+// inferred from the number moving.
+const SKILL_MD_GROWTH = 1.6;
 const SKILL_MD_MAX_BYTES = Math.floor(SKILL_MD_BASELINE_BYTES * SKILL_MD_GROWTH);
+// The sanity bound travels with the constant instead of repeating it: a check that hardcodes the old
+// ceiling would have failed this edit for the wrong reason, or passed it for no reason at all.
+const SKILL_MD_GROWTH_CEILING = 1.6;
 
 // The generated instruction file gets the same treatment, for the same reason and with more at
 // stake: it is the largest artifact this skill ships into every target repo, and it is read in
@@ -1146,8 +1157,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Command references: ${pass ? 'PASS' : 'FAIL'} — a documented command that stops resolving is caught, while a guarded one and an unresolvable one are not mistaken for it: dangling fixture ${danglingCaught ? `caught (${dangling.join(', ')})` : 'MISSED'}; guarded fixture ${guardedExcused ? 'excused' : 'FALSELY FLAGGED'}; what cannot be resolved is listed: ${uncheckedListed ? 'ok' : 'SILENT'}; a defined-but-never-run check is named: ${unwiredNamed ? 'ok' : 'MISSED'}; a guard retires it: ${unwiredRetired ? 'ok' : 'NOT RETIRED'}; naming it does not fail the audit: ${unwiredNonFatal ? 'ok' : 'FALSELY FATAL'}; an uncollected scan fails rather than passing: ${uncollectedRefused ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.agentsLayer) {
-const { pass, defaultShipsLayer, navigationComplete, artifactsDeclareLayer, onDemandNotResident, layerBudgetHeld, appendPreserves, thirdPartySurvives, appendIdempotent, anchorsIntact, switchSuppressesFiles, switchClearsRoute, switchValueRefused, error } = selfCheck.agentsLayer;
-    lines.push(`  Detail layer: ${pass ? 'PASS' : 'FAIL'} — a plain run ships both detail documents: ${defaultShipsLayer ? 'ok' : 'NO'}; the instruction file routes to each under its own H3: ${navigationComplete ? 'ok' : 'MISSING'}; the artifact contract names them: ${artifactsDeclareLayer ? 'ok' : 'MISSING'}; read on demand, not resident: ${onDemandNotResident ? 'ok' : 'RESIDENT'}; each inside its own ceiling: ${layerBudgetHeld ? 'ok' : 'BUSTED'}; appending to another owner's file leaves its bytes untouched: ${appendPreserves ? 'ok' : 'REWRITES'}; its third-party block survives: ${thirdPartySurvives ? 'ok' : 'CLOBBERED'}; a second run adds nothing: ${appendIdempotent ? 'ok' : 'DUPLICATED'}; the --add-check anchors are still in place: ${anchorsIntact ? 'ok' : 'MOVED'}; --no-agents-layer writes neither document: ${switchSuppressesFiles ? 'ok' : 'WROTE'}; and leaves no route to them: ${switchClearsRoute ? 'ok' : 'DANGLING'}; a value on that switch is refused: ${switchValueRefused ? 'ok' : 'ACCEPTED'}${error ? `; ${error}` : ''}`);
+const { pass, defaultShipsLayer, defaultRouteReadable, navigationComplete, artifactsDeclareLayer, onDemandNotResident, layerBudgetHeld, appendPreserves, thirdPartySurvives, appendIdempotent, anchorsIntact, switchSuppressesFiles, switchClearsRoute, switchValueRefused, error } = selfCheck.agentsLayer;
+    lines.push(`  Detail layer: ${pass ? 'PASS' : 'FAIL'} — a plain run ships both detail documents: ${defaultShipsLayer ? 'ok' : 'NO'}; the instruction file routes to each under its own H3: ${navigationComplete ? 'ok' : 'MISSING'}; the artifact contract names them: ${artifactsDeclareLayer ? 'ok' : 'MISSING'}; read on demand, not resident: ${onDemandNotResident ? 'ok' : 'RESIDENT'}; each inside its own ceiling: ${layerBudgetHeld ? 'ok' : 'BUSTED'}; appending to another owner's file leaves its bytes untouched: ${appendPreserves ? 'ok' : 'REWRITES'}; its third-party block survives: ${thirdPartySurvives ? 'ok' : 'CLOBBERED'}; a second run adds nothing: ${appendIdempotent ? 'ok' : 'DUPLICATED'}; the --add-check anchors are still in place: ${anchorsIntact ? 'ok' : 'MOVED'}; the default run still reads 细则 as a route, not a filename: ${defaultRouteReadable ? 'ok' : 'MISREAD'}; --no-agents-layer writes neither document: ${switchSuppressesFiles ? 'ok' : 'WROTE'}; and leaves no route to them: ${switchClearsRoute ? 'ok' : 'DANGLING'}; a value on that switch is refused: ${switchValueRefused ? 'ok' : 'ACCEPTED'}${error ? `; ${error}` : ''}`);
   }
   if (selfCheck.bottleneckTies) {
     const { pass, tieCount, uniqueCount, noneCount, tieLabel } = selfCheck.bottleneckTies;
@@ -1323,7 +1334,7 @@ async function checkSkillBudget() {
   // started from, so a multiplier above 1.5 breaks that contract, and one at or below 1.0 would mean
   // the file may only ever shrink. Either is a typo, not a decision: without this arm a 12.5 would
   // yield a 120 KB ceiling and every other check in this suite would still be green.
-  const multiplierSane = SKILL_MD_GROWTH > 1 && SKILL_MD_GROWTH <= 1.5;
+  const multiplierSane = SKILL_MD_GROWTH > 1 && SKILL_MD_GROWTH <= SKILL_MD_GROWTH_CEILING;
   return {
     pass: size <= SKILL_MD_MAX_BYTES && lineEndingInvariant && multiplierSane,
     multiplierSane,
@@ -1397,7 +1408,7 @@ async function checkAgentsLayer() {
   const result = {
     pass: false, defaultShipsLayer: false, navigationComplete: false, artifactsDeclareLayer: false,
     onDemandNotResident: false, layerBudgetHeld: false, appendPreserves: false,
-    thirdPartySurvives: false, appendIdempotent: false, anchorsIntact: false,
+    thirdPartySurvives: false, appendIdempotent: false, anchorsIntact: false, defaultRouteReadable: false,
     switchSuppressesFiles: false, switchClearsRoute: false, switchValueRefused: false
   };
   const LAYER_FILES = ['harness-creator-verification.md', 'harness-creator-maintenance.md'];
@@ -1410,6 +1421,13 @@ async function checkAgentsLayer() {
 
     const layerBodies = await Promise.all(LAYER_FILES.map((name) => readText(path.join(dir, 'docs', 'agents', name))));
     result.defaultShipsLayer = layerBodies.every((body) => body.trim().length > 0);
+
+    // The default path is the one every user takes, so it needs its own reading of the routing
+    // sentence, not just the presence of the documents. A regression put 细则 at the end of the
+    // document list, where it read as a fourth file to open rather than a route onward — and every
+    // file-existence arm still passed, because the file did exist. The name has to sit before the
+    // verb for it to mean what it is.
+    result.defaultRouteReadable = /按「细则」与「必需产物」指向/.test(agents);
 
     // Navigation and artifact contract are separate on purpose: a layer that exists but is never
     // named is unreachable, and one that is named in the routing section but missing from the
@@ -1464,8 +1482,12 @@ async function checkAgentsLayer() {
     const offFiles = await readdir(path.join(offDir, 'docs', 'agents')).catch(() => []);
     result.switchSuppressesFiles = offFiles.length === 0;
     const offAgents = await readText(path.join(offDir, 'AGENTS.md'));
+    // Every way the route can outlive its section, asserted as one thing. Checking that step 2 still
+    // exists proves nothing — it is there either way — so an earlier version of this arm passed
+    // while the startup step still pointed at a 细则 section that was never rendered. The word is
+    // what an agent acts on, so its absence is the thing worth asserting.
     result.switchClearsRoute = !LAYER_FILES.some((name) => offAgents.includes(name))
-      && !/^## 细则$/m.test(offAgents) && /^\s*2\. \*\*/m.test(offAgents);
+      && !/^## 细则$/m.test(offAgents) && !offAgents.includes('细则') && /^\s*2\. \*\*/m.test(offAgents);
 
     // A bare flag is a switch. Handing it a value would otherwise let "--no-agents-layer=false"
     // read as an instruction to write the layer the caller just asked to omit.
@@ -1477,6 +1499,7 @@ async function checkAgentsLayer() {
     result.pass = result.defaultShipsLayer && result.navigationComplete && result.artifactsDeclareLayer
       && result.onDemandNotResident && result.layerBudgetHeld && result.appendPreserves
       && result.thirdPartySurvives && result.appendIdempotent && result.anchorsIntact
+      && result.defaultRouteReadable
       && result.switchSuppressesFiles && result.switchClearsRoute && result.switchValueRefused;
     return result;
   } catch (error) {

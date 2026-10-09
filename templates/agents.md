@@ -18,7 +18,7 @@
 编写代码前：
 
 1. **确认现场**：运行 `pwd`、`git status --short`，识别已有修改及未跟踪文件
-2. **完整阅读本文件**，按「必需产物」指向打开与本次任务相关的文档：`README`、架构与规格、本项目已有的任务记录{{SPEC_LAYER_NOTE}}{{LAYER_ROUTE}}
+2. **完整阅读本文件**，按{{LAYER_ROUTE}}「必需产物」指向打开与本次任务相关的文档：`README`、架构与规格、本项目已有的任务记录{{SPEC_LAYER_NOTE}}
 3. **运行 `./init.sh`** 验证基线
 4. **查看最近提交**：运行 `git log --oneline -5`
 
@@ -38,7 +38,7 @@
 ## 必需产物
 
 - `init.sh` — 标准启动与验证路径
-{{LAYER_ARTIFACTS}}{{SPEC_LAYER_ARTIFACTS}}
+{{LAYER_ARTIFACTS_LINE}}{{SPEC_LAYER_ARTIFACTS}}
 
 ## 完成定义
 
