@@ -110,8 +110,9 @@ script, do not run it: authoring the checks this points at is the project's own 
 
 --spec-layer adds two project documents beside the harness: mission.md (what this project is and
 what it delivers, what it does NOT do, who it is for) and tech-stack.md (what was detected, with the
-file each detection came from). It is OFF by default and a run without it produces byte-identical
-output to a run that never heard of the flag — the argument against these documents is a real one
+file each detection came from). It is OFF by default and a run without it writes byte-identical
+artifacts on disk to a run that never heard of the flag (the console names the optional layer so the
+agent can ask about it) — the argument against these documents is a real one
 ("what can be derived does not belong in a resident instruction file"), and a switch is the only
 form in which both positions stay true.
 
@@ -143,7 +144,8 @@ const noVerification = Boolean(args.noVerification);
 // --spec-layer adds two project documents beside the harness. It is opt-in because the whole
 // argument for it is disputed in this repository's own tradition — "what can be derived is not a
 // resident instruction file" — and a switch is the only form in which both positions stay true:
-// without it the run is byte-identical to a run that never heard of the idea.
+// without it the artifacts on disk are byte-identical to a run that never heard of the idea; stdout
+// still names the optional layer, which is how the agent learns it can ask for it.
 //
 // A bare flag is refused rather than read as "on". parseArgs hands back `true` when a flag has no
 // value, and treating that as enabled is how a flag ends up silently selecting a mode the reader
@@ -752,12 +754,27 @@ const specReplacements = {
   }
 };
 
+const specResults = [];
 if (specLayer) {
   for (const [name, replacementsFor] of Object.entries(specReplacements)) {
     const specPath = path.join(target, `${name}.md`);
-    results.push(await copyTemplate(`spec-layer/${name}.md`, specPath, replacementsFor, { force, dryRun }));
+    const specResult = await copyTemplate(`spec-layer/${name}.md`, specPath, replacementsFor, { force, dryRun });
+    specResults.push(specResult);
+    results.push(specResult);
   }
 }
+
+// The two pointers into the spec layer (SPEC_LAYER_NOTE, SPEC_LAYER_ARTIFACTS) are rendered into
+// the instruction file, and nothing else. So a run that writes the documents while the instruction
+// file is skipped or refused leaves two files on disk that no session will ever be told about: the
+// instruction file is the one artifact read every session, so "the documents exist" is not
+// "the agent knows they exist". Same shape as the --blueprint orphan fixed earlier today — a product
+// written with no edge pointing at it.
+//
+// The predicate is about THIS run, not about the filesystem: an idempotent re-run skips all three
+// files, and warning there would be a line printed on every repeat, which is how an agent learns to
+// ignore the line. Written documents plus an untouched instruction file is the only orphan shape.
+const orphanSpecLayer = specResults.some((r) => r.status === 'written') && agentResult.status !== 'written';
 
 // The detail layer, unconditionally. The instruction file is read in full every session, so what
 // belongs there is what every session needs: the startup path, the brakes, the completion gate. The
@@ -804,6 +821,45 @@ if (noVerification) {
 console.log('');
 for (const result of results) {
   console.log(`${result.status.toUpperCase()} ${path.relative(target, result.path)}${result.reason ? ` (${result.reason})` : ''}`);
+}
+
+// The optional layer gets a line here for the same reason --dry-run exists at all: the pre-write
+// CHECKPOINT tells the agent to show the plan and wait, and this is the only place it learns there
+// is anything ELSE it could have written. Without it the criterion for asking lives solely in prose
+// the agent has to remember to apply — measured in a live run, an agent that had correctly detected
+// the package manifest still produced no question, because a self-consistent dry-run gave it nothing
+// to ask about. The gate is the evidence the agent already holds — a detected package manifest
+// (package.json, pyproject.toml, requirements.txt, go.mod, Cargo.toml, pom.xml,
+// build.gradle[.kts], *.csproj, *.sln) or a stated blueprint — so a directory with neither still
+// prints nothing: there the two documents would be all 待补, and naming them would be the
+// placeholder-cost this skill exists to avoid. Deliberately NOT also gated on !noAgentsLayer: that
+// switch controls the docs/agents/* detail layer, an orthogonal choice from the repository-root
+// spec layer. Tying the two meant asking "build only the detail layer?" silently suppressed the
+// spec-layer question too — the same class of defect as asking a question whose answer changes
+// nothing.
+//
+// Printed by both paths, and matching in both: the plan must equal the run it previews.
+if (!specLayer && (project.stack !== 'generic' || args.blueprint !== undefined)) {
+  console.log('');
+  console.log('Optional, not written: --spec-layer adds mission.md and tech-stack.md (read on demand).');
+  console.log('Ask the user before adding them; without --spec-layer the artifacts on disk are unchanged.');
+}
+
+// An orphaned spec layer exits non-zero, for the same reason a refused --force and an unlocatable
+// blueprint slot do: the status lines above read as a successful delivery ("WRITTEN mission.md"),
+// and an agent that stops there reports work done while the only artifact any session reads carries
+// no mention of it. That is the silent degradation this skill exists to refuse, so the exit code is
+// the signal that the run is unfinished — the remedy is a hand edit, and the message names it.
+if (orphanSpecLayer) {
+  console.log('');
+  console.log(`ORPHANED SPEC LAYER — ${dryRun ? 'would be written' : 'written'}, but ${agentFile} was not:`);
+  for (const r of specResults) if (r.status === 'written') console.log(`  - ${path.relative(target, r.path)}`);
+  console.log(`  ${agentFile} (${agentResult.status}${agentResult.reason ? ` (${agentResult.reason})` : ''})`);
+  console.log('  Nothing points at these documents: the instruction file is read every session, and the');
+  console.log('  only channel for the pointers is the render that just did not happen.');
+  console.log(`  Merge them into ${agentFile} by hand, in both places: the startup path (the read-on-demand pointer)`);
+  console.log('  and 必需产物. Do not add a second copy of a section the file already covers.');
+  process.exitCode = 1;
 }
 
 // A refused --force exits non-zero. The status line above already names the file and the sections,
