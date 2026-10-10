@@ -754,12 +754,27 @@ const specReplacements = {
   }
 };
 
+const specResults = [];
 if (specLayer) {
   for (const [name, replacementsFor] of Object.entries(specReplacements)) {
     const specPath = path.join(target, `${name}.md`);
-    results.push(await copyTemplate(`spec-layer/${name}.md`, specPath, replacementsFor, { force, dryRun }));
+    const specResult = await copyTemplate(`spec-layer/${name}.md`, specPath, replacementsFor, { force, dryRun });
+    specResults.push(specResult);
+    results.push(specResult);
   }
 }
+
+// The two pointers into the spec layer (SPEC_LAYER_NOTE, SPEC_LAYER_ARTIFACTS) are rendered into
+// the instruction file, and nothing else. So a run that writes the documents while the instruction
+// file is skipped or refused leaves two files on disk that no session will ever be told about: the
+// instruction file is the one artifact read every session, so "the documents exist" is not
+// "the agent knows they exist". Same shape as the --blueprint orphan fixed earlier today — a product
+// written with no edge pointing at it.
+//
+// The predicate is about THIS run, not about the filesystem: an idempotent re-run skips all three
+// files, and warning there would be a line printed on every repeat, which is how an agent learns to
+// ignore the line. Written documents plus an untouched instruction file is the only orphan shape.
+const orphanSpecLayer = specResults.some((r) => r.status === 'written') && agentResult.status !== 'written';
 
 // The detail layer, unconditionally. The instruction file is read in full every session, so what
 // belongs there is what every session needs: the startup path, the brakes, the completion gate. The
@@ -828,6 +843,23 @@ if (!specLayer && (project.stack !== 'generic' || args.blueprint !== undefined))
   console.log('');
   console.log('Optional, not written: --spec-layer adds mission.md and tech-stack.md (read on demand).');
   console.log('Ask the user before adding them; without --spec-layer the artifacts on disk are unchanged.');
+}
+
+// An orphaned spec layer exits non-zero, for the same reason a refused --force and an unlocatable
+// blueprint slot do: the status lines above read as a successful delivery ("WRITTEN mission.md"),
+// and an agent that stops there reports work done while the only artifact any session reads carries
+// no mention of it. That is the silent degradation this skill exists to refuse, so the exit code is
+// the signal that the run is unfinished — the remedy is a hand edit, and the message names it.
+if (orphanSpecLayer) {
+  console.log('');
+  console.log(`ORPHANED SPEC LAYER — ${dryRun ? 'would be written' : 'written'}, but ${agentFile} was not:`);
+  for (const r of specResults) if (r.status === 'written') console.log(`  - ${path.relative(target, r.path)}`);
+  console.log(`  ${agentFile} (${agentResult.status}${agentResult.reason ? ` (${agentResult.reason})` : ''})`);
+  console.log('  Nothing points at these documents: the instruction file is read every session, and the');
+  console.log('  only channel for the pointers is the render that just did not happen.');
+  console.log(`  Merge them into ${agentFile} by hand, in both places: the startup path (the read-on-demand pointer)`);
+  console.log('  and 必需产物. Do not add a second copy of a section the file already covers.');
+  process.exitCode = 1;
 }
 
 // A refused --force exits non-zero. The status line above already names the file and the sections,

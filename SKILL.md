@@ -91,7 +91,13 @@ node <技能目录>/scripts/run-benchmark.mjs --target /path/to/project --html /
 
 ### 更新 harness
 
-无独立脚本。五步按 `references/harness-maintenance-pattern.md`：取证 → 两份清单 → 🔴 CHECKPOINT → 落地 → 复验。
+无独立脚本。五步按 `references/harness-maintenance-pattern.md`，每步的输入 → 输出：
+
+1. 取证 ←目标仓路径 + 本次会话产出 → 失准点候选
+2. 两份清单 ←失准点候选 → 候选改动 | 需你判断
+3. 🔴 CHECKPOINT ←两份清单 → 已批准范围
+4. 落地 ←已批准项 → 改后的指令文件 / `init.sh`
+5. 复验 ←重跑验证 → 净增/净减 + 未闭合项
 
 ```bash
 # 取证：得分与 FAIL 行是候选的证据，不是结论
