@@ -110,8 +110,9 @@ script, do not run it: authoring the checks this points at is the project's own 
 
 --spec-layer adds two project documents beside the harness: mission.md (what this project is and
 what it delivers, what it does NOT do, who it is for) and tech-stack.md (what was detected, with the
-file each detection came from). It is OFF by default and a run without it produces byte-identical
-output to a run that never heard of the flag — the argument against these documents is a real one
+file each detection came from). It is OFF by default and a run without it writes byte-identical
+artifacts on disk to a run that never heard of the flag (the console names the optional layer so the
+agent can ask about it) — the argument against these documents is a real one
 ("what can be derived does not belong in a resident instruction file"), and a switch is the only
 form in which both positions stay true.
 
@@ -143,7 +144,8 @@ const noVerification = Boolean(args.noVerification);
 // --spec-layer adds two project documents beside the harness. It is opt-in because the whole
 // argument for it is disputed in this repository's own tradition — "what can be derived is not a
 // resident instruction file" — and a switch is the only form in which both positions stay true:
-// without it the run is byte-identical to a run that never heard of the idea.
+// without it the artifacts on disk are byte-identical to a run that never heard of the idea; stdout
+// still names the optional layer, which is how the agent learns it can ask for it.
 //
 // A bare flag is refused rather than read as "on". parseArgs hands back `true` when a flag has no
 // value, and treating that as enabled is how a flag ends up silently selecting a mode the reader
@@ -811,15 +813,21 @@ for (const result of results) {
 // is anything ELSE it could have written. Without it the criterion for asking lives solely in prose
 // the agent has to remember to apply — measured in a live run, an agent that had correctly detected
 // the package manifest still produced no question, because a self-consistent dry-run gave it nothing
-// to ask about. Gated on the same evidence SKILL.md's first step names, so a directory with neither a
-// manifest nor a stated blueprint still prints nothing: there the two documents would be all 待补,
-// and naming them would be the placeholder-cost this skill exists to avoid.
+// to ask about. The gate is the evidence the agent already holds — a detected package manifest
+// (package.json, pyproject.toml, requirements.txt, go.mod, Cargo.toml, pom.xml,
+// build.gradle[.kts], *.csproj, *.sln) or a stated blueprint — so a directory with neither still
+// prints nothing: there the two documents would be all 待补, and naming them would be the
+// placeholder-cost this skill exists to avoid. Deliberately NOT also gated on !noAgentsLayer: that
+// switch controls the docs/agents/* detail layer, an orthogonal choice from the repository-root
+// spec layer. Tying the two meant asking "build only the detail layer?" silently suppressed the
+// spec-layer question too — the same class of defect as asking a question whose answer changes
+// nothing.
 //
 // Printed by both paths, and matching in both: the plan must equal the run it previews.
-if (!specLayer && !noAgentsLayer && (project.stack !== 'generic' || args.blueprint !== undefined)) {
+if (!specLayer && (project.stack !== 'generic' || args.blueprint !== undefined)) {
   console.log('');
   console.log('Optional, not written: --spec-layer adds mission.md and tech-stack.md (read on demand).');
-  console.log('Ask the user before adding them; without --spec-layer the output is unchanged.');
+  console.log('Ask the user before adding them; without --spec-layer the artifacts on disk are unchanged.');
 }
 
 // A refused --force exits non-zero. The status line above already names the file and the sections,
