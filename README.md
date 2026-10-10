@@ -112,7 +112,7 @@ node ~/.agents/skills/harness-creator/scripts/validate-harness.mjs --target /pat
 
 **不给这个开关时，落盘的产物与从前逐字节相同。** 这是硬要求，不是承诺：本仓库自己的原则是「能推导的不进常驻指令文件」，而规范层要正面反对这条，所以做成开关而不是默认行为，两种立场才能同时成立。（控制台输出是另一回事：见下，代理需要在那儿看见这个可选层才问得出问题。）
 
-代理会**按项目情况主动问一次**要不要建：检测到包清单或栈标志文件（`package.json`、`go.mod`、`pyproject.toml`、`Cargo.toml` 等）、或你已经陈述过项目使命时才问；两者都没有就不问——那种情况下建出来只会是两份全「待补」的占位符，比空白更贵。这个判据也会出现在 `--dry-run` 与真实运行的输出里（`Optional, not written: --spec-layer …`），所以代理不必只靠记住散文规则去提问。两份文档建好之后按 [`references/harness-maintenance-pattern.md`](references/harness-maintenance-pattern.md) 的「规范层维护」改事实，不重跑生成器覆盖。
+代理会**按项目情况主动问一次**要不要建：检测到包清单或栈标志文件（`package.json`、`go.mod`、`pyproject.toml`、`Cargo.toml` 等）、或你已经陈述过项目使命时才问；两者都没有就不问——那种情况下建出来只会是两份全「待补」的占位符，比空白更贵。脚本提示覆盖的是**探测到清单/栈标志**这一类，它会出现在 `--dry-run` 与真实运行的输出里（`Optional, not written: --spec-layer …`）；**「你已陈述过项目使命」那一类不靠脚本输出**，由 SKILL.md 第一步第 2 条承载——它早于第 4 步产出 `--blueprint`，此刻脚本还没有那个证据。两份文档建好之后按 [`references/harness-maintenance-pattern.md`](references/harness-maintenance-pattern.md) 的「规范层维护」改事实，不重跑生成器覆盖。
 
 两条不让它腐化的硬边界：
 
