@@ -16,3 +16,4 @@
 2026-10-10T16:15	4f872ae	harness-creator	-	-	fixed	dim2	dim2 加权缺口 1.20 闭合: 「更新 harness」五步由纯名字串改为逐步「输入 → 输出」, 沿用本文件常见任务表同一形状。采取改写而非增写, 未删任何内容。SKILL.md 16008→16285/16464(余 179B)	paired
 2026-10-10T16:20	4f872ae	harness-creator	-	-	verified	-	终态: self-check exit 0 全绿(Spec layer 五组新臂全 ok: hint×3 + orphan×2; SKILL.md design rule ok; Wrap-up outputs ok; Report coverage ok; Orphan 248 声明); check-links 18 links OK	paired
 2026-10-10T16:20	-	harness-creator	-	-	note	纪律	实验设计失误一次: ARM D 首轮 sed 用 ^...$ 锚点, 在 CRLF checkout 下未命中(行尾 \r 使 $ 失配), 却因未加 set -e 继续跑完并输出「PASS」, 若采信即等于拿未变异树当证据。改用行号定位 sed '862s/…/…/' 后才打出真 FAIL。Windows CRLF 下 sed 锚点不可靠	dry_run
+2026-10-10T16:45	ee0b50f	harness-creator	-	-	verified	-	推送并刷新安装副本: 推 auto-optimize/20261010-r2 后 no-ff 合入 master 并推(ee0b50f), 再 npx skills update harness-creator。安装副本与仓库四个关键文件逐字节一致(SKILL.md/README.md/create-harness.mjs/run-benchmark.mjs), 孤儿告警与新提示均在其中; 用安装副本实跑: 提示出现=1、默认跑 exit=0、孤儿场景 exit=1、自检 exit 0 全绿	full_test
