@@ -662,6 +662,12 @@ const replacements = {
     : '- `docs/agents/harness-creator-verification.md`、`docs/agents/harness-creator-maintenance.md` — 细则层：判据与处置动作，**按需读**\n'
 };
 
+// The names the two pointers above mention. The orphan check reads the instruction file looking for
+// exactly these, so it must live beside the literals that introduce them rather than at the check:
+// a third copy of "mission.md" in a comment said to be authoritative is the same drift the merge of
+// the two HINT_LINE copies removed.
+const SPEC_LAYER_POINTERS = ['mission.md', 'tech-stack.md'];
+
 const results = [];
 const agentPath = path.join(target, agentFile);
 const agentResult = await copyTemplate(templateName, agentPath, replacements, { force, dryRun });
@@ -776,16 +782,52 @@ if (specLayer) {
 }
 
 // The two pointers into the spec layer (SPEC_LAYER_NOTE, SPEC_LAYER_ARTIFACTS) are rendered into
-// the instruction file, and nothing else. So a run that writes the documents while the instruction
-// file is skipped or refused leaves two files on disk that no session will ever be told about: the
-// instruction file is the one artifact read every session, so "the documents exist" is not
-// "the agent knows they exist". Same shape as the --blueprint orphan fixed earlier today — a product
-// written with no edge pointing at it.
+// the instruction file, and nothing else. So documents sitting on disk that no session will ever be
+// told about are a product with no edge pointing at it — the same shape as the --blueprint orphan
+// fixed earlier today. The instruction file is the one artifact read every session, so "the
+// documents exist" is not "the agent knows they exist".
 //
-// The predicate is about THIS run, not about the filesystem: an idempotent re-run skips all three
-// files, and warning there would be a line printed on every repeat, which is how an agent learns to
-// ignore the line. Written documents plus an untouched instruction file is the only orphan shape.
-const orphanSpecLayer = specResults.some((r) => r.status === 'written') && agentResult.status !== 'written';
+// The predicate is therefore a pure reading of the current state — "right now, does a session that
+// reads the instruction file get told these documents exist?" — and deliberately asks nothing about
+// what THIS run did. Both earlier predicates keyed on the per-run status and both were wrong, in
+// opposite directions:
+//
+//   - "wrote documents this run AND did not write the instruction file" exited 1 on a healthy
+//     repository, handing the agent a repair to perform against files that needed none.
+//   - "wrote documents this run" went silent the second time round: the documents now SKIP, so the
+//     agent's second run printed SKIPPED, exited 0, and reported an unresolved orphan as resolved.
+//     One unfixed state, one warning — the worst of both, because the exit code is exactly what the
+//     agent trusts to decide the run is finished.
+//
+// The boundary drawn here: the warning fires on the STATE, not on the run, so it also fires on a run
+// that never asked for the layer and wrote nothing. That is intentional. Whoever re-runs the
+// generator over a repository holding these two documents is the one agent in a position to notice
+// that no session will find them, and the skill's own doctrine refuses to let a defect survive on
+// the grounds that this particular invocation did not cause it. The alternative — only warn when
+// --spec-layer was passed — re-creates the same one-shot bug in a narrower case: the agent that
+// generated the orphan usually does not re-run with the same flags.
+// The complementary boundary, and the one that keeps a healthy repository quiet: pointers present,
+// this run skipped or not, is never an orphan. That case is not "nothing to say", it is the ordinary
+// idempotent re-run, and a warning printed on every repeat is a line the agent learns to ignore,
+// which deletes the value of the warning everywhere it is true.
+//
+// Under --dry-run the state on disk has not changed and the documents do not exist yet, so a preview
+// of a run that would create them is judged on what that run would leave behind — otherwise the one
+// output the agent reads BEFORE agreeing to write is the one output that cannot tell it the plan
+// orphans the layer.
+const specDocsPresent = [];
+for (const name of SPEC_LAYER_POINTERS) {
+  const onDisk = await exists(path.join(target, name));
+  // dryRun reports the same 'written' status it would really use without touching the filesystem,
+  // so the plan counts as "these two documents will be here".
+  const plannedHere = dryRun && specResults.some((r) => path.basename(r.path) === name);
+  if (onDisk || plannedHere) specDocsPresent.push(name);
+}
+const instructionText = await exists(agentPath) ? await readText(agentPath) : '';
+const specLayerPointed = SPEC_LAYER_POINTERS.every((name) => instructionText.includes(name));
+// The preview's own render is not on disk to be read; under --spec-layer it carries both pointers.
+const specLayerPointedByPlan = dryRun && specLayer && agentResult.status === 'written';
+const orphanSpecLayer = specDocsPresent.length > 0 && !specLayerPointed && !specLayerPointedByPlan;
 
 // The detail layer, unconditionally. The instruction file is read in full every session, so what
 // belongs there is what every session needs: the startup path, the brakes, the completion gate. The
@@ -865,13 +907,19 @@ if (!specLayer && (project.stack !== 'generic' || args.blueprint !== undefined))
 // and an agent that stops there reports work done while the only artifact any session reads carries
 // no mention of it. That is the silent degradation this skill exists to refuse, so the exit code is
 // the signal that the run is unfinished — the remedy is a hand edit, and the message names it.
+//
+// The message names the documents that are on disk rather than the ones this run wrote, because the
+// predicate no longer knows or cares which those were: on the third identical run the status lines
+// all read SKIPPED, and a warning phrased as "written" would be contradicted by the lines directly
+// above it.
 if (orphanSpecLayer) {
   console.log('');
-  console.log(`ORPHANED SPEC LAYER — ${dryRun ? 'would be written' : 'written'}, but ${agentFile} was not:`);
-  for (const r of specResults) if (r.status === 'written') console.log(`  - ${path.relative(target, r.path)}`);
+  console.log(`ORPHANED SPEC LAYER — ${agentFile} does not mention documents that exist in this project:`);
+  for (const name of specDocsPresent) console.log(`  - ${name}`);
   console.log(`  ${agentFile} (${agentResult.status}${agentResult.reason ? ` (${agentResult.reason})` : ''})`);
   console.log('  Nothing points at these documents: the instruction file is read every session, and the');
-  console.log('  only channel for the pointers is the render that just did not happen.');
+  console.log('  only channel for the pointers is a render of it. Re-running does not fix this — the');
+  console.log('  documents now skip, so every later run ends the same way until the file below is edited.');
   console.log(`  Merge them into ${agentFile} by hand, in both places: the startup path (the read-on-demand pointer)`);
   console.log('  and 必需产物. Do not add a second copy of a section the file already covers.');
   process.exitCode = 1;
