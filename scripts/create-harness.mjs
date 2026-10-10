@@ -806,6 +806,22 @@ for (const result of results) {
   console.log(`${result.status.toUpperCase()} ${path.relative(target, result.path)}${result.reason ? ` (${result.reason})` : ''}`);
 }
 
+// The optional layer gets a line here for the same reason --dry-run exists at all: the pre-write
+// CHECKPOINT tells the agent to show the plan and wait, and this is the only place it learns there
+// is anything ELSE it could have written. Without it the criterion for asking lives solely in prose
+// the agent has to remember to apply — measured in a live run, an agent that had correctly detected
+// the package manifest still produced no question, because a self-consistent dry-run gave it nothing
+// to ask about. Gated on the same evidence SKILL.md's first step names, so a directory with neither a
+// manifest nor a stated blueprint still prints nothing: there the two documents would be all 待补,
+// and naming them would be the placeholder-cost this skill exists to avoid.
+//
+// Printed by both paths, and matching in both: the plan must equal the run it previews.
+if (!specLayer && !noAgentsLayer && (project.stack !== 'generic' || args.blueprint !== undefined)) {
+  console.log('');
+  console.log('Optional, not written: --spec-layer adds mission.md and tech-stack.md (read on demand).');
+  console.log('Ask the user before adding them; without --spec-layer the output is unchanged.');
+}
+
 // A refused --force exits non-zero. The status line above already names the file and the sections,
 // but exit 0 on a run whose whole point was to overwrite would report success for work that
 // deliberately did not happen — the same shape the blueprint refusal and every other refusal here
