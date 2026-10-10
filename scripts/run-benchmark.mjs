@@ -123,7 +123,8 @@ const DISCOVERABLE_CONTENT = [
 const SELF_CHECK_GROUPS = [
   'budget', 'agentsBudget', 'agentsDiscover', 'artifactPurity', 'maintenance', 'skillDesign',
   'wrapupOutput', 'dryRun', 'selfRefs', 'references', 'bottleneckTies', 'foreignAudit', 'blankGate',
-  'blueprint', 'agentFile', 'initGrowth', 'specLayer', 'agentsLayer', 'nextSteps', 'reportContract', 'taskContract', 'maintContract', 'noDeadDecls', 'gateArgs'
+  'blueprint', 'agentFile', 'initGrowth', 'specLayer', 'agentsLayer', 'nextSteps', 'reportContract', 'taskContract', 'maintContract', 'noDeadDecls', 'gateArgs',
+  'specAsk'
 ];
 
 // One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
@@ -154,6 +155,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['taskContract', (group) => ` The instruction file scopes work to what the user authorized: explicit authorization to advance, picking and status updates only while an authorized deliverable is being executed, a baseline failure split into pre-existing versus introduced, a commit gated on the definition of done rather than on a passing check, existing modifications and untracked files protected from any cleanup, and a read-only task that only reports harness drift (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-requirement teeth ${group.teeth ? 'ok' : 'BLIND'}; forbidden-list witness ${group.forbidWitness ? 'ok' : 'BLIND'}; old forms ${group.oldFormsRejected ? 'refused' : 'ACCEPTED'}`}).`],
   ['maintContract', (group) => ` A full audit score is not an exit condition in the maintenance reference: the score row still routes to the actual misalignment check, keeps the anti-gaming clause, and the shared content-review table states the read-only, baseline-scope, commit-authorization, existing-work and full-score rules — proven per guard, with the whole table deleted, and by the retired short-circuit row (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-guard teeth ${group.teeth ? 'ok' : 'BLIND'}; whole table removed ${group.tableRemovedRefused ? 'refused' : 'ACCEPTED'}; retired row ${group.oldRowRejected ? 'refused' : 'ACCEPTED'}`}).`],
   ['noDeadDecls', (group) => ` This suite carries no orphan: ${group.declaredCount} top-level declarations under scripts/ are all read somewhere in the tree, the ${group.helpEntries} numbered --help entries annotate exactly the ${SELF_CHECK_GROUPS.length} live group keys in both directions, and every flag the generator documents is a flag it reads (${group.pass ? 'verified' : `unread ${(group.dead || []).join(', ') || 'none'}; ghost keys ${(group.ghostKeys || []).join(', ') || 'none'}; groups with no help entry ${(group.missingKeys || []).join(', ') || 'none'}; keys documented twice ${(group.duplicateKeys || []).join(', ') || 'none'}; documented-but-unread flags ${(group.unreadFlags || []).join(', ') || 'none'}; artifact-adding flags missing from SKILL.md ${(group.undocumentedFlags || []).join(', ') || 'none'} (baseline ${group.artifactFlagBaseline} files); lying fixtures ${(group.lyingFlags || []).join(', ') || 'none'}; detector teeth decls ${group.teethDeclarations ? 'ok' : 'BLIND'}, help ${group.teethHelp ? 'ok' : 'BLIND'}, flags ${group.teethFlags ? 'ok' : 'BLIND'}`}).`],
+  ['specAsk', (group) => ` The one instruction line that decides whether the agent raises the spec layer at all is machine-checked rather than trusted to prose: SKILL.md's first step names manifest files the stack detector really recognises — in both directions, so the prose cannot claim evidence the code ignores or quietly drop evidence the code acts on — states the non-interactive fallback, and the pair is pinned by behaviour rather than by string comparison: a directory carrying a Go module is asked about (the stack-flag branch the hint arms never exercised, because they all used package.json) while a bare directory is not (${group.pass ? 'verified' : `rule ${group.ruleFound ? 'found' : 'MISSING'}; evidence ${group.evidenceMatchesDetector ? 'agrees' : `DRIFTED (doc names ${(group.docNamed || []).join(', ') || 'none'}; detector covers ${(group.detectorCovered || []).join(', ') || 'none'}; contract missing ${(group.contractMissing || []).join(', ') || 'none'}; contract unknown to detector ${(group.contractUnknown || []).join(', ') || 'none'}; named but not detected ${(group.docUnknown || []).join(', ') || 'none'})`}; non-interactive fallback ${group.nonInteractiveFallbackStated ? 'stated' : 'MISSING'}; predicate ${group.predicateAgreesWithCode ? 'agrees' : `DRIFTED (asked on a Go module: ${group.askedOnStackFlag ? 'yes' : 'NO'}; silent on a bare directory: ${group.silentOnBareTarget ? 'yes' : 'NO'})`}`}).`],
   ['gateArgs', (group) => ` This script's own switches cannot switch it off: a non-numeric --min-score, --min-eval-score or --min-self-check-score is refused before the run starts rather than becoming NaN and turning the comparison permanently false, and --no-self-check is refused rather than skipping the only check that proves the bundled scripts still run — proven by deleting the refusal from a copy of this file in turn, while an explicit --min-score=0 still runs as the deliberate relaxation it is (${group.pass ? 'verified' : `refusal ${group.refusalsCaught}/${group.refusalsTotal}; exit ${group.refusalExits ? 'ok' : 'NO'}; teeth ${group.teethThresholds ? 'ok' : 'BLIND'}/${group.teethSelfCheck ? 'ok' : 'BLIND'}; zero still runs ${group.zeroStillRuns ? 'ok' : 'REFUSED'}; accepted ${(group.accepted || []).join(', ') || 'none'}; misreported ${(group.misreported || []).join(', ') || 'none'}`}).`]
 ]);
 
@@ -445,8 +447,62 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['taskContract', 'Task authorization'],
   ['maintContract', 'Maintenance contract'],
   ['noDeadDecls', 'Orphan declarations'],
+  ['specAsk', 'Spec-layer ask rule'],
   ['gateArgs', 'Gate switches']
 ]);
+
+// The manifests SKILL.md's first step is REQUIRED to name when it tells the agent to ask about the
+// spec layer. A literal on purpose, for the reason the artifact-flag table records: derived from the
+// doc it would agree with the doc by construction, and deleting a row would delete the arm with it —
+// the self-shrinking table this suite has been bitten by twice. Derived from the detector instead it
+// would demand the prose enumerate every suffix branch (*.csproj, build.gradle.kts), which is the
+// wrong contract: the prose names representatives and says 等, and an agent needs a sample it can
+// recognise, not the detector's source.
+//
+// So the literal carries only what the RULE must keep saying, and the arms below carry the truth:
+// every name here must be one detectProject really recognises (so the doc cannot drift toward a file
+// the code ignores), and every manifest-shaped name the doc does mention must be one the detector
+// recognises (so the code cannot grow a branch the instruction line never tells the agent about).
+// Declared here, ahead of the runSelfCheck() call site, for the temporal-dead-zone reason recorded
+// above CONSOLE_GROUP_LABELS.
+const SPEC_ASK_EVIDENCE = ['package.json', 'go.mod', 'pyproject.toml', 'Cargo.toml'];
+// The generator's own hint line, read from the same arm specLayer asserts rather than a second copy:
+// two literals for one stdout string is the shape that let the two drift.
+const SPEC_ASK_HINT_LINE = 'Optional, not written: --spec-layer adds mission.md and tech-stack.md (read on demand).';
+
+// The first step's numbered item that carries the spec-layer question, read from the section rather
+// than from the whole file: SKILL.md names several artifacts elsewhere, and a match anywhere in the
+// document would let an unrelated sentence satisfy the arm. Declared here for the same TDZ reason.
+const specAskRuleIn = (skill) => (skill.split(/^##\s+/m).slice(1).find((part) => part.startsWith('第一步')) || '')
+  .split(/\r?\n/)
+  .find((line) => /^\s*\d+\./.test(line) && /规范层/.test(line)) || '';
+
+// Manifest-shaped names only. The rule line also quotes --spec-layer prose, and a backtick sweep
+// without this shape test would treat every quoted token as evidence the detector owes.
+const manifestTokensIn = (text) => [...new Set(
+  [...text.matchAll(/`([^`]+)`/g)]
+    .map((match) => match[1])
+    .filter((token) => /^[\w.*-]+\.(json|mod|toml|txt|xml|gradle|kts|csproj|sln)$/.test(token))
+)];
+
+// What detectProject really recognises, read off its source rather than a hand-kept list: the
+// has('…') branches, the package.json branch, and the suffix branches (*.csproj/*.sln) that carry
+// no has() at all. A list maintained by hand here would be a third copy of the same fact.
+const detectorManifestsIn = (utils) => {
+  const start = utils.indexOf('export async function detectProject');
+  if (start === -1) return [];
+  const body = utils.slice(start, utils.indexOf('\nexport ', start + 1) === -1 ? undefined : utils.indexOf('\nexport ', start + 1));
+  const names = new Set([...body.matchAll(/\bhas\('([^']+)'\)/g)].map((match) => match[1]));
+  if (/packageJson/.test(body)) names.add('package.json');
+  for (const match of body.matchAll(/endsWith\('\.([\w.]+)'\)/g)) names.add(`*.${match[1]}`);
+  return [...names];
+};
+
+// Does a name the doc uses fall under one the detector covers, honouring the `*.ext` suffix form the
+// detector also uses? Kept as a helper so both directions of the comparison are the same judgement
+// rather than a strict equality that would call *.csproj and requirements.txt drift.
+const detectorCovers = (name, covered) => covered.some((entry) => entry === name
+  || (entry.startsWith('*.') && name.endsWith(entry.slice(1))));
 
 
 
@@ -986,7 +1042,14 @@ Runs a lightweight harness benchmark:
      deleted from a copy in turn so a check that would pass without it is caught. --min-score=0 is
      asserted to still run, because a refusal that also ate deliberate relaxations would be its own
      kind of wrong. [gateArgs]
-29. Produces a JSON report and optional HTML report.
+29. Checks that SKILL.md's first-step rule for raising the spec layer is machine-checked rather
+     than trusted to prose: the manifest files it names are compared with the ones the stack
+     detector actually recognises, in both directions and with the difference named, the
+     non-interactive fallback is required, and the pair is pinned by behaviour — a Go module is
+     asked about while a bare directory is not, which is the stack-flag branch the package.json
+     hint arms never exercised. The line had no machine carrier at all, and a rule that lives
+     only in prose is one nothing can catch an agent misreading. [specAsk]
+30. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -1218,6 +1281,10 @@ const { pass, defaultShipsLayer, defaultRouteReadable, navigationComplete, artif
     const { pass, dead = [], ghostKeys = [], missingKeys = [], duplicateKeys = [], unreadFlags = [], declaredCount, helpEntries, teethDeclarations, teethHelp, teethFlags, undocumentedFlags = [], lyingFlags = [], artifactFlagBaseline, error } = selfCheck.noDeadDecls;
     lines.push(`  Orphan declarations: ${pass ? 'PASS' : 'FAIL'} — ${declaredCount} top-level declarations under scripts/, all read somewhere in the tree: ${dead.length === 0 ? 'ok' : `${dead.length} UNREAD (${dead.join(', ')})`}; ${helpEntries} numbered --help entries vs ${SELF_CHECK_GROUPS.length} group keys, equal in both directions: ${ghostKeys.length === 0 && missingKeys.length === 0 && duplicateKeys.length === 0 ? 'ok' : `NO (ghost: ${ghostKeys.join(', ') || 'none'}; missing entry: ${missingKeys.join(', ') || 'none'}; twice: ${duplicateKeys.join(', ') || 'none'})`}; documented-but-unread generator flags: ${unreadFlags.length === 0 ? 'none' : unreadFlags.join(', ')}; flags missing from the Usage synopsis: ${(selfCheck.noDeadDecls.missingFromSynopsis || []).length === 0 ? 'none' : selfCheck.noDeadDecls.missingFromSynopsis.join(', ')}; a flag that ADDS artifacts and is missing from SKILL.md: ${undocumentedFlags.length === 0 ? `none (baseline ${artifactFlagBaseline} files)` : `UNDOCUMENTED ${undocumentedFlags.join(', ')}`}; artifact-adding fixtures that do not actually add: ${lyingFlags.length === 0 ? 'none' : lyingFlags.join(', ')}; detector teeth: declarations ${teethDeclarations ? 'ok' : 'BLIND'}, help ${teethHelp ? 'ok' : 'BLIND'}, flags ${teethFlags ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.specAsk) {
+    const { pass, ruleFound, evidenceMatchesDetector, nonInteractiveFallbackStated, predicateAgreesWithCode, askedOnStackFlag, silentOnBareTarget, docNamed = [], detectorCovered = [], contractMissing = [], contractUnknown = [], docUnknown = [], error } = selfCheck.specAsk;
+    lines.push(`  Spec-layer ask rule: ${pass ? 'PASS' : 'FAIL'} — the first-step rule is present: ${ruleFound ? 'ok' : 'MISSING'}; the manifests it names match the stack detector in both directions: ${evidenceMatchesDetector ? 'ok' : `DRIFTED (doc: ${docNamed.join(', ') || 'none'}; detector: ${detectorCovered.join(', ') || 'none'}; contract missing from doc: ${contractMissing.join(', ') || 'none'}; contract the detector does not know: ${contractUnknown.join(', ') || 'none'}; named but undetected: ${docUnknown.join(', ') || 'none'})`}; the non-interactive fallback is stated: ${nonInteractiveFallbackStated ? 'ok' : 'MISSING'}; and the behaviour agrees: asked on a directory carrying go.mod: ${askedOnStackFlag ? 'ok' : 'NO'}; silent on a bare directory: ${silentOnBareTarget ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
+  }
   if (selfCheck.gateArgs) {
     const { pass, refusalsCaught = 0, refusalsTotal = 0, refusalExits, teethThresholds, teethSelfCheck, zeroStillRuns, accepted = [], misreported = [], error } = selfCheck.gateArgs;
     lines.push(`  Gate switches: ${pass ? 'PASS' : 'FAIL'} — this script cannot be switched off: ${refusalsCaught}/${refusalsTotal} malformed invocations refused, each exiting 2: ${refusalExits ? 'ok' : 'NO'}; non-numeric thresholds still accepted once the refusal is deleted: ${teethThresholds ? 'ok' : 'BLIND'}; --no-self-check still accepted once its refusal is deleted: ${teethSelfCheck ? 'ok' : 'BLIND'}; --min-score=0 still runs: ${zeroStillRuns ? 'ok' : 'REFUSED'}${accepted.length ? `; wrongly accepted: ${accepted.join(', ')}` : ''}${misreported.length ? `; refusal without a usable message: ${misreported.join(', ')}` : ''}${error ? ` — ${error}` : ''}`);
@@ -1272,6 +1339,7 @@ async function runSelfCheck() {
       taskContract: async () => (await evaluateContracts()).taskContract,
       maintContract: () => checkMaintContract(),
       noDeadDecls: () => checkNoDeadDeclarations(),
+      specAsk: () => checkSpecAsk(),
       gateArgs: () => checkGateArgs()
     };
     const groups = {};
@@ -1705,6 +1773,74 @@ async function checkSpecLayer() {
     return { ...result, error: error.message };
   } finally {
     for (const target of [plainDir, specDir, leakDir, hintDir, silentDir, realDir, orphanDir]) if (target) await rm(target, { recursive: true, force: true });
+  }
+}
+
+// The spec-layer QUESTION, as opposed to the spec-layer FILES the group above covers.
+//
+// Those fourteen arms all read what lands on disk once the agent has already decided to ask. Nothing
+// read the sentence that makes that decision. It matters more than any other line in SKILL.md: the
+// generator prints one hint line, on stdout, for one predicate — the agent is expected to turn that
+// line into a question to the user — and the instruction file is where the rules for doing so live.
+// A rule with no machine carrier is a rule that can be reworded into uselessness with the suite
+// green, which is the exact shape README records: deleting the design section's closing rule left
+// the self-check PASS.
+//
+// Three arms, in ascending order of how much they can see. (1) The manifests the rule names are
+// compared with the ones detectProject really recognises, BOTH ways: the contract list must all be
+// present, and nothing the doc names may be a file the detector ignores. One direction catches the
+// prose shrinking; the other catches the prose growing a file nothing keys off — the "document says
+// A, code judges B" pair this repository has now paid for twice. (2) The non-interactive fallback
+// must be stated. Measured, not imagined: on 2026-10-10 an agent run non-interactively read the ask
+// rule, drafted the question, and had no channel to send it — the run finished with asked=false and
+// zero artifacts, and nothing in the tree could see that. (3) The behaviour, run rather than read:
+// a directory carrying go.mod must produce the hint and a bare directory must not. That is the only
+// arm that can catch the two halves agreeing on the wrong predicate, and go.mod is deliberate —
+// specLayer's hint arms all use package.json, so the stack-flag branch the rule actually names as
+// its non-package example has never been executed by this suite.
+async function checkSpecAsk() {
+  let stackDir;
+  let bareDir;
+  const result = {
+    pass: false, ruleFound: false, evidenceMatchesDetector: false, nonInteractiveFallbackStated: false,
+    predicateAgreesWithCode: false, askedOnStackFlag: false, silentOnBareTarget: false,
+    docNamed: [], detectorCovered: [], contractMissing: [], contractUnknown: [], docUnknown: []
+  };
+  try {
+    const rule = specAskRuleIn(await readText(path.join(skillRoot, 'SKILL.md')));
+    result.ruleFound = rule.length > 0;
+
+    result.docNamed = manifestTokensIn(rule);
+    result.detectorCovered = detectorManifestsIn(await readText(path.join(scriptDir, 'lib', 'harness-utils.mjs')));
+    result.contractMissing = SPEC_ASK_EVIDENCE.filter((name) => !result.docNamed.includes(name));
+    result.contractUnknown = SPEC_ASK_EVIDENCE.filter((name) => !detectorCovers(name, result.detectorCovered));
+    result.docUnknown = result.docNamed.filter((name) => !detectorCovers(name, result.detectorCovered));
+    result.evidenceMatchesDetector = result.ruleFound
+      && result.contractMissing.length === 0 && result.contractUnknown.length === 0 && result.docUnknown.length === 0;
+
+    // The fallback is half the rule, not a courtesy clause: without it a non-interactive run has no
+    // stated answer and invents one. Required to appear in the SAME line as the ask, so a
+    // non-interactive fallback written about some other question cannot carry this arm.
+    result.nonInteractiveFallbackStated = result.ruleFound && /非交互/.test(rule) && /不加/.test(rule);
+
+    const script = path.join(scriptDir, 'create-harness.mjs');
+    stackDir = await mkdtemp(path.join(os.tmpdir(), 'harness-specask-stack-'));
+    await writeText(path.join(stackDir, 'go.mod'), 'module probe\n\ngo 1.21\n');
+    const stackOut = (await execFileAsync('node', [script, '--target', stackDir, '--dry-run'])).stdout;
+    result.askedOnStackFlag = stackOut.includes(SPEC_ASK_HINT_LINE);
+
+    bareDir = await mkdtemp(path.join(os.tmpdir(), 'harness-specask-bare-'));
+    const bareOut = (await execFileAsync('node', [script, '--target', bareDir, '--dry-run'])).stdout;
+    result.silentOnBareTarget = !bareOut.includes(SPEC_ASK_HINT_LINE);
+
+    result.predicateAgreesWithCode = result.askedOnStackFlag && result.silentOnBareTarget;
+    result.pass = result.ruleFound && result.evidenceMatchesDetector
+      && result.nonInteractiveFallbackStated && result.predicateAgreesWithCode;
+    return result;
+  } catch (error) {
+    return { ...result, error: error.message };
+  } finally {
+    for (const target of [stackDir, bareDir]) if (target) await rm(target, { recursive: true, force: true });
   }
 }
 
