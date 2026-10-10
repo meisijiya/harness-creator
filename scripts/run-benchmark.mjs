@@ -611,7 +611,14 @@ const MAINT_GUARDS = [
   // row, so a mention in the right-hand "what to check" column would satisfy the guard on its own —
   // which is how this guard passed with its instruction rewritten to nothing. Anchoring on 先跑 A/B
   // means only the action column can carry the requirement.
-  { name: 'deletions carry A/B evidence', anchor: /先跑 A\/B/, terms: ['前后', '对照', '删前删后'] }
+  { name: 'deletions carry A/B evidence', anchor: /先跑 A\/B/, terms: ['前后', '对照', '删前删后'] },
+  // The spec layer carries project facts that rot silently: the audit reads neither document, so a
+  // stale mission cannot make a FAIL line appear. It has to be reachable from the wrap-up candidate
+  // list, and the action is a hand edit — regenerating is what --spec-layer's skip-if-exists exists
+  // to prevent, and --force would overwrite the project's own wording. Same shape as the row above:
+  // the anchor is the ACTION column's phrasing, not the word 规范层, so a mention in the "检查对象"
+  // column cannot satisfy the guard while the action stayed empty.
+  { name: 'stale spec-layer facts reach the candidate list', anchor: /列入维护候选/, terms: ['不重跑生成器'] }
 ];
 const MAINT_OLD_ROW = '| 审计已满分 | 报「无候选瓶颈」，不改；为刷分堆关键词是反模式 |';
 
