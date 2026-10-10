@@ -129,6 +129,10 @@ node ~/.agents/skills/harness-creator/scripts/validate-harness.mjs --target /pat
 
 `create-harness.mjs` 可检测常见的项目类型与包管理器。在基础验证命令层面支持 Node/npm/pnpm/yarn/bun、Python、Go、Rust、Maven、Gradle 和 .NET。
 
+### 手工兜底模板的一处已知边界
+
+`templates/init.sh` 是无 Node 时的手抄兜底，它与 `NEXT_STEPS` 字面量被 `nextSteps` 组**逐字节比对**钉住，所以里面的 `1. Read AGENTS.md …` 无法改成占位符。后果：**`CLAUDE.md` 仓的用户手抄这份模板时，那一行需要手改**。生成器走的那条路径没有这个问题——它在写入时替换成实际文件名，`noOrphanPointer` 臂守的正是它。
+
 ### 确实没有可跑的东西时
 
 文档集、技能仓、教学材料这类目录可能真的没有一条可执行的检查。用 `--no-verification` **显式声明**这一点，它被三条约束夹住：生成的 `init.sh` 只打印 `NO VERIFICATION DECLARED` 与「本脚本什么都没验证」，**绝不打印完成横幅**；声明**同时**写进 `AGENTS.md` 与 `init.sh`；不给这个标志时 `init.sh` 仍然退出码 1。

@@ -124,7 +124,7 @@ const SELF_CHECK_GROUPS = [
   'budget', 'agentsBudget', 'agentsDiscover', 'artifactPurity', 'maintenance', 'skillDesign',
   'wrapupOutput', 'dryRun', 'selfRefs', 'references', 'bottleneckTies', 'foreignAudit', 'blankGate',
   'blueprint', 'agentFile', 'initGrowth', 'specLayer', 'agentsLayer', 'nextSteps', 'reportContract', 'taskContract', 'maintContract', 'noDeadDecls', 'gateArgs',
-  'specAsk'
+  'specAsk', 'blacklist'
 ];
 
 // One sentence builder per group, keyed by the same names. The self-check asserts the two sets are
@@ -146,7 +146,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['foreignAudit', (group) => ` A repository the audit did not generate — no init.sh, no gate — cannot collect the static-check or evidence points from the word "TypeScript" or the letters inside "concise", so it no longer ranks its empty verification subsystem above instructions and scope; and a repository that does have a gate still passes both (${group.pass ? 'verified' : `gate-less ${group.bareVerification}/5 vs gated ${group.gatedVerification}/5; static ${group.staticCheckFailed ? 'ok' : 'LEAKED'}; evidence ${group.evidenceFailed ? 'ok' : 'LEAKED'}; entrypoint ${group.entrypointFailed ? 'ok' : 'LEAKED'}; gated static ${group.gatedStaticPasses ? 'ok' : 'BROKEN'}; gated evidence ${group.gatedEvidencePasses ? 'ok' : 'BROKEN'}; not overranked ${group.notOverranked ? 'ok' : 'INVERTED'}; teeth ${group.teeth ? 'ok' : 'BLIND'}`}).`],
   ['blankGate', (group) => ` A project with nothing to verify — no manifest, a manifest with no runnable script, or an explicit --commands list whose scripts the manifest does not define — gets a refusal that exits non-zero instead of reporting a pass it did not earn, the counter reopens the moment a real check runs, a comma inside a quoted command stays one command while a genuine comma-separated list still splits, an unterminated quote is refused leaving nothing behind, and the manual fallback template refuses on the same shapes (${group.pass ? 'verified' : 'FAILED'}).`],
   ['blueprint', (group) => ` The project-description slot stays a visible pending marker when the user has not stated one, while a blueprint change rewrites that slot only — the rest of the file survives byte for byte, and a shape this skill did not render is refused rather than guessed at (${group.pass ? 'verified' : `pending ${group.pendingMarked ? 'ok' : 'NO'}; no stack fill ${group.noInventedFill ? 'ok' : 'NO'}; verbatim ${group.verbatim ? 'ok' : 'NO'}; slot-only ${group.slotRewritten && group.restIntact ? 'ok' : 'NO'}; detector ${group.detectorHasTeeth ? 'has teeth' : 'BLIND'}; refusal ${group.refusalHonoured && group.refusedUntouched ? 'ok' : 'NO'}`}).`],
-  ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, an existing instruction file is left byte-identical while its missing sections are still reported, and --force refuses to render over sections it does not define — the one rule protecting another owner's block, which was prose until it destroyed a fixture — while still overwriting this skill's own render. Every artifact the run leaves behind points at the file the target actually uses — a hardcoded AGENTS.md in a CLAUDE.md repo is an orphan pointer the agent spends a failed open to diagnose — and the report never denies what the run wrote (${group.pass ? 'verified' : `FAILED (foreign block refused: ${group.forceRefused ? 'ok' : 'NO'}; own render rewritten: ${group.forceStillWritesOwn ? 'ok' : 'NO'}; orphan pointer: ${group.noOrphanPointer ? 'ok' : 'ORPHANED'}; false denial: ${group.noFalseDenial ? 'ok' : 'DENIED'})`}).`],
+  ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, an existing instruction file is left byte-identical while its missing sections are still reported, and --force refuses to render over sections it does not define — the one rule protecting another owner's block, which was prose until it destroyed a fixture — while still overwriting this skill's own render. Every artifact the GENERATOR leaves behind points at the file the target actually uses — a hardcoded AGENTS.md in a CLAUDE.md repo is an orphan pointer the agent spends a failed open to diagnose (the hand-copy fallback template still says AGENTS.md and is pinned byte-for-byte by the nextSteps gate, so that path is documented rather than fixed) — and the report never denies what the run wrote (${group.pass ? 'verified' : `FAILED (foreign block refused: ${group.forceRefused ? 'ok' : 'NO'}; own render rewritten: ${group.forceStillWritesOwn ? 'ok' : 'NO'}; orphan pointer: ${group.noOrphanPointer ? 'ok' : 'ORPHANED'}; false denial: ${group.noFalseDenial ? 'ok' : 'DENIED'})`}).`],
   ['initGrowth', (group) => ` The gate only grows: a new check joins an existing init.sh without removing or reordering any step, a repeat is a no-op that leaves the file byte-identical, a check the gate would never actually run — or one that does not parse as shell — is refused and rolled back rather than reported as added, and such a refusal names the command it refused instead of printing a placeholder where the command belongs, a one-line entry reference to a script this repository owns is appended unguarded so a missing entry turns the gate red instead of skipping it, a declared check that did not run turns the gate red instead of printing a notice beside the success tail while a script this manifest does define still gets a real step, every toolchain branch of the hand-copy fallback raises its counter only on the tool's own verdict — so a project whose test suite is empty is refused by name rather than reported as verified — while the same branch stays green on a toolchain that has a test to run, and a gate that went red this session leaves a check behind so the lesson reaches the specification instead of only the fix (${group.pass ? 'verified' : `grew ${group.grew ? 'ok' : 'NO'}; existing steps intact ${group.preserved ? 'ok' : 'NO'}; repeat ${group.idempotent ? 'ok' : 'NO'}; dead-branch check ${group.deadBranchRefused && group.rolledBack ? 'refused and rolled back' : 'ACCEPTED'}; refusal names its command ${group.refusalNamesCommand ? 'ok' : '     '}; name detector ${group.refusalNameHasTeeth ? 'has teeth' : 'BLIND'}; unparseable check ${group.unparseableRefused ? 'refused' : 'ACCEPTED'}; entry appended ${group.entryAppended ? 'ok' : 'NO'}; entry unguarded ${group.entryUnguarded ? 'ok' : 'GUARDED'}; entry repeat ${group.entryIdempotent ? 'ok' : 'NO'}; missing entry ${group.entryMissingRefused ? 'refused' : 'ACCEPTED'}; path rules ${group.entryRulesHaveTeeth ? 'ok' : 'BLIND'}; entry removed turns it red ${group.entryGateFailsWhenUnresolvable ? 'yes' : 'NO'}; skipped declared check ${group.declaredSkipTurnsGateRed ? 'turns it red' : 'NOTICE ONLY'}; its detector ${group.declaredSkipDetectorHasTeeth ? 'has teeth' : 'BLIND'}; declared script ${group.declaredScriptStillRuns ? 'still checked' : 'DROPPED'}; run-it ${group.declaredSkipGateIsRed && group.declaredGateIsGreen ? 'red and green' : 'NOT OBSERVED'}; toolchain branches earn RAN ${group.emptyToolBranchesGuarded ? 'ok' : 'UNGUARDED'}; branch detector ${group.emptyToolBranchesHaveTeeth ? 'has teeth' : 'BLIND'}; empty tool run ${group.emptyToolRunsRed ? 'red' : 'NOT OBSERVED'}; populated tool run ${group.emptyToolRunsGreen ? 'green' : 'NOT OBSERVED'}; that detector ${group.emptyToolGateTeeth ? 'has teeth' : 'BLIND'}; red-gate lesson ${group.loopStated && group.loopIsLoadBearing ? 'recorded' : 'LOST'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}; no init.sh ${group.missingRefused ? 'refused' : 'ACCEPTED'}`}).`],
   ['specLayer', (group) => ` The spec layer is opt-in and says nothing when it is off: a run without --spec-layer still produces the two artifacts and byte-identical content, the two documents exist only when the flag is given, the detected stack never becomes an answer to "what is this project", they are pointed at as read-on-demand rather than as files every session must open, and the same byte/line/working-rule ceilings still hold with the extra pointer. The optional layer is not silent by default: the hint naming --spec-layer appears on stdout when the target carries a manifest the stack detector recognises, stays silent for a bare directory, and appears on the real run as well as on the dry-run preview. Documents on disk that no version of the instruction file names are orphaned — nothing points at them from the one file every session reads — and the run exits non-zero rather than reporting a delivery the next session cannot find; the warning reads the state on disk rather than this run's statuses, so it still fires on the second and third run once both documents SKIP, pointers left by an earlier run are honoured, and a healthy repository re-runs silently and successfully so the warning keeps its meaning (${group.pass ? 'verified' : `default unchanged ${group.offByDefault ? 'ok' : 'CHANGED'}; flag creates the layer ${group.onCreatesLayer ? 'ok' : 'NO'}; stack kept out of the mission ${group.noStackLeak ? 'ok' : 'LEAKED'}; read on demand ${group.onDemandNotResident ? 'ok' : 'RESIDENT'}; budget ${group.budgetHeld ? 'ok' : 'BUSTED'}; re-run skips ${group.reRunSkips ? 'ok' : 'OVERWROTE'}; flag value ${group.flagValueRefused ? 'refused' : 'ACCEPTED'}; zero coupling ${group.purityHeld ? 'ok' : 'NAMED OR BLIND'}; pointers kept, documents re-created ${group.pointersSurviveRedelete ? 'ok' : 'CALLED ORPHAN'}`}).`],
   ['agentsLayer', (group) => ` The instruction file is a router and the detail lives beside it: a default run ships both detail documents with no switch, the instruction file names each of them under its own H3 with a one-line summary, the artifact contract lists them, all three are pointed at as read-on-demand rather than resident, and appending the section to an instruction file another owner wrote leaves that file's existing bytes untouched, survives a third party's block, and is idempotent (${group.pass ? 'verified' : `default ships ${group.defaultShipsLayer ? 'ok' : 'NO'}; navigation ${group.navigationComplete ? 'ok' : 'MISSING'}; artifact contract ${group.artifactsDeclareLayer ? 'ok' : 'MISSING'}; read on demand ${group.onDemandNotResident ? 'ok' : 'RESIDENT'}; append preserves ${group.appendPreserves ? 'ok' : 'REWRITES'}; third party survives ${group.thirdPartySurvives ? 'ok' : 'CLOBBERED'}; idempotent ${group.appendIdempotent ? 'ok' : 'DUPLICATED'}; anchors intact ${group.anchorsIntact ? 'ok' : 'BROKEN'}; budget ${group.layerBudgetHeld ? 'ok' : 'BUSTED'}`}).`],
@@ -156,6 +156,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['maintContract', (group) => ` A full audit score is not an exit condition in the maintenance reference: the score row still routes to the actual misalignment check, keeps the anti-gaming clause, and the shared content-review table states the read-only, baseline-scope, commit-authorization, existing-work and full-score rules — proven per guard, with the whole table deleted, and by the retired short-circuit row (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-guard teeth ${group.teeth ? 'ok' : 'BLIND'}; whole table removed ${group.tableRemovedRefused ? 'refused' : 'ACCEPTED'}; retired row ${group.oldRowRejected ? 'refused' : 'ACCEPTED'}`}).`],
   ['noDeadDecls', (group) => ` This suite carries no orphan: ${group.declaredCount} top-level declarations under scripts/ are all read somewhere in the tree, the ${group.helpEntries} numbered --help entries annotate exactly the ${SELF_CHECK_GROUPS.length} live group keys in both directions, and every flag the generator documents is a flag it reads (${group.pass ? 'verified' : `unread ${(group.dead || []).join(', ') || 'none'}; ghost keys ${(group.ghostKeys || []).join(', ') || 'none'}; groups with no help entry ${(group.missingKeys || []).join(', ') || 'none'}; keys documented twice ${(group.duplicateKeys || []).join(', ') || 'none'}; documented-but-unread flags ${(group.unreadFlags || []).join(', ') || 'none'}; artifact-adding flags missing from SKILL.md ${(group.undocumentedFlags || []).join(', ') || 'none'} (baseline ${group.artifactFlagBaseline} files); lying fixtures ${(group.lyingFlags || []).join(', ') || 'none'}; detector teeth decls ${group.teethDeclarations ? 'ok' : 'BLIND'}, help ${group.teethHelp ? 'ok' : 'BLIND'}, flags ${group.teethFlags ? 'ok' : 'BLIND'}`}).`],
   ['specAsk', (group) => ` The one instruction line that decides whether the agent raises the spec layer at all is machine-checked rather than trusted to prose: SKILL.md's first step names manifest files the stack detector really recognises, judged by running the generator on each file alone rather than by reading its source, in both directions, so the prose cannot claim evidence the code ignores or quietly drop evidence the code acts on — states the non-interactive fallback, and the pair is pinned by behaviour rather than by string comparison: a directory carrying a Go module is asked about (the stack-flag branch the hint arms never exercised, because they all used package.json) while a bare directory is not (${group.pass ? 'verified' : `rule ${group.ruleFound ? 'found' : 'MISSING'}; evidence ${group.evidenceMatchesDetector ? 'agrees' : `DRIFTED (doc names ${(group.docNamed || []).join(', ') || 'none'}; detected ${(group.detected || []).join(', ') || 'none'}; not detected ${(group.undetected || []).join(', ') || 'none'}; contract missing ${(group.contractMissing || []).join(', ') || 'none'}; contract unknown to detector ${(group.contractUnknown || []).join(', ') || 'none'}; named but not detected ${(group.docUnknown || []).join(', ') || 'none'})`}; non-interactive fallback ${group.nonInteractiveFallbackStated ? 'stated' : 'MISSING'}; predicate ${group.predicateAgreesWithCode ? 'agrees' : `DRIFTED (asked on a Go module: ${group.askedOnStackFlag ? 'yes' : 'NO'}; silent on a bare directory: ${group.silentOnBareTarget ? 'yes' : 'NO'})`}`}).`],
+  ['blacklist', (group) => ` The blacklist table in SKILL.md is machine-checked rather than trusted to prose: the header and the 1..${group.rows} numbering hold — the citation "见黑名单 11-13" points at fixed rows — every row carries three non-empty cells and an alternative that does not restate the reason, and the two failure modes this suite was itself bitten by stay pinned to their own terms by a hand-written witness each (${group.pass ? 'verified' : `header ${group.headerFound ? 'ok' : 'MISSING'}; numbering ${group.breaks.length ? `BROKEN at ${group.breaks.join(', ')}` : 'ok'}; hollow rows ${group.hollowRows.length ? group.hollowRows.join(', ') : 'none'}; terms not carried ${group.modeMissing.join(', ') || 'none'}; witnesses ${group.witnesses ? 'ok' : 'BLIND'}`}).`],
   ['gateArgs', (group) => ` This script's own switches cannot switch it off: a non-numeric --min-score, --min-eval-score or --min-self-check-score is refused before the run starts rather than becoming NaN and turning the comparison permanently false, and --no-self-check is refused rather than skipping the only check that proves the bundled scripts still run — proven by deleting the refusal from a copy of this file in turn, while an explicit --min-score=0 still runs as the deliberate relaxation it is (${group.pass ? 'verified' : `refusal ${group.refusalsCaught}/${group.refusalsTotal}; exit ${group.refusalExits ? 'ok' : 'NO'}; teeth ${group.teethThresholds ? 'ok' : 'BLIND'}/${group.teethSelfCheck ? 'ok' : 'BLIND'}; zero still runs ${group.zeroStillRuns ? 'ok' : 'REFUSED'}; accepted ${(group.accepted || []).join(', ') || 'none'}; misreported ${(group.misreported || []).join(', ') || 'none'}`}).`]
 ]);
 
@@ -321,6 +322,27 @@ const SKILL_DESIGN_INCOMPLETE_FORMS = [
   // and only if the phrase is genuinely required.
   ['不是命令队列', '- 已记录的清单是上下文：本技能与生成物都不自行选活，推进哪一条需本次显式授权。']
 ];
+// The blacklist table's two newest rows each name a failure mode this suite itself was bitten by, and
+// each word below is the one that makes the mode recognisable — not a sample. They are hand-written
+// rather than derived from the table, for the reason SKILL_DESIGN_INCOMPLETE_FORMS records: a list
+// derived from SKILL.md stops testing a word the day that word is dropped from it, and every arm
+// stays green. `witness` is the shipped row with exactly one term removed, so it is refused if and
+// only if that term is genuinely required.
+const BLACKLIST_FAILURE_MODES = [
+  {
+    row: 14,
+    key: 'run-status',
+    terms: ['本次 run', 'status'],
+    witness: '| 14 | 用「本次写了什么」当状态判据 | 缺陷持续存在，下次因文件已存在被跳过而静默通过 | 判「写完之后现状如何」——读文件内容而非本次 status；指针齐全时也要静默 |'
+  },
+  {
+    row: 15,
+    key: 'artifact-pointer',
+    terms: ['产物', '指向'],
+    witness: '| 15 | 声称「每个都正确」 | 修正只加在生成路径，手工兜底仍写死 | 写准覆盖范围（逐个产物核到文件），或修模板 |'
+  }
+];
+
 // Section-scoped rather than whole-file: the old wording is still quoted on purpose in the
 // maintenance reference and the README as a counter-example, and a file-wide arm would flag that
 // deliberate prose. Declared HERE, not beside the functions that use it — those run from inside
@@ -448,7 +470,8 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['maintContract', 'Maintenance contract'],
   ['noDeadDecls', 'Orphan declarations'],
   ['specAsk', 'Spec-layer ask rule'],
-  ['gateArgs', 'Gate switches']
+  ['gateArgs', 'Gate switches'],
+  ['blacklist', 'Blacklist table']
 ]);
 
 // The manifests SKILL.md's first step is REQUIRED to name when it tells the agent to ask about the
@@ -1055,7 +1078,16 @@ Runs a lightweight harness benchmark:
      asked about while a bare directory is not, which is the stack-flag branch the package.json
      hint arms never exercised. The line had no machine carrier at all, and a rule that lives
      only in prose is one nothing can catch an agent misreading. [specAsk]
-30. Produces a JSON report and optional HTML report.
+30. Checks that SKILL.md's anti-pattern blacklist is machine-checked rather than trusted to prose — the
+     table's own row 7 lists "carrying a constraint in prose only" as an anti-pattern while the
+     blacklist was one, and README records the measurement: deleting a whole design rule left this
+     suite PASS at 100/100. Asserts the header and a gapless 1..N numbering, because SKILL.md cites
+     "黑名单 11-13" and a duplicate row silently re-points that citation; that every row carries three
+     non-empty cells and an alternative that does not restate the reason it gives; and that the two
+     failure modes this suite was itself bitten by keep their own words, each pinned by a hand-written
+     witness that must be refused by exactly the term it dropped. Deliberately does NOT assert
+     uniqueness: the table restates a fact where the decision is made, on purpose. [blacklist]
+31. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -1295,6 +1327,10 @@ const { pass, defaultShipsLayer, defaultRouteReadable, navigationComplete, artif
     const { pass, refusalsCaught = 0, refusalsTotal = 0, refusalExits, teethThresholds, teethSelfCheck, zeroStillRuns, accepted = [], misreported = [], error } = selfCheck.gateArgs;
     lines.push(`  Gate switches: ${pass ? 'PASS' : 'FAIL'} — this script cannot be switched off: ${refusalsCaught}/${refusalsTotal} malformed invocations refused, each exiting 2: ${refusalExits ? 'ok' : 'NO'}; non-numeric thresholds still accepted once the refusal is deleted: ${teethThresholds ? 'ok' : 'BLIND'}; --no-self-check still accepted once its refusal is deleted: ${teethSelfCheck ? 'ok' : 'BLIND'}; --min-score=0 still runs: ${zeroStillRuns ? 'ok' : 'REFUSED'}${accepted.length ? `; wrongly accepted: ${accepted.join(', ')}` : ''}${misreported.length ? `; refusal without a usable message: ${misreported.join(', ')}` : ''}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.blacklist) {
+    const { pass, headerFound, numberingContinuous, breaks = [], hollowRows = [], modeRows = [], witnesses, rows, error } = selfCheck.blacklist;
+    lines.push(`  Blacklist table: ${pass ? 'PASS' : 'FAIL'} — header: ${headerFound ? 'ok' : 'MISSING'}; ${rows} rows numbered 1..${rows} without a gap or a repeat: ${numberingContinuous ? 'ok' : `BROKEN (${breaks.join('; ') || 'no numbered rows'})`}; every row carries three non-empty cells and an alternative that does not restate the reason: ${hollowRows.length ? `NO (${hollowRows.join(', ')})` : 'ok'}; the failure modes this suite was bitten by stay pinned to their terms: ${modeRows.map((mode) => `${mode.key} ${mode.missing.length ? `MISSING ${mode.missing.join(', ')}` : 'ok'}`).join('; ')}; a hand-written witness per mode is refused by exactly the word it dropped: ${witnesses ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
+  }
   if (selfCheck.reportCoverage) {
     const { pass, unbound = [], missingLines = [], orphanLines = [], missingConsole = [] } = selfCheck.reportCoverage;
     lines.push(`  Report coverage: ${pass ? 'PASS' : 'FAIL'} — every self-check group is bound, gated, reported and shown on the console: ${pass ? 'ok' : `NO (unbound: ${unbound.join(', ') || 'none'}; missing report line: ${missingLines.join(', ') || 'none'}; orphan line: ${orphanLines.join(', ') || 'none'}; missing console line: ${missingConsole.join(', ') || 'none'})`}`);
@@ -1346,6 +1382,7 @@ async function runSelfCheck() {
       maintContract: () => checkMaintContract(),
       noDeadDecls: () => checkNoDeadDeclarations(),
       specAsk: () => checkSpecAsk(),
+      blacklist: () => checkBlacklistTable(),
       gateArgs: () => checkGateArgs()
     };
     const groups = {};
@@ -2617,6 +2654,121 @@ async function checkSkillDesignRule() {
       witness: false,
       error: error.message
     };
+  }
+}
+
+// The blacklist table had no machine carrier at all, and its own row 7 names the shape: "把文字说明当
+// 约束的唯一载体" is listed as an anti-pattern while the blacklist itself was one. README records the
+// measurement — deleting a whole design rule left the self-check PASS and the eval at 100/100, and the
+// freed bytes made the budget line greener.
+//
+// What is deliberately NOT asserted: uniqueness. The table restates a fact where the decision is
+// made, on purpose, and an earlier audit ruled 8 of 11 repetitions deliberate. An arm that punished
+// them would push the next author to delete the wrong copy.
+//
+// Three arms. (1) shapeHeld — the header and the numbering. The numbering is load-bearing because
+// SKILL.md:113 points at "黑名单 11-13"; a gap or a duplicate silently re-points that citation.
+// (2) rowsSubstantive — three non-empty cells per row, and an 替代做法 that is not the 为什么 restated.
+// An anti-pattern that only says "do not do X" leaves the reader stuck, which is the one thing the
+// column exists to prevent. Reported per row so a failure names the row. (3) failureModesCarried —
+// the two newest rows each encode a mode this suite was actually bitten by, and each is pinned to one
+// hand-written witness per term, so deleting the word is caught by name instead of by a list quietly
+// shrinking.
+
+// Reads the table straight out of the file's line array rather than slicing the text first: an earlier
+// version converted a character offset into a line count, and every failure it reported pointed at a
+// line number off by a hundred and sixty. A failure that names the wrong line is a failure nobody can
+// act on.
+function blacklistTable(text) {
+  const lines = text.split('\n');
+  const heading = lines.findIndex((line) => /^##\s+反例黑名单\s*$/.test(line));
+  if (heading === -1) return { found: false, header: '', rows: [], body: '' };
+  const separator = lines.findIndex((line, i) => i > heading && /^\s*\|[\s|:-]+\|\s*$/.test(line));
+  if (separator === -1) return { found: false, header: '', rows: [], body: '' };
+  const header = (blacklistCells(lines[separator - 1]) || []).join('|').replace(/\s+/g, ' ');
+  const rows = [];
+  lines.slice(separator + 1).forEach((line, i) => {
+    const cells = blacklistCells(line);
+    if (!cells || cells.length !== 4 || !/^\d+$/.test(cells[0])) return;
+    rows.push({ number: Number(cells[0]), cells, line: separator + 2 + i });
+  });
+  return { found: true, header, rows, body: lines.slice(separator + 1).join('\n') };
+}
+
+// The four table cells of a `| … |` line, or null when the line is not one. Escaped pipes are out of
+// scope: none of the shipped cells contains one, and splitting them apart would fabricate columns.
+function blacklistCells(line) {
+  if (!/^\s*\|/.test(line)) return null;
+  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim());
+}
+
+// Numbers as written, paired with the line they were written on — a failure that says "row 14" and a
+// failure that says "SKILL.md:169" cost the same reader very different amounts of work.
+function blacklistRows(body) {
+  return body.split('\n').map((line) => blacklistCells(line))
+    .filter((cells) => cells && cells.length === 4 && /^\d+$/.test(cells[0]))
+    .map((cells) => ({ number: Number(cells[0]), cells, line: 0 }));
+}
+
+async function checkBlacklistTable() {
+  const result = {
+    pass: false, headerFound: false, numberingContinuous: false, rowsSubstantive: false,
+    failureModesCarried: false, witnesses: false, rows: 0, breaks: [], hollowRows: [],
+    modeRows: [], modeMissing: []
+  };
+  try {
+    const body = await readText(path.join(skillRoot, 'SKILL.md'));
+    const { found, header, rows, body: table } = blacklistTable(body);
+    result.headerFound = found && header === '#|反模式|为什么不要做|替代做法';
+    result.rows = rows.length;
+
+    // Continuity, not uniqueness: a number that repeats makes the sequence differ from 1..N too, so
+    // both a gap and a duplicate land here.
+    const expected = rows.map((_, i) => i + 1);
+    result.numberingContinuous = result.headerFound && rows.length > 0
+      && rows.every((row, i) => row.number === expected[i]);
+    result.breaks = result.numberingContinuous ? [] : rows
+      .map((row, i) => (row.number === expected[i] ? null : `${row.number} at SKILL.md:${row.line} (expected ${expected[i]})`))
+      .filter(Boolean);
+    if (!rows.length) result.breaks = ['no numbered rows found'];
+
+    // "雷同" is read as the alternative column restating the reason column, not as shared vocabulary:
+    // several rows legitimately share words across the two columns. Normalising away punctuation and
+    // whitespace is what makes "照旧，不要。" and "照旧不要" the same cell.
+    const normalise = (cell) => cell.replace(/[\s`*_「」“”"'，。、；：:（）()\-—→]/g, '');
+    result.hollowRows = rows.filter((row) => row.cells.slice(1).some((cell) => cell.length === 0)
+      || normalise(row.cells[3]) === normalise(row.cells[2])
+      || normalise(row.cells[3]).length < 4)
+      .map((row) => `${row.number} (SKILL.md:${row.line})`);
+    result.rowsSubstantive = result.hollowRows.length === 0;
+
+    // Reads rows out of a table body that already starts at the first data row.
+    const judge = (text) => BLACKLIST_FAILURE_MODES.map((mode) => {
+      const row = blacklistRows(text).find((entry) => entry.number === mode.row);
+      return { ...mode, found: row ? mode.terms.filter((term) => !row.cells.join(' ').includes(term)) : mode.terms };
+    });
+    result.modeRows = judge(table).map(({ row, key, found: absent }) => ({ row, key, missing: absent }));
+    result.modeMissing = result.modeRows.flatMap((mode) => mode.missing.map((term) => `row ${mode.row}: ${term}`));
+    result.failureModesCarried = result.modeRows.every((mode) => mode.missing.length === 0);
+    // Each witness is the shipped row with one term deleted, so each must be refused BY EXACTLY THAT
+    // TERM — a required-terms list read off SKILL.md would stop testing a word the day it was dropped.
+    result.witnesses = BLACKLIST_FAILURE_MODES.every(({ row, terms, witness }) => {
+      const shipped = blacklistRows(table).find((entry) => entry.number === row);
+      if (!shipped) return false;
+      // The witness is written as a table line a reader could paste in; the substitution target is the
+      // line's interior. Substituting the full witness instead would leave the original's leading "| "
+      // in front of the witness's own, producing a five-cell row that reads as no row at all.
+      const replacement = witness.replace(/^\|\s*/, '').replace(/\s*\|$/, '');
+      const { found: absent } = judge(table.replace(shipped.cells.join(' | '), replacement))
+        .find((mode) => mode.row === row);
+      return absent.length === 1 && absent[0] === terms.find((term) => !witness.includes(term));
+    });
+
+    result.pass = result.headerFound && result.numberingContinuous && result.rowsSubstantive
+      && result.failureModesCarried && result.witnesses;
+    return result;
+  } catch (error) {
+    return { ...result, error: error.message };
   }
 }
 
