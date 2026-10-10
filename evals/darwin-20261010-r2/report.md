@@ -96,7 +96,27 @@ HL-4：两轮 judge 的 new_problems 均已回填并通过反向证明；剩余�
 
 | 项 | 说明 |
 |---|---|
-| dim2 加权缺口 1.20 | 「更新 harness」第 2-5 步只有名字串，无逐步产出物。上一轮因预算搁置，本轮余量 456B 仍偏紧 |
-| 缺陷 6 | 已有 AGENTS.md 时补跑 `--spec-layer` 产生孤儿文档（先于本轮存在，需改退出行为） |
+| ~~dim2 加权缺口 1.20~~ | **已闭合**（`4f872ae`）：五步改为逐步「输入 → 输出」，改写而非增写 |
+| ~~缺陷 6 孤儿文档~~ | **已闭合**（`4f872ae`）：告警 + `exit 1`，门禁两臂反向证明 |
 | dim8 覆盖面 | 本轮只跑 1 个 prompt × 1 臂；26 条 test-prompts 未全跑，`dry_run` 占比高 |
-| 安装副本 | `~/.agents/skills/harness-creator` 仍落后，dim8 实测须显式指向仓库 HEAD；刷新需用户决定 |
+| 安装副本 | `~/.agents/skills/harness-creator` 仍落后（实测缺 `self-check-only`、`栈标志文件` 两处本轮新增），刷新需 remote 先有本轮 commit |
+
+## Round 3（commit `4f872ae`）
+
+**孤儿文档缺陷闭合**（先于本轮存在，2026-10-10 记为未闭合）。已有 `AGENTS.md` 时补跑 `--spec-layer`，两份文档落盘但 `SPEC_LAYER_NOTE` 进不了指令文件——而指令文件是代理每会话唯一必读的文件，于是代理下次会话根本不知道这两份存在。判据取「本次运行内有文档 written 且 `AGENTS.md` 非 written」，所以幂等重跑（全 SKIPPED）不报警。退出码取 `1`，与 `--force` 拒绝、`--blueprint` 定位不到槽位两处先例一致：状态行读起来是成功交付，代理停在 `WRITTEN` 就报完成，正是本仓要消灭的静默降级。门禁补 `orphanSpecWarned`（含退出码，经 try/catch 读）与 `idempotentSilent` 两臂。
+
+**dim2 缺口闭合**。「更新 harness」五步原为纯名字串，改为逐步「输入 → 输出」，沿用本文件常见任务表的同一形状。
+
+## 预算：为什么没删任何东西
+
+先做了只读预算调查（scout）。结论与上一轮的 TrimAudit 一致：**在不损失任何在起作用的判据的前提下，只能腾出约 75B**（L34 部分 20B + L146 部分 33B + L105 压缩 22B），远不够 414B。
+
+但 414B 这个估算是按**增写**算的，而实际是**替换**那句名字串——按本仓任务表已有的体裁写约 277B。因此不需要删任何内容，`SKILL.md` 16008 → 16285/16464，余 179B。
+
+调查同时更正了我派发时的两处错误前提：`TASK_OLD_FORMS` 读的是**生成的** `AGENTS.md`（`run-benchmark.mjs:687`），`MAINT_GUARDS` 读的是 `references/harness-maintenance-pattern.md`（`:722`）——两者都不读 SKILL.md。真实受 SKILL.md 断言保护的只有 `## 设计规则` 节与「更新」表格行两处。
+
+## 实验纪律：又一次变异选错
+
+ARM D 首轮用 `sed "s/^  process.exitCode = 1;$/.../"` 想把退出码改成 0，但 Windows CRLF checkout 下行尾 `\r` 使 `$` 锚点失配，**sed 根本没命中**；脚本又因未加 `set -e` 继续跑完，输出一个「PASS」。若采信，就是拿未变异的树当反向证明的证据。改用行号定位 `sed "862s/…/…/"` 后才拿到真的 `FAIL`（`reported as orphaned, non-zero: SILENT`）。
+
+这是本轮第二次变异选错（第一次是 `X-OFF:` 前缀没删掉内容），两次都被「门禁仍绿」暴露。判据：**变异实验必须先确认 sed/替换真的改动了目标**，再读门禁结论。
