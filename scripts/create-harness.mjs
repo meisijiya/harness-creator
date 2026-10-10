@@ -722,7 +722,18 @@ const missingAgentSections = agentResult.status === 'skipped'
 const initPath = path.join(target, 'init.sh');
 if (force || !await exists(initPath)) {
   if (!dryRun) {
-    await writeText(initPath, initScriptFromCommands(commands, { noVerification }));
+    // The next-steps block names the instruction file the agent must read. Hardcoding AGENTS.md
+    // there made a repository whose instruction file is CLAUDE.md open a file that does not exist,
+    // in the one gate every session runs. The literal lives in harness-utils NEXT_STEPS and the
+    // hand-copy fallback templates/init.sh carries the same text, so the substitution is applied to
+    // the rendered text here rather than to the template: a placeholder in templates/init.sh would
+    // break the `nextSteps` agreement gate, which compares that file against NEXT_STEPS verbatim.
+    // A target with no instruction file yet renders AGENTS.md, so the self-check's own fixture
+    // (empty temp dir) is byte-identical to before.
+    const NEXT_STEPS_AGENT_LINE_PREFIX = '1. Read AGENTS.md for the startup path';
+    const initScript = initScriptFromCommands(commands, { noVerification })
+      .replace(NEXT_STEPS_AGENT_LINE_PREFIX, `1. Read ${agentFile} for the startup path`);
+    await writeText(initPath, initScript);
     await chmod(initPath, 0o755);
   }
   results.push({ path: initPath, status: 'written' });
@@ -799,7 +810,11 @@ const AGENTS_LAYER_FILES = {
 
 if (!noAgentsLayer) {
   for (const [template, relative] of Object.entries(AGENTS_LAYER_FILES)) {
-    results.push(await copyTemplate(template, path.join(target, relative), {}, { force, dryRun }));
+    // The two 细则 point at the instruction file that actually exists in this target. Passing no
+    // replacement left the literal `AGENTS.md` behind in a CLAUDE.md repository, which is an
+    // on-demand doc telling the agent to open a file that was never written.
+    results.push(await copyTemplate(template, path.join(target, relative),
+      { AGENT_FILE_NAME: agentFile }, { force, dryRun }));
   }
 }
 
@@ -895,13 +910,18 @@ if (blueprintUpdate) {
 
 if (missingAgentSections.length > 0) {
   console.log('');
-  console.log(`${agentFile} already exists and was NOT written. Harness sections it lacks:`);
+  // The detail layer is appended even when the rest of the file is left alone, so this sentence used
+  // to claim the file "was NOT written" on a run that had just appended ## 细则 to it. Both halves
+  // appeared in the same output — the APPENDED status line above and this one — so a reader could
+  // not tell which was true, and "NOT written" is the half a user checking their constraint would
+  // believe. The append preserves every existing byte and is idempotent, so the honest statement is
+  // that the sections below were NOT merged, not that nothing was.
+  console.log(`${agentFile}: the sections below were NOT merged in — merge them by hand:`);
   for (const section of missingAgentSections) {
     console.log(`  - ${section}`);
   }
-  console.log('  Merge them by hand: keep existing content and any third-party block,');
-  console.log('  and do not add a second copy of a section the file already covers in');
-  console.log('  another language or wording.');
+  console.log('  Keep existing content and any third-party block, and do not add a second copy');
+  console.log('  of a section the file already covers in another language or wording.');
 }
 
 // The next step is the user's, not this skill's. This script places the two artifacts and says
