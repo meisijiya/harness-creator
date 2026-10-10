@@ -156,7 +156,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['maintContract', (group) => ` A full audit score is not an exit condition in the maintenance reference: the score row still routes to the actual misalignment check, keeps the anti-gaming clause, and the shared content-review table states the read-only, baseline-scope, commit-authorization, existing-work and full-score rules — proven per guard, with the whole table deleted, and by the retired short-circuit row (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-guard teeth ${group.teeth ? 'ok' : 'BLIND'}; whole table removed ${group.tableRemovedRefused ? 'refused' : 'ACCEPTED'}; retired row ${group.oldRowRejected ? 'refused' : 'ACCEPTED'}`}).`],
   ['noDeadDecls', (group) => ` This suite carries no orphan: ${group.declaredCount} top-level declarations under scripts/ are all read somewhere in the tree, the ${group.helpEntries} numbered --help entries annotate exactly the ${SELF_CHECK_GROUPS.length} live group keys in both directions, and every flag the generator documents is a flag it reads (${group.pass ? 'verified' : `unread ${(group.dead || []).join(', ') || 'none'}; ghost keys ${(group.ghostKeys || []).join(', ') || 'none'}; groups with no help entry ${(group.missingKeys || []).join(', ') || 'none'}; keys documented twice ${(group.duplicateKeys || []).join(', ') || 'none'}; documented-but-unread flags ${(group.unreadFlags || []).join(', ') || 'none'}; artifact-adding flags missing from SKILL.md ${(group.undocumentedFlags || []).join(', ') || 'none'} (baseline ${group.artifactFlagBaseline} files); lying fixtures ${(group.lyingFlags || []).join(', ') || 'none'}; detector teeth decls ${group.teethDeclarations ? 'ok' : 'BLIND'}, help ${group.teethHelp ? 'ok' : 'BLIND'}, flags ${group.teethFlags ? 'ok' : 'BLIND'}`}).`],
   ['specAsk', (group) => ` The one instruction line that decides whether the agent raises the spec layer at all is machine-checked rather than trusted to prose: SKILL.md's first step names manifest files the stack detector really recognises, judged by running the generator on each file alone rather than by reading its source, in both directions, so the prose cannot claim evidence the code ignores or quietly drop evidence the code acts on — states the non-interactive fallback, and the pair is pinned by behaviour rather than by string comparison: a directory carrying a Go module is asked about (the stack-flag branch the hint arms never exercised, because they all used package.json) while a bare directory is not (${group.pass ? 'verified' : `rule ${group.ruleFound ? 'found' : 'MISSING'}; evidence ${group.evidenceMatchesDetector ? 'agrees' : `DRIFTED (doc names ${(group.docNamed || []).join(', ') || 'none'}; detected ${(group.detected || []).join(', ') || 'none'}; not detected ${(group.undetected || []).join(', ') || 'none'}; contract missing ${(group.contractMissing || []).join(', ') || 'none'}; contract unknown to detector ${(group.contractUnknown || []).join(', ') || 'none'}; named but not detected ${(group.docUnknown || []).join(', ') || 'none'})`}; non-interactive fallback ${group.nonInteractiveFallbackStated ? 'stated' : 'MISSING'}; predicate ${group.predicateAgreesWithCode ? 'agrees' : `DRIFTED (asked on a Go module: ${group.askedOnStackFlag ? 'yes' : 'NO'}; silent on a bare directory: ${group.silentOnBareTarget ? 'yes' : 'NO'})`}`}).`],
-  ['blacklist', (group) => ` The blacklist table in SKILL.md is machine-checked rather than trusted to prose: the header and the 1..${group.rows} numbering hold — the citation "见黑名单 11-13" points at fixed rows — every row carries three non-empty cells and an alternative that does not restate the reason, and the two failure modes this suite was itself bitten by stay pinned to their own terms by a hand-written witness each (${group.pass ? 'verified' : `header ${group.headerFound ? 'ok' : 'MISSING'}; numbering ${group.breaks.length ? `BROKEN at ${group.breaks.join(', ')}` : 'ok'}; hollow rows ${group.hollowRows.length ? group.hollowRows.join(', ') : 'none'}; terms not carried ${group.modeMissing.join(', ') || 'none'}; witnesses ${group.witnesses ? 'ok' : 'BLIND'}`}).`],
+  ['blacklist', (group) => ` The blacklist table in SKILL.md is machine-checked rather than trusted to prose: the header and the 1..${group.rows} numbering hold — a gap or a duplicate would silently shift row handles — every row carries three non-empty cells and an alternative that does not restate the reason, and the two failure modes this suite was itself bitten by stay pinned to their own terms by a hand-written witness each, and every 「见黑名单 N-M」 citation lands on a row that exists (${group.pass ? 'verified' : `header ${group.headerFound ? 'ok' : 'MISSING'}; numbering ${group.breaks.length ? `BROKEN at ${group.breaks.join(', ')}` : 'ok'}; hollow rows ${group.hollowRows.length ? group.hollowRows.join(', ') : 'none'}; terms not carried ${group.modeMissing.join(', ') || 'none'}; witnesses ${group.witnesses ? 'ok' : 'BLIND'}; dangling citations ${(group.badCitations || []).join(', ') || 'none'}`}).`],
   ['gateArgs', (group) => ` This script's own switches cannot switch it off: a non-numeric --min-score, --min-eval-score or --min-self-check-score is refused before the run starts rather than becoming NaN and turning the comparison permanently false, and --no-self-check is refused rather than skipping the only check that proves the bundled scripts still run — proven by deleting the refusal from a copy of this file in turn, while an explicit --min-score=0 still runs as the deliberate relaxation it is (${group.pass ? 'verified' : `refusal ${group.refusalsCaught}/${group.refusalsTotal}; exit ${group.refusalExits ? 'ok' : 'NO'}; teeth ${group.teethThresholds ? 'ok' : 'BLIND'}/${group.teethSelfCheck ? 'ok' : 'BLIND'}; zero still runs ${group.zeroStillRuns ? 'ok' : 'REFUSED'}; accepted ${(group.accepted || []).join(', ') || 'none'}; misreported ${(group.misreported || []).join(', ') || 'none'}`}).`]
 ]);
 
@@ -332,14 +332,20 @@ const BLACKLIST_FAILURE_MODES = [
   {
     row: 14,
     key: 'run-status',
-    terms: ['本次 run', 'status'],
-    witness: '| 14 | 用「本次写了什么」当状态判据 | 缺陷持续存在，下次因文件已存在被跳过而静默通过 | 判「写完之后现状如何」——读文件内容而非本次 status；指针齐全时也要静默 |'
+    // Each entry is a set of interchangeable spellings; one match carries the term. 状态 is the
+    // Chinese of status and the shipped anti-pattern uses it; status is the literal token the
+    // remedy quotes, and it is deliberately excluded by the column scoping below.
+    terms: [['本次 run', '本次 run 了什么', '本次写了什么'], ['状态', 'status']],
+    witness: '| 14 | 用「本次写了什么」当判据 | 缺陷持续存在，下次因文件已存在被跳过而静默通过 | 判「写完之后现状如何」——读文件内容而非本次 status；指针齐全时也要静默 |'
   },
   {
     row: 15,
     key: 'artifact-pointer',
-    terms: ['产物', '指向'],
-    witness: '| 15 | 声称「每个都正确」 | 修正只加在生成路径，手工兜底仍写死 | 写准覆盖范围（逐个产物核到文件），或修模板 |'
+    // The witness deletes ONE word from the shipped anti-pattern, never rewrites the column: an
+    // earlier version replaced 声称「每个产物都指向正确的文件」 wholesale, which dropped both pinned
+    // terms at once and made the arm refuse two groups instead of the one it is about.
+    terms: [['产物'], ['指向']],
+    witness: '| 15 | 声称「每个产物都正确」 | 修正只加在生成路径，手工兜底仍写死 | 写准覆盖范围（逐个产物核到文件），或修模板 |'
   }
 ];
 
@@ -1328,8 +1334,8 @@ const { pass, defaultShipsLayer, defaultRouteReadable, navigationComplete, artif
     lines.push(`  Gate switches: ${pass ? 'PASS' : 'FAIL'} — this script cannot be switched off: ${refusalsCaught}/${refusalsTotal} malformed invocations refused, each exiting 2: ${refusalExits ? 'ok' : 'NO'}; non-numeric thresholds still accepted once the refusal is deleted: ${teethThresholds ? 'ok' : 'BLIND'}; --no-self-check still accepted once its refusal is deleted: ${teethSelfCheck ? 'ok' : 'BLIND'}; --min-score=0 still runs: ${zeroStillRuns ? 'ok' : 'REFUSED'}${accepted.length ? `; wrongly accepted: ${accepted.join(', ')}` : ''}${misreported.length ? `; refusal without a usable message: ${misreported.join(', ')}` : ''}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.blacklist) {
-    const { pass, headerFound, numberingContinuous, breaks = [], hollowRows = [], modeRows = [], witnesses, rows, error } = selfCheck.blacklist;
-    lines.push(`  Blacklist table: ${pass ? 'PASS' : 'FAIL'} — header: ${headerFound ? 'ok' : 'MISSING'}; ${rows} rows numbered 1..${rows} without a gap or a repeat: ${numberingContinuous ? 'ok' : `BROKEN (${breaks.join('; ') || 'no numbered rows'})`}; every row carries three non-empty cells and an alternative that does not restate the reason: ${hollowRows.length ? `NO (${hollowRows.join(', ')})` : 'ok'}; the failure modes this suite was bitten by stay pinned to their terms: ${modeRows.map((mode) => `${mode.key} ${mode.missing.length ? `MISSING ${mode.missing.join(', ')}` : 'ok'}`).join('; ')}; a hand-written witness per mode is refused by exactly the word it dropped: ${witnesses ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
+    const { pass, headerFound, numberingContinuous, breaks = [], hollowRows = [], modeRows = [], witnesses, citationsResolve, badCitations = [], rows, error } = selfCheck.blacklist;
+    lines.push(`  Blacklist table: ${pass ? 'PASS' : 'FAIL'} — header: ${headerFound ? 'ok' : 'MISSING'}; ${rows} rows numbered 1..${rows} without a gap or a repeat: ${numberingContinuous ? 'ok' : `BROKEN (${breaks.join('; ') || 'no numbered rows'})`}; every row carries three non-empty cells and an alternative that does not restate the reason: ${hollowRows.length ? `NO (${hollowRows.join(', ')})` : 'ok'}; the failure modes this suite was bitten by stay pinned to their terms: ${modeRows.map((mode) => `${mode.key} ${mode.missing.length ? `MISSING ${mode.missing.join(', ')}` : 'ok'}`).join('; ')}; a hand-written witness per mode is refused by exactly the word it dropped: ${witnesses ? 'ok' : 'BLIND'}; every 见黑名单 N-M citation lands on a row that exists: ${citationsResolve ? 'ok' : `DANGLING ${badCitations.join(', ')}`}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.reportCoverage) {
     const { pass, unbound = [], missingLines = [], orphanLines = [], missingConsole = [] } = selfCheck.reportCoverage;
@@ -2687,12 +2693,18 @@ function blacklistTable(text) {
   if (separator === -1) return { found: false, header: '', rows: [], body: '' };
   const header = (blacklistCells(lines[separator - 1]) || []).join('|').replace(/\s+/g, ' ');
   const rows = [];
-  lines.slice(separator + 1).forEach((line, i) => {
+  // Bounded at the next H2. Running to end of file absorbed any later four-column table whose first
+  // cell is numeric — measured: a table added under 交付清单 turned the count to 16 and reported the
+  // break against SKILL.md's wrong line. Today only pipe-lines follow the separator, so the bound is
+  // for the next table rather than for a defect that exists yet.
+  const nextHeading = lines.findIndex((line, i) => i > separator && /^##\s/.test(line));
+  const end = nextHeading === -1 ? lines.length : nextHeading;
+  lines.slice(separator + 1, end).forEach((line, i) => {
     const cells = blacklistCells(line);
     if (!cells || cells.length !== 4 || !/^\d+$/.test(cells[0])) return;
     rows.push({ number: Number(cells[0]), cells, line: separator + 2 + i });
   });
-  return { found: true, header, rows, body: lines.slice(separator + 1).join('\n') };
+  return { found: true, header, rows, body: lines.slice(separator + 1, end).join('\n') };
 }
 
 // The four table cells of a `| … |` line, or null when the line is not one. Escaped pipes are out of
@@ -2743,29 +2755,64 @@ async function checkBlacklistTable() {
     result.rowsSubstantive = result.hollowRows.length === 0;
 
     // Reads rows out of a table body that already starts at the first data row.
+    // The terms are searched in the anti-pattern and reason columns but NEVER the alternative one:
+    // the alternatives reuse the same vocabulary (row 15's alternative carries 产物 and 指向), so a
+    // whole-row match certified a gutted anti-pattern — measured: row 15 rewritten to "把验证做得更全面"
+    // while its alternative kept both pinned terms, and the arm passed. A row that no longer states
+    // the failure mode is exactly what these rows forbid. The alternative column is the remedy, not
+    // the diagnosis.
+    // A term is a LIST of interchangeable spellings, any one of which carries it. The shipped rows mix
+    // 中文 and the literal English tokens (row 14 writes 本次 run in the anti-pattern and 状态 in
+    // Chinese while its remedy quotes status), so pinning a single spelling would only test the
+    // rewording that happened to be shipped.
     const judge = (text) => BLACKLIST_FAILURE_MODES.map((mode) => {
       const row = blacklistRows(text).find((entry) => entry.number === mode.row);
-      return { ...mode, found: row ? mode.terms.filter((term) => !row.cells.join(' ').includes(term)) : mode.terms };
+      const diagnosis = row ? `${row.cells[1]} ${row.cells[2]}` : '';
+      return {
+        ...mode,
+        found: row ? mode.terms.filter((spellings) => !spellings.some((s) => diagnosis.includes(s))) : mode.terms
+      };
     });
     result.modeRows = judge(table).map(({ row, key, found: absent }) => ({ row, key, missing: absent }));
     result.modeMissing = result.modeRows.flatMap((mode) => mode.missing.map((term) => `row ${mode.row}: ${term}`));
     result.failureModesCarried = result.modeRows.every((mode) => mode.missing.length === 0);
-    // Each witness is the shipped row with one term deleted, so each must be refused BY EXACTLY THAT
+    // Each witness is the shipped row with one term deleted, so it must be refused BY EXACTLY THAT
     // TERM — a required-terms list read off SKILL.md would stop testing a word the day it was dropped.
+    // The witness is judged AS TEXT rather than substituted into the table: substitution means
+    // re-serialising the row, and this checkout is CRLF, so the target string carries a trailing \r
+    // that the pipe strip cannot match — measured as `foundAfter=MISSING`, which then made the next
+    // mode throw on a row that was in fact intact. Parsing the witness line directly tests the same
+    // thing without a second serialisation to get wrong.
     result.witnesses = BLACKLIST_FAILURE_MODES.every(({ row, terms, witness }) => {
-      const shipped = blacklistRows(table).find((entry) => entry.number === row);
-      if (!shipped) return false;
-      // The witness is written as a table line a reader could paste in; the substitution target is the
-      // line's interior. Substituting the full witness instead would leave the original's leading "| "
-      // in front of the witness's own, producing a five-cell row that reads as no row at all.
-      const replacement = witness.replace(/^\|\s*/, '').replace(/\s*\|$/, '');
-      const { found: absent } = judge(table.replace(shipped.cells.join(' | '), replacement))
-        .find((mode) => mode.row === row);
-      return absent.length === 1 && absent[0] === terms.find((term) => !witness.includes(term));
+      const cells = blacklistCells(witness.replace(/\r/g, '').trim());
+      if (!cells || cells.length !== 4 || cells[0] !== String(row)) return false;
+      const diagnosis = `${cells[1]} ${cells[2]}`;
+      const absent = terms.filter((spellings) => !spellings.some((s) => diagnosis.includes(s)));
+      // Exactly one spelling group missing, AND the witness must differ from the shipped row in
+      // something other than that group — otherwise the fixture proves only that `absent` agrees with
+      // itself, which is this file's own blacklist row 14 (a run's own output is not a state check).
+      // The remedy column is excluded from the comparison so that quoting the word under contrast
+      // (row 14's 读文件内容而非本次 status) does not count as "different".
+      const shipped = rows.find((entry) => entry.number === row);
+      const differs = Boolean(shipped) && (shipped.cells[1] !== cells[1] || shipped.cells[2] !== cells[2]);
+      return absent.length === 1 && differs;
     });
 
+    // The numbering check proves 1..N contiguity and nothing more, so the citation that makes the
+    // numbering worth keeping needs its own arm — measured: deleting 「，维护路径的反例见黑名单 11-13」
+    // outright left every other arm green. A citation into this table is what makes a row number a
+    // stable handle, and a citation that points at nothing is a broken instruction, not prose.
+    const citations = [...(body.match(/见黑名单\s*\d+(?:-\d+)?/g) || [])];
+    const badCitations = citations.filter((citation) => {
+      const span = citation.match(/(\d+)(?:-(\d+))?/);
+      const end = Number(span[2] || span[1]);
+      return Number(span[1]) < 1 || end > result.rows;
+    });
+    result.citationsResolve = badCitations.length === 0;
+    result.badCitations = badCitations;
+
     result.pass = result.headerFound && result.numberingContinuous && result.rowsSubstantive
-      && result.failureModesCarried && result.witnesses;
+      && result.failureModesCarried && result.witnesses && result.citationsResolve;
     return result;
   } catch (error) {
     return { ...result, error: error.message };
