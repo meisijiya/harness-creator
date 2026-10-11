@@ -13,6 +13,8 @@ import {
   diffSections,
   exists,
   extractSection,
+  gateHasCheckRegion,
+  holdsForeignSections,
   initScriptFromCommands,
   isPlaceholderVerification,
   lineCount,
@@ -726,19 +728,21 @@ const missingAgentSections = agentResult.status === 'skipped'
 // place.
 
 const initPath = path.join(target, 'init.sh');
-if (force || !await exists(initPath)) {
+const gateIsGenerated = force || !await exists(initPath);
+// The next-steps block names the instruction file the agent must read. Hardcoding AGENTS.md
+// there made a repository whose instruction file is CLAUDE.md open a file that does not exist,
+// in the one gate every session runs. The literal lives in harness-utils NEXT_STEPS and the
+// hand-copy fallback templates/init.sh carries the same text, so the substitution is applied to
+// the rendered text here rather than to the template: a placeholder in templates/init.sh would
+// break the `nextSteps` agreement gate, which compares that file against NEXT_STEPS verbatim.
+// A target with no instruction file yet renders AGENTS.md, so the self-check's own fixture
+// (empty temp dir) is byte-identical to before. The text is built even under --dry-run, because
+// a preview has to reason about the gate a real run WOULD leave behind.
+const NEXT_STEPS_AGENT_LINE_PREFIX = '1. Read AGENTS.md for the startup path';
+const initScript = initScriptFromCommands(commands, { noVerification })
+  .replace(NEXT_STEPS_AGENT_LINE_PREFIX, `1. Read ${agentFile} for the startup path`);
+if (gateIsGenerated) {
   if (!dryRun) {
-    // The next-steps block names the instruction file the agent must read. Hardcoding AGENTS.md
-    // there made a repository whose instruction file is CLAUDE.md open a file that does not exist,
-    // in the one gate every session runs. The literal lives in harness-utils NEXT_STEPS and the
-    // hand-copy fallback templates/init.sh carries the same text, so the substitution is applied to
-    // the rendered text here rather than to the template: a placeholder in templates/init.sh would
-    // break the `nextSteps` agreement gate, which compares that file against NEXT_STEPS verbatim.
-    // A target with no instruction file yet renders AGENTS.md, so the self-check's own fixture
-    // (empty temp dir) is byte-identical to before.
-    const NEXT_STEPS_AGENT_LINE_PREFIX = '1. Read AGENTS.md for the startup path';
-    const initScript = initScriptFromCommands(commands, { noVerification })
-      .replace(NEXT_STEPS_AGENT_LINE_PREFIX, `1. Read ${agentFile} for the startup path`);
     await writeText(initPath, initScript);
     await chmod(initPath, 0o755);
   }
@@ -746,6 +750,11 @@ if (force || !await exists(initPath)) {
 } else {
   results.push({ path: initPath, status: 'skipped', reason: 'exists' });
 }
+
+// The gate text this run is actually reasoning about: the one it would write, or the one already
+// on disk when the existing-file rule kept it. Never read from what this run did — under --dry-run
+// nothing was written, so a read of init.sh would be a read of a file that does not exist yet.
+const gateText = gateIsGenerated ? initScript : await readText(initPath);
 
 // The spec layer, and only when it was asked for. Same skip rule as the two artifacts above, so a
 // re-run cannot quietly rewrite documents the project has since edited in its own words — that is
@@ -850,13 +859,134 @@ const AGENTS_LAYER_FILES = {
   'agents-layer/maintenance.md': 'docs/agents/harness-creator-maintenance.md'
 };
 
+// Select the branch of a detail document that is true of THIS target's gate. The markers are HTML
+// comments so a branch that survives is never prose a reader trips over — and a comment that DOES
+// survive is the loudest possible signal that the projection failed, which is why an unbalanced or
+// unknown block throws instead of defaulting.
+//
+// The failure this replaces is not cosmetic. Both documents make unconditional claims about
+// `./init.sh`, and those claims describe a `RAN` counter, an `has_script` guard, a short-hash
+// anchor and an `--add-check` that appends between two anchors. A hand-written gate has none of
+// them, and an agent reading prose about a mechanism that is not there stops looking for the one
+// that is. So the branch is chosen from the gate's own shape rather than assumed.
+//
+// Both branches of one document must carry the SAME H2 headings. `--force` decides what it may
+// overwrite by comparing headings (holdsForeignSections), and it is now handed the projected text —
+// a heading that existed only in the dropped branch would silently become deletable, because the
+// check asks "is this heading one the template defines?" and the projected template no longer
+// defines it. That is why the heading is required to sit outside the conditional spans.
+function projectBranches(templateName, contents, replacements) {
+  const lines = contents.split(/\r?\n/);
+  const out = [];
+  let open = null; // the key of the block currently being collected, null outside any block
+  // Whether the open block's body is kept. A false branch is still opened, because it has to be
+  // skipped to its endif; `open === null` alone cannot express "inside a block that is dropped".
+  let dropping = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    const opener = /^<!--\s*if:([A-Za-z0-9_]+)\s*-->$/.exec(trimmed);
+    if (opener) {
+      const key = opener[1];
+      if (open !== null) {
+        throw new Error(`${templateName}: <!-- if:${key} --> nested inside the open <!-- if:${open} --> block`);
+      }
+      if (Object.hasOwn(replacements, key)) {
+        open = key;
+        dropping = replacements[key] !== 'true';
+      } else {
+        throw new Error(`${templateName}: conditional block uses key "${key}", which is not among the replacements this run passes`);
+      }
+      continue; // the marker line itself never reaches the output
+    }
+
+    if (/^<!--\s*endif\s*-->$/.test(trimmed)) {
+      if (open === null) {
+        throw new Error(`${templateName}: <!-- endif --> with no open <!-- if:… -->`);
+      }
+      open = null;
+      dropping = false;
+      continue;
+    }
+
+    if (open !== null && dropping) continue;
+    out.push(line);
+  }
+
+  if (open !== null) {
+    throw new Error(`${templateName}: <!-- if:${open} --> is never closed by an <!-- endif -->`);
+  }
+
+  // The blank-line pass runs once over the whole result rather than per block, because the two
+  // blocks in these documents are separated by the blank line between them: dropping the first one
+  // strands that separator against the second block's own leading blank. Collapsing afterwards
+  // cannot tell which blank line was original, and does not need to — two blank lines in a row are
+  // never content. The heading guard is the same argument for structure: a heading that used to be
+  // preceded by a dropped block's paragraph would otherwise be glued onto the line above it.
+  const rendered = out.join('\n');
+  const spaced = rendered.replace(/\n{3,}/g, '\n\n');
+  return spaced.replace(/([^\n])\n(?=#{1,6} )/g, '$1\n\n');
+}
+
 if (!noAgentsLayer) {
+  // Both 细则 make claims about `./init.sh` that are only true of a gate this generator produced —
+  // a `RAN` counter, an `has_script` guard, a short-hash evidence anchor, `--add-check` growing it.
+  // A target whose gate was written by hand has none of those, and prose describing them there is
+  // worse than silence: an agent that reads it concludes the mechanism exists and stops looking.
+  // So the branch is decided from the gate text itself, per target, at write time. An empty or
+  // unrecognisable gateText resolves to the hand-written branch, because calling an unknown gate a
+  // generated one is the failure that misleads; calling a generated one hand-written only drops
+  // advice the agent can still get by reading the gate.
+  const shaped = gateHasCheckRegion(gateText).shaped;
+  const layerReplacements = {
+    AGENT_FILE_NAME: agentFile,
+    GENERATED_GATE: shaped ? 'true' : 'false',
+    HANDWRITTEN_GATE: shaped ? 'false' : 'true'
+  };
+
   for (const [template, relative] of Object.entries(AGENTS_LAYER_FILES)) {
     // The two 细则 point at the instruction file that actually exists in this target. Passing no
     // replacement left the literal `AGENTS.md` behind in a CLAUDE.md repository, which is an
     // on-demand doc telling the agent to open a file that was never written.
-    results.push(await copyTemplate(template, path.join(target, relative),
-      { AGENT_FILE_NAME: agentFile }, { force, dryRun }));
+    const targetPath = path.join(target, relative);
+
+    // Same skip rule copyTemplate applies, decided before any reading so a re-run stays as quiet as
+    // it was. --force falls through to the foreign-section check below.
+    if (!force && await exists(targetPath)) {
+      results.push({ path: targetPath, status: 'skipped', reason: 'exists' });
+      continue;
+    }
+
+    // readText runs under dryRun on purpose, for copyTemplate's reason: a missing or unreadable
+    // template must fail during the preview, not surface for the first time on the real write.
+    // The {{KEY}} substitution copyTemplate used to do still has to happen here, because this loop
+    // no longer calls it: skipping it ships the literal `{{AGENT_FILE_NAME}}` into an on-demand
+    // document, which is the orphan pointer the agentFile gate exists to catch.
+    const contents = renderTemplate(template,
+      projectBranches(template, await readText(path.join(TEMPLATE_DIR, template)), layerReplacements),
+      layerReplacements);
+
+    // Refuse before writing, not after: reporting "written" and then deleting someone else's work is
+    // the exact failure, and it stays after the read because the PROJECTED text's headings are the
+    // ownership test — a name list beside it would be a second contract to keep in sync. This runs
+    // on the branch that will actually be written, so it cannot be disarmed by holding a heading
+    // only inside the branch that was dropped.
+    if (force && await exists(targetPath) && template.endsWith('.md')) {
+      const foreign = holdsForeignSections(await readText(targetPath), contents);
+      if (foreign.length > 0) {
+        results.push({
+          path: targetPath,
+          status: 'refused',
+          reason: `--force would delete sections this template does not define: ${foreign.join(', ')}. `
+            + 'Merge by hand instead, or remove those sections yourself if they are genuinely obsolete.'
+        });
+        continue;
+      }
+    }
+
+    if (!dryRun) await writeText(targetPath, contents);
+    results.push({ path: targetPath, status: 'written' });
   }
 }
 

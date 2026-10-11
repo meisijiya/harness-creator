@@ -728,14 +728,15 @@ export function normalizeEntryPath(value) {
 // unrecognised blueprint slot: both ways of guessing are silent. Insert too early and the step runs
 // outside the region or before RAN=0 initialises it; either way the file still parses, still exits
 // 0, and still says nothing was checked while looking exactly like a gate.
-const CHECK_REGION_OPEN = 'RAN=0';
-const CHECK_REGION_CLOSE = 'if [ "$RAN" -eq 0 ]; then';
+export const CHECK_REGION_OPEN = 'RAN=0';
+export const CHECK_REGION_CLOSE = 'if [ "$RAN" -eq 0 ]; then';
 
-// Three outcomes rather than the {ok} pair the other editors return, because this one can also
-// succeed by doing nothing. Reporting "already there" as ok:true would be indistinguishable from a
-// write unless the caller read a second field, and a caller that forgets it writes nothing and
-// claims a check was added.
-export function appendVerificationCheck(scriptText, command) {
+// The ONE answer to "is this the gate shape this generator produces", read off the anchors rather
+// than reimplemented per caller. --add-check below decides whether it may append from it, and the
+// detail layer's projection decides which prose to ship from it; a second copy of this test is a
+// second truth, and the day they disagree the projection would tell a hand-written gate it carries
+// a counter it does not have — which is the exact defect this predicate exists to prevent.
+export function gateHasCheckRegion(scriptText) {
   const bare = (line) => line.replace(/\r$/, '');
   const lines = String(scriptText).split('\n');
   const opens = [];
@@ -745,6 +746,17 @@ export function appendVerificationCheck(scriptText, command) {
     if (trimmed === CHECK_REGION_OPEN) opens.push(index);
     if (trimmed === CHECK_REGION_CLOSE) closes.push(index);
   });
+  return { opens, closes, shaped: opens.length === 1 && closes.length === 1 && opens[0] < closes[0] };
+}
+
+// Three outcomes rather than the {ok} pair the other editors return, because this one can also
+// succeed by doing nothing. Reporting "already there" as ok:true would be indistinguishable from a
+// write unless the caller read a second field, and a caller that forgets it writes nothing and
+// claims a check was added.
+export function appendVerificationCheck(scriptText, command) {
+  const bare = (line) => line.replace(/\r$/, '');
+  const lines = String(scriptText).split('\n');
+  const { opens, closes } = gateHasCheckRegion(scriptText);
 
   if (opens.length !== 1 || closes.length !== 1) {
     return {

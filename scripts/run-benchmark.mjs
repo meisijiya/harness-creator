@@ -1274,8 +1274,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Command references: ${pass ? 'PASS' : 'FAIL'} — a documented command that stops resolving is caught, while a guarded one and an unresolvable one are not mistaken for it: dangling fixture ${danglingCaught ? `caught (${dangling.join(', ')})` : 'MISSED'}; guarded fixture ${guardedExcused ? 'excused' : 'FALSELY FLAGGED'}; what cannot be resolved is listed: ${uncheckedListed ? 'ok' : 'SILENT'}; a defined-but-never-run check is named: ${unwiredNamed ? 'ok' : 'MISSED'}; a guard retires it: ${unwiredRetired ? 'ok' : 'NOT RETIRED'}; naming it does not fail the audit: ${unwiredNonFatal ? 'ok' : 'FALSELY FATAL'}; an uncollected scan fails rather than passing: ${uncollectedRefused ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.agentsLayer) {
-const { pass, defaultShipsLayer, defaultRouteReadable, navigationComplete, artifactsDeclareLayer, onDemandNotResident, layerBudgetHeld, appendPreserves, thirdPartySurvives, appendIdempotent, anchorsIntact, switchSuppressesFiles, switchClearsRoute, switchValueRefused, error } = selfCheck.agentsLayer;
-    lines.push(`  Detail layer: ${pass ? 'PASS' : 'FAIL'} — a plain run ships both detail documents: ${defaultShipsLayer ? 'ok' : 'NO'}; the instruction file routes to each under its own H3: ${navigationComplete ? 'ok' : 'MISSING'}; the artifact contract names them: ${artifactsDeclareLayer ? 'ok' : 'MISSING'}; read on demand, not resident: ${onDemandNotResident ? 'ok' : 'RESIDENT'}; each inside its own ceiling: ${layerBudgetHeld ? 'ok' : 'BUSTED'}; appending to another owner's file leaves its bytes untouched: ${appendPreserves ? 'ok' : 'REWRITES'}; its third-party block survives: ${thirdPartySurvives ? 'ok' : 'CLOBBERED'}; a second run adds nothing: ${appendIdempotent ? 'ok' : 'DUPLICATED'}; the --add-check anchors are still in place: ${anchorsIntact ? 'ok' : 'MOVED'}; the default run still reads 细则 as a route, not a filename: ${defaultRouteReadable ? 'ok' : 'MISREAD'}; --no-agents-layer writes neither document: ${switchSuppressesFiles ? 'ok' : 'WROTE'}; and leaves no route to them: ${switchClearsRoute ? 'ok' : 'DANGLING'}; a value on that switch is refused: ${switchValueRefused ? 'ok' : 'ACCEPTED'}${error ? `; ${error}` : ''}`);
+const { pass, defaultShipsLayer, defaultRouteReadable, navigationComplete, artifactsDeclareLayer, onDemandNotResident, layerBudgetHeld, appendPreserves, thirdPartySurvives, appendIdempotent, anchorsIntact, switchSuppressesFiles, switchClearsRoute, switchValueRefused, projectedForGeneratedGate, projectedForHandwrittenGate, handGateSurvived, projectionHasTeeth, noResidualMarkers, error } = selfCheck.agentsLayer;
+    lines.push(`  Detail layer: ${pass ? 'PASS' : 'FAIL'} — a plain run ships both detail documents: ${defaultShipsLayer ? 'ok' : 'NO'}; the instruction file routes to each under its own H3: ${navigationComplete ? 'ok' : 'MISSING'}; the artifact contract names them: ${artifactsDeclareLayer ? 'ok' : 'MISSING'}; read on demand, not resident: ${onDemandNotResident ? 'ok' : 'RESIDENT'}; each inside its own ceiling: ${layerBudgetHeld ? 'ok' : 'BUSTED'}; appending to another owner's file leaves its bytes untouched: ${appendPreserves ? 'ok' : 'REWRITES'}; its third-party block survives: ${thirdPartySurvives ? 'ok' : 'CLOBBERED'}; a second run adds nothing: ${appendIdempotent ? 'ok' : 'DUPLICATED'}; the --add-check anchors are still in place: ${anchorsIntact ? 'ok' : 'MOVED'}; the default run still reads 细则 as a route, not a filename: ${defaultRouteReadable ? 'ok' : 'MISREAD'}; --no-agents-layer writes neither document: ${switchSuppressesFiles ? 'ok' : 'WROTE'}; and leaves no route to them: ${switchClearsRoute ? 'ok' : 'DANGLING'}; a value on that switch is refused: ${switchValueRefused ? 'ok' : 'ACCEPTED'}; an anchored gate gets the prose that describes it: ${projectedForGeneratedGate ? 'ok' : 'WRONG BRANCH'}; a gate with no RAN anchors gets the prose that describes THAT gate: ${projectedForHandwrittenGate ? 'ok' : 'WRONG BRANCH'}; and the generator left that gate alone: ${handGateSurvived ? 'ok' : 'REWRITTEN'}; the branch comparison can come out false: ${projectionHasTeeth ? 'ok' : 'BLIND'}; no branch marker survives into a shipped document: ${noResidualMarkers ? 'ok' : 'LEAKED'}${error ? `; ${error}` : ''}`);
   }
   if (selfCheck.bottleneckTies) {
     const { pass, tieCount, uniqueCount, noneCount, tieLabel } = selfCheck.bottleneckTies;
@@ -1532,13 +1532,19 @@ async function checkAgentsLayer() {
   let dir;
   let foreignDir;
   let offDir;
+  let handDir;
   const result = {
     pass: false, defaultShipsLayer: false, navigationComplete: false, artifactsDeclareLayer: false,
     onDemandNotResident: false, layerBudgetHeld: false, appendPreserves: false,
     thirdPartySurvives: false, appendIdempotent: false, anchorsIntact: false, defaultRouteReadable: false,
-    switchSuppressesFiles: false, switchClearsRoute: false, switchValueRefused: false
+    switchSuppressesFiles: false, switchClearsRoute: false, switchValueRefused: false,
+    projectedForGeneratedGate: false, projectedForHandwrittenGate: false, handGateSurvived: false,
+    projectionHasTeeth: false, noResidualMarkers: false
   };
   const LAYER_FILES = ['harness-creator-verification.md', 'harness-creator-maintenance.md'];
+  // The two documents' short names, in LAYER_FILES order — the projection arms key literals per
+  // document, so they need to say WHICH file a claim has to appear in.
+  const LAYER_DOCS = ['verification', 'maintenance'];
   try {
     const script = path.join(scriptDir, 'create-harness.mjs');
 
@@ -1623,11 +1629,92 @@ async function checkAgentsLayer() {
       .catch((error) => error.code ?? 1);
     result.switchValueRefused = valueRun !== 0;
 
+    // ---- projection onto the target's REAL gate shape ----
+    //
+    // Both 细则 make claims about `./init.sh` that are only true of a gate carrying the check-region
+    // anchors, so the generator projects one of two prose branches per target, decided from that
+    // target's own gate text. Every arm above this line passes equally well on a document that
+    // describes a mechanism the target does not have — an unconditional template would ship
+    // `Evidence anchor` and `--add-check` into a hand-written gate and score full marks, which is
+    // exactly the defect a real target repo hit.
+    //
+    // The literals below are branch-exclusive substrings, not wording preferences. Each was read out
+    // of the shipped templates: GENERATED-only — `Evidence anchor: <短哈希>` and
+    // `走 \`--add-check "npm run lint"\`` in verification.md, `--add-check-entry（检查多时…）` in
+    // maintenance.md; HANDWRITTEN-only — `本仓的门禁不打印 commit 锚点` and
+    // `直接在门禁里写上那一步，改完重跑一遍` in verification.md, `认不出来就会拒绝` in
+    // maintenance.md. Deliberately NOT asserted: any authorship wording (手写/生成器产物) — a
+    // `--no-verification` gate has no anchors either and lands on the same branch without anyone
+    // having written it.
+    const GENERATED_ONLY = {
+      verification: ['Evidence anchor: <短哈希>', '走 `--add-check "npm run lint"`'],
+      maintenance: ['`--add-check-entry`（检查多时门禁里只加一行调用本仓脚本）']
+    };
+    const HANDWRITTEN_ONLY = {
+      verification: ['本仓的门禁不打印 commit 锚点', '直接在门禁里写上那一步，改完重跑一遍'],
+      maintenance: ['认不出来就会拒绝']
+    };
+    // Black-box on the rendered bytes: which branch landed, and nothing else. A function, not a
+    // loop, because the teeth arm has to be able to hand it text the generator never produced.
+    const projectedBranch = (bodies, generated) => {
+      const wanted = generated ? GENERATED_ONLY : HANDWRITTEN_ONLY;
+      const other = generated ? HANDWRITTEN_ONLY : GENERATED_ONLY;
+      return LAYER_DOCS.every((doc) => wanted[doc].every((literal) => bodies[doc].includes(literal))
+        && !other[doc].some((literal) => bodies[doc].includes(literal)));
+    };
+    const readLayerDocs = async (root) => ({
+      verification: (await readText(path.join(root, 'docs', 'agents', LAYER_FILES[0]))).replace(/\r\n/g, '\n'),
+      maintenance: (await readText(path.join(root, 'docs', 'agents', LAYER_FILES[1]))).replace(/\r\n/g, '\n')
+    });
+
+    const layerText = await readLayerDocs(dir);
+    // A plain generated target: its gate DOES carry the anchors, so the generated prose has to be
+    // there — and the other branch has to be gone, because a document carrying both tells the agent
+    // two contradictory things about the same file.
+    result.projectedForGeneratedGate = projectedBranch(layerText, true);
+
+    // The arm that would have caught the real defect. A gate with no `RAN=0` and no
+    // `if [ "$RAN" -eq 0 ]; then` is the whole premise. An unconditional template fails this
+    // immediately, which is the point: nothing else in this group could tell the two apart.
+    handDir = await mkdtemp(path.join(os.tmpdir(), 'harness-layer-hand-'));
+    const handGate = '#!/bin/bash\nset -e\necho "a gate this generator did not produce"\n';
+    await writeText(path.join(handDir, 'init.sh'), handGate);
+    await execFileAsync('node', [script, '--target', handDir]);
+    // The planted gate must survive the run byte-for-byte. If the generator regenerated it, the
+    // anchors would be back and the fixture would silently become a GENERATED one — the projection
+    // arms would still be true while testing nothing about the no-anchor case.
+    result.handGateSurvived = (await readText(path.join(handDir, 'init.sh'))).replace(/\r\n/g, '\n') === handGate;
+    const handText = await readLayerDocs(handDir);
+    result.projectedForHandwrittenGate = result.handGateSurvived && projectedBranch(handText, false);
+
+    // Teeth. A comparison that cannot come out false reports "projected correctly" on any file at
+    // all — including one that shipped BOTH branches, which is the failure mode where the document
+    // is unreadable rather than merely wrong. So delete one branch-exclusive literal per document and
+    // require the verdict to flip on both. Deletion, not substitution: a substituted string can still
+    // satisfy an `includes()` elsewhere in the document. Asserting the mutated text merely EXISTS
+    // would prove nothing — the load-bearing part is the false verdict.
+    const dropped = { ...layerText };
+    result.projectionHasTeeth = LAYER_DOCS.every((doc) => {
+      const trimmed = dropped[doc].replace(GENERATED_ONLY[doc][0], '');
+      const verdict = trimmed !== dropped[doc]
+        && !projectedBranch({ ...dropped, [doc]: trimmed }, true);
+      dropped[doc] = trimmed;
+      return verdict;
+    });
+
+    // A marker that reached the shipped document is the projection failing OPEN: the reader gets an
+    // HTML comment, no prose, and an agent that opens the file learns nothing at all. Checked in both
+    // targets, because a strip that runs on only one branch would pass a single-dir check.
+    result.noResidualMarkers = [...LAYER_DOCS.map((doc) => layerText[doc]), ...LAYER_DOCS.map((doc) => handText[doc])]
+      .every((text) => !text.includes('<!-- if:') && !text.includes('<!-- endif -->'));
+
     result.pass = result.defaultShipsLayer && result.navigationComplete && result.artifactsDeclareLayer
       && result.onDemandNotResident && result.layerBudgetHeld && result.appendPreserves
       && result.thirdPartySurvives && result.appendIdempotent && result.anchorsIntact
       && result.defaultRouteReadable
-      && result.switchSuppressesFiles && result.switchClearsRoute && result.switchValueRefused;
+      && result.switchSuppressesFiles && result.switchClearsRoute && result.switchValueRefused
+      && result.projectedForGeneratedGate && result.projectedForHandwrittenGate && result.handGateSurvived
+      && result.projectionHasTeeth && result.noResidualMarkers;
     return result;
   } catch (error) {
     return { ...result, pass: false, error: error.message };
@@ -1635,6 +1722,7 @@ async function checkAgentsLayer() {
     if (dir) await rm(dir, { recursive: true, force: true });
     if (foreignDir) await rm(foreignDir, { recursive: true, force: true });
     if (offDir) await rm(offDir, { recursive: true, force: true });
+    if (handDir) await rm(handDir, { recursive: true, force: true });
   }
 }
 
