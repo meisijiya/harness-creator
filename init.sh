@@ -5,12 +5,6 @@ set -e
 
 echo "=== Harness Initialization ==="
 
-# A script that package.json does not define yet is SKIPPED with a notice, so a
-# fresh skeleton runs cleanly; a real verification failure still aborts below.
-has_script() {
-  [ -f package.json ] && node -e "const s=require('./package.json').scripts||{};process.exit(s[process.argv[1]]?0:1)" "$1"
-}
-
 explain_failure() {
   echo ""
   echo "=== Verification FAILED ==="

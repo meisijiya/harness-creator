@@ -151,7 +151,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['agentFile', (group) => ` An existing CLAUDE.md is reused instead of having AGENTS.md created beside it, an existing instruction file is left byte-identical while its missing sections are still reported, and --force refuses to render over sections it does not define — the one rule protecting another owner's block, which was prose until it destroyed a fixture — while still overwriting this skill's own render. Every artifact the GENERATOR leaves behind points at the file the target actually uses — a hardcoded AGENTS.md in a CLAUDE.md repo is an orphan pointer the agent spends a failed open to diagnose (the hand-copy fallback template still says AGENTS.md and is pinned byte-for-byte by the nextSteps gate, so that path is documented rather than fixed) — and the report never denies what the run wrote (${group.pass ? 'verified' : `FAILED (foreign block refused: ${group.forceRefused ? 'ok' : 'NO'}; own render rewritten: ${group.forceStillWritesOwn ? 'ok' : 'NO'}; orphan pointer: ${group.noOrphanPointer ? 'ok' : 'ORPHANED'}; false denial: ${group.noFalseDenial ? 'ok' : 'DENIED'})`}).`],
   ['initGrowth', (group) => ` The gate only grows: a new check joins an existing init.sh without removing or reordering any step, a repeat is a no-op that leaves the file byte-identical, a check the gate would never actually run — or one that does not parse as shell — is refused and rolled back rather than reported as added, and such a refusal names the command it refused instead of printing a placeholder where the command belongs, a one-line entry reference to a script this repository owns is appended unguarded so a missing entry turns the gate red instead of skipping it, a declared check that did not run turns the gate red instead of printing a notice beside the success tail while a script this manifest does define still gets a real step, every toolchain branch of the hand-copy fallback raises its counter only on the tool's own verdict — so a project whose test suite is empty is refused by name rather than reported as verified — while the same branch stays green on a toolchain that has a test to run, and a gate that went red this session leaves a check behind so the lesson reaches the specification instead of only the fix (${group.pass ? 'verified' : `grew ${group.grew ? 'ok' : 'NO'}; existing steps intact ${group.preserved ? 'ok' : 'NO'}; repeat ${group.idempotent ? 'ok' : 'NO'}; dead-branch check ${group.deadBranchRefused && group.rolledBack ? 'refused and rolled back' : 'ACCEPTED'}; refusal names its command ${group.refusalNamesCommand ? 'ok' : '     '}; name detector ${group.refusalNameHasTeeth ? 'has teeth' : 'BLIND'}; unparseable check ${group.unparseableRefused ? 'refused' : 'ACCEPTED'}; entry appended ${group.entryAppended ? 'ok' : 'NO'}; entry unguarded ${group.entryUnguarded ? 'ok' : 'GUARDED'}; entry repeat ${group.entryIdempotent ? 'ok' : 'NO'}; missing entry ${group.entryMissingRefused ? 'refused' : 'ACCEPTED'}; path rules ${group.entryRulesHaveTeeth ? 'ok' : 'BLIND'}; entry removed turns it red ${group.entryGateFailsWhenUnresolvable ? 'yes' : 'NO'}; skipped declared check ${group.declaredSkipTurnsGateRed ? 'turns it red' : 'NOTICE ONLY'}; its detector ${group.declaredSkipDetectorHasTeeth ? 'has teeth' : 'BLIND'}; declared script ${group.declaredScriptStillRuns ? 'still checked' : 'DROPPED'}; run-it ${group.declaredSkipGateIsRed && group.declaredGateIsGreen ? 'red and green' : 'NOT OBSERVED'}; toolchain branches earn RAN ${group.emptyToolBranchesGuarded ? 'ok' : 'UNGUARDED'}; branch detector ${group.emptyToolBranchesHaveTeeth ? 'has teeth' : 'BLIND'}; empty tool run ${group.emptyToolRunsRed ? 'red' : 'NOT OBSERVED'}; populated tool run ${group.emptyToolRunsGreen ? 'green' : 'NOT OBSERVED'}; that detector ${group.emptyToolGateTeeth ? 'has teeth' : 'BLIND'}; red-gate lesson ${group.loopStated && group.loopIsLoadBearing ? 'recorded' : 'LOST'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}; no init.sh ${group.missingRefused ? 'refused' : 'ACCEPTED'}`}).`],
   ['specLayer', (group) => ` The spec layer is opt-in and says nothing when it is off: a run without --spec-layer still produces the two artifacts and byte-identical content, the two documents exist only when the flag is given, the detected stack never becomes an answer to "what is this project", they are pointed at as read-on-demand rather than as files every session must open, and the same byte/line/working-rule ceilings still hold with the extra pointer. The optional layer is not silent by default: the hint naming --spec-layer appears on stdout when the target carries a manifest the stack detector recognises, stays silent for a bare directory, and appears on the real run as well as on the dry-run preview. Documents on disk that no version of the instruction file names are orphaned — nothing points at them from the one file every session reads — and the run exits non-zero rather than reporting a delivery the next session cannot find; the warning reads the state on disk rather than this run's statuses, so it still fires on the second and third run once both documents SKIP, pointers left by an earlier run are honoured, and a healthy repository re-runs silently and successfully so the warning keeps its meaning (${group.pass ? 'verified' : `default unchanged ${group.offByDefault ? 'ok' : 'CHANGED'}; flag creates the layer ${group.onCreatesLayer ? 'ok' : 'NO'}; stack kept out of the mission ${group.noStackLeak ? 'ok' : 'LEAKED'}; read on demand ${group.onDemandNotResident ? 'ok' : 'RESIDENT'}; budget ${group.budgetHeld ? 'ok' : 'BUSTED'}; re-run skips ${group.reRunSkips ? 'ok' : 'OVERWROTE'}; flag value ${group.flagValueRefused ? 'refused' : 'ACCEPTED'}; zero coupling ${group.purityHeld ? 'ok' : 'NAMED OR BLIND'}; pointers kept, documents re-created ${group.pointersSurviveRedelete ? 'ok' : 'CALLED ORPHAN'}`}).`],
-  ['agentsLayer', (group) => ` The instruction file is a router and the detail lives beside it: a default run ships both detail documents with no switch, the instruction file names each of them under its own H3 with a one-line summary, the artifact contract lists them, all three are pointed at as read-on-demand rather than resident, and appending the section to an instruction file another owner wrote leaves that file's existing bytes untouched, survives a third party's block, and is idempotent (${group.pass ? 'verified' : `default ships ${group.defaultShipsLayer ? 'ok' : 'NO'}; navigation ${group.navigationComplete ? 'ok' : 'MISSING'}; artifact contract ${group.artifactsDeclareLayer ? 'ok' : 'MISSING'}; read on demand ${group.onDemandNotResident ? 'ok' : 'RESIDENT'}; append preserves ${group.appendPreserves ? 'ok' : 'REWRITES'}; third party survives ${group.thirdPartySurvives ? 'ok' : 'CLOBBERED'}; idempotent ${group.appendIdempotent ? 'ok' : 'DUPLICATED'}; anchors intact ${group.anchorsIntact ? 'ok' : 'BROKEN'}; budget ${group.layerBudgetHeld ? 'ok' : 'BUSTED'}`}).`],
+  ['agentsLayer', (group) => ` The instruction file is a router and the detail lives beside it: a default run ships both detail documents with no switch, the instruction file names each of them under its own H3 with a one-line summary, the artifact contract lists them, all three are pointed at as read-on-demand rather than resident, and appending the section to an instruction file another owner wrote leaves that file's existing bytes untouched, survives a third party's block, and is idempotent (${group.pass ? 'verified' : `default ships ${group.defaultShipsLayer ? 'ok' : 'NO'}; navigation ${group.navigationComplete ? 'ok' : 'MISSING'}; artifact contract ${group.artifactsDeclareLayer ? 'ok' : 'MISSING'}; read on demand ${group.onDemandNotResident ? 'ok' : 'RESIDENT'}; append preserves ${group.appendPreserves ? 'ok' : 'REWRITES'}; third party survives ${group.thirdPartySurvives ? 'ok' : 'CLOBBERED'}; idempotent ${group.appendIdempotent ? 'ok' : 'DUPLICATED'}; anchors intact ${group.anchorsIntact ? 'ok' : 'BROKEN'}; budget ${group.layerBudgetHeld ? 'ok' : 'BUSTED'}; across TIME, drift injected ${group.driftInjected ? 'ok' : 'NO'} and reported ${group.driftReported ? 'ok' : 'SILENT'} on a settled document (${group.driftIsStale ? 'stale confirmed' : 'NOT STALE'})`}).`],
   ['nextSteps', (group) => ` The gate's closing instructions are one literal with two producers: the generated init.sh, the hand-copy fallback and this repository's own gate all carry the same next-steps block, and it tells the agent to work only on what was explicitly authorized rather than to pick its own next task — a contradiction that was shipping, because the generated gate selected work in the same breath as the instruction file that forbids it (${group.pass ? 'verified' : `generated ${group.generatorAgrees ? 'agrees' : 'DRIFTED'}; fallback ${group.fallbackAgrees ? 'agrees' : 'DRIFTED'}; own gate ${group.ownGateAgrees ? 'agrees' : 'DRIFTED'}; authorizes rather than selects ${group.authorizesRatherThanSelects ? 'ok' : 'SELECTS'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}`}).`],
   ['ownGate', (group) => ` The gate this repository runs on itself is checked like any other: it still executes the self-check, it still carries the RAN counter that turns "every step skipped" into a non-zero exit, and every script this skill ships is still reachable from it. Every other arm in this suite grades a throwaway target or one of the two shipped templates, so before these arms a file edit could strip the counter, the refusal, the self-check or a single check step out of the local gate and the suite stayed PASS about itself (${group.pass ? 'verified' : `runs the self-check ${group.runsSelfCheck ? 'ok' : 'NO'}; carries the counter ${group.carriesCounter ? 'ok' : 'MISSING'}; scripts reachable ${group.shipsReachable ? 'ok' : `UNREACHED ${(group.unreached || []).join(', ') || 'none'}`}; step detector ${group.stepTeeth ? 'ok' : 'BLIND'}; counter detector ${group.counterTeeth ? 'ok' : 'BLIND'}; reachability detector ${group.reachTeeth ? 'ok' : 'BLIND'}`}).`],
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`],
@@ -232,7 +232,7 @@ const SEEDED_VIOLATION = '\n状态写入 feature_list.json 与 progress.md；产
 // and the negative arm requires the OLD diff-keyed sentence to be REJECTED, so a render cannot satisfy
 // the gate on vocabulary alone.
 //
-// Declared here, ahead of the runSelfCheck() call site (line 343), for the temporal-dead-zone reason
+// Declared here, ahead of the runSelfCheck() call site, for the temporal-dead-zone reason
 // this file has already paid for three times.
 const MAINTENANCE_TERMS = ['会话产出', '按需优化', 'harness-creator'];
 // Verbatim from `templates/agents.md` as it stood before 09-25. It is the negative arm's fixture now;
@@ -260,9 +260,10 @@ const MAINTENANCE_FORBIDDEN_FORMS = [
 // Section-scoped rather than whole-file on purpose — the skill name appears in the delegation
 // section too, so a file-wide match would stay green after the wrap-up step was deleted, and a
 // file-wide strip would remove the copy that does not matter. Declared HERE, not next to the
-// functions that use it: those run from inside runSelfCheck(), which is invoked at line 343, so a
-// const sitting beside them is still in its temporal dead zone when first read. This file has paid
-// for that mistake four times now, always with the same symptom — a FAIL that looks like a missing
+// functions that use it: those run from inside runSelfCheck(), which is invoked after this
+// declaration is evaluated, so a const sitting beside them is still in its temporal dead zone
+// when first read. This file has paid for that mistake four times now, always with the same
+// symptom — a FAIL that looks like a missing
 // feature rather than an uninitialised binding.
 const maintenanceSection = (text) =>
   text.split(/^##\s+/m).slice(1).find((part) => part.startsWith('会话结束')) || '';
@@ -413,7 +414,7 @@ const WRAPUP_SKILL_ENTRY_INCOMPLETE = [
 // weakest member, and that member is exactly the one nobody notices is gone. Found the hard way on
 // 10-08 — the task-row witness was guarded this way while the older reference-side one was not, and
 // deleting a row from that older table left every gate green. Declared up here with the other wrap-up
-// constants, ahead of the runSelfCheck() call site, for the temporal-dead-zone reason at line 347.
+// constants, ahead of the runSelfCheck() call site, for that same temporal-dead-zone reason.
 const sameTermSet = (terms, witnessRows) =>
   witnessRows.map(([term]) => term).sort().join('|') === [...terms].sort().join('|');
 
@@ -1286,8 +1287,8 @@ function consoleSelfCheckLines(selfCheck) {
     lines.push(`  Command references: ${pass ? 'PASS' : 'FAIL'} — a documented command that stops resolving is caught, while a guarded one and an unresolvable one are not mistaken for it: dangling fixture ${danglingCaught ? `caught (${dangling.join(', ')})` : 'MISSED'}; guarded fixture ${guardedExcused ? 'excused' : 'FALSELY FLAGGED'}; what cannot be resolved is listed: ${uncheckedListed ? 'ok' : 'SILENT'}; a defined-but-never-run check is named: ${unwiredNamed ? 'ok' : 'MISSED'}; a guard retires it: ${unwiredRetired ? 'ok' : 'NOT RETIRED'}; naming it does not fail the audit: ${unwiredNonFatal ? 'ok' : 'FALSELY FATAL'}; an uncollected scan fails rather than passing: ${uncollectedRefused ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
   }
   if (selfCheck.agentsLayer) {
-const { pass, defaultShipsLayer, defaultRouteReadable, navigationComplete, artifactsDeclareLayer, onDemandNotResident, layerBudgetHeld, appendPreserves, thirdPartySurvives, appendIdempotent, anchorsIntact, switchSuppressesFiles, switchClearsRoute, switchValueRefused, projectedForGeneratedGate, projectedForHandwrittenGate, handGateSurvived, projectionHasTeeth, noResidualMarkers, error } = selfCheck.agentsLayer;
-    lines.push(`  Detail layer: ${pass ? 'PASS' : 'FAIL'} — a plain run ships both detail documents: ${defaultShipsLayer ? 'ok' : 'NO'}; the instruction file routes to each under its own H3: ${navigationComplete ? 'ok' : 'MISSING'}; the artifact contract names them: ${artifactsDeclareLayer ? 'ok' : 'MISSING'}; read on demand, not resident: ${onDemandNotResident ? 'ok' : 'RESIDENT'}; each inside its own ceiling: ${layerBudgetHeld ? 'ok' : 'BUSTED'}; appending to another owner's file leaves its bytes untouched: ${appendPreserves ? 'ok' : 'REWRITES'}; its third-party block survives: ${thirdPartySurvives ? 'ok' : 'CLOBBERED'}; a second run adds nothing: ${appendIdempotent ? 'ok' : 'DUPLICATED'}; the --add-check anchors are still in place: ${anchorsIntact ? 'ok' : 'MOVED'}; the default run still reads 细则 as a route, not a filename: ${defaultRouteReadable ? 'ok' : 'MISREAD'}; --no-agents-layer writes neither document: ${switchSuppressesFiles ? 'ok' : 'WROTE'}; and leaves no route to them: ${switchClearsRoute ? 'ok' : 'DANGLING'}; a value on that switch is refused: ${switchValueRefused ? 'ok' : 'ACCEPTED'}; an anchored gate gets the prose that describes it: ${projectedForGeneratedGate ? 'ok' : 'WRONG BRANCH'}; a gate with no RAN anchors gets the prose that describes THAT gate: ${projectedForHandwrittenGate ? 'ok' : 'WRONG BRANCH'}; and the generator left that gate alone: ${handGateSurvived ? 'ok' : 'REWRITTEN'}; the branch comparison can come out false: ${projectionHasTeeth ? 'ok' : 'BLIND'}; no branch marker survives into a shipped document: ${noResidualMarkers ? 'ok' : 'LEAKED'}${error ? `; ${error}` : ''}`);
+const { pass, defaultShipsLayer, defaultRouteReadable, navigationComplete, artifactsDeclareLayer, onDemandNotResident, layerBudgetHeld, appendPreserves, thirdPartySurvives, appendIdempotent, anchorsIntact, switchSuppressesFiles, switchClearsRoute, switchValueRefused, projectedForGeneratedGate, projectedForHandwrittenGate, handGateSurvived, projectionHasTeeth, noResidualMarkers, driftInjected, driftReported, driftIsStale, error } = selfCheck.agentsLayer;
+    lines.push(`  Detail layer: ${pass ? 'PASS' : 'FAIL'} — a plain run ships both detail documents: ${defaultShipsLayer ? 'ok' : 'NO'}; the instruction file routes to each under its own H3: ${navigationComplete ? 'ok' : 'MISSING'}; the artifact contract names them: ${artifactsDeclareLayer ? 'ok' : 'MISSING'}; read on demand, not resident: ${onDemandNotResident ? 'ok' : 'RESIDENT'}; each inside its own ceiling: ${layerBudgetHeld ? 'ok' : 'BUSTED'}; appending to another owner's file leaves its bytes untouched: ${appendPreserves ? 'ok' : 'REWRITES'}; its third-party block survives: ${thirdPartySurvives ? 'ok' : 'CLOBBERED'}; a second run adds nothing: ${appendIdempotent ? 'ok' : 'DUPLICATED'}; the --add-check anchors are still in place: ${anchorsIntact ? 'ok' : 'MOVED'}; the default run still reads 细则 as a route, not a filename: ${defaultRouteReadable ? 'ok' : 'MISREAD'}; --no-agents-layer writes neither document: ${switchSuppressesFiles ? 'ok' : 'WROTE'}; and leaves no route to them: ${switchClearsRoute ? 'ok' : 'DANGLING'}; a value on that switch is refused: ${switchValueRefused ? 'ok' : 'ACCEPTED'}; an anchored gate gets the prose that describes it: ${projectedForGeneratedGate ? 'ok' : 'WRONG BRANCH'}; a gate with no RAN anchors gets the prose that describes THAT gate: ${projectedForHandwrittenGate ? 'ok' : 'WRONG BRANCH'}; and the generator left that gate alone: ${handGateSurvived ? 'ok' : 'REWRITTEN'}; the branch comparison can come out false: ${projectionHasTeeth ? 'ok' : 'BLIND'}; no branch marker survives into a shipped document: ${noResidualMarkers ? 'ok' : 'LEAKED'}; drift survives across runs: the anchors can be removed under a settled document: ${driftInjected ? 'ok' : 'NO'}; and a second run reports it instead of passing in silence: ${driftReported ? 'ok' : 'SILENT'}; the stale state itself is what the fixture asserts: ${driftIsStale ? 'ok' : 'NO'}${error ? `; ${error}` : ''}`);
   }
   if (selfCheck.bottleneckTies) {
     const { pass, tieCount, uniqueCount, noneCount, tieLabel } = selfCheck.bottleneckTies;
@@ -1551,6 +1552,7 @@ async function checkAgentsLayer() {
   let foreignDir;
   let offDir;
   let handDir;
+  let driftDir;
   const result = {
     pass: false, defaultShipsLayer: false, navigationComplete: false, artifactsDeclareLayer: false,
     onDemandNotResident: false, layerBudgetHeld: false, appendPreserves: false,
@@ -1727,13 +1729,59 @@ async function checkAgentsLayer() {
     result.noResidualMarkers = [...LAYER_DOCS.map((doc) => layerText[doc]), ...LAYER_DOCS.map((doc) => handText[doc])]
       .every((text) => !text.includes('<!-- if:') && !text.includes('<!-- endif -->'));
 
+    // The arm for the arrow of TIME. Every projection arm above grades a document the generator has
+    // just written, so all of them pass on a projection that is correct for one instant and stale
+    // the next — and stale is the normal case, because the projection is decided ONCE at generation
+    // time (create-harness.mjs skips an existing file) and is never recomputed. Measured against
+    // this fixture: generate a target, delete the RAN anchors from its init.sh by hand, and the
+    // 细则 still describe `--add-check`, `Evidence anchor` and the RAN counter for a gate that no
+    // longer has them. Nothing in the suite noticed, because nothing re-reads the gate afterwards.
+    //
+    // The judgement is deliberately one-sided. This is not a demand that the generator rewrite the
+    // documents: that is precisely what appendIdempotent and handGateSurvived forbid, and a generator
+    // that silently re-projects would undo a hand-tuned detail file. The requirement is that the
+    // STALENESS IS REPORTED — the run must exit non-zero naming the drift — because a reader with no
+    // signal cannot tell a live claim from a dead one, and verification.md's own HANDWRITTEN branch
+    // says so in as many words.
+    driftDir = await mkdtemp(path.join(os.tmpdir(), 'harness-layer-drift-'));
+    await execFileAsync('node', [script, '--target', driftDir]);
+    const driftGatePath = path.join(driftDir, 'init.sh');
+    const driftGate = (await readText(driftGatePath)).replace(/\r\n/g, '\n');
+    // Strip the anchors the projection keys on, exactly as a hand edit would: the RAN counter and
+    // the refusal that depends on it, leaving a gate that still runs and still prints a success tail.
+    const stripped = driftGate
+      .split('\n')
+      .filter((line) => !/RAN=0|\"\$\{RAN\}\"|RAN\" -eq/.test(line))
+      .join('\n');
+    result.driftInjected = stripped !== driftGate && !gateHasCheckRegion(stripped).shaped;
+    await writeText(driftGatePath, stripped);
+    // A second run is what a user actually does after hand-editing their gate. It must not rewrite
+    // the documents to paper over the drift, and it must not exit 0 in silence either.
+    const secondRun = await execFileAsync('node', [script, '--target', driftDir]).then(
+      () => ({ code: 0, output: '' }),
+      (error) => ({ code: error.code ?? 1, output: `${error.stdout || ''}${error.stderr || ''}` })
+    );
+    const afterSecond = await readLayerDocs(driftDir);
+    // Stale is the state under test: GENERATED prose survived a gate that lost its anchors, and the
+    // second run left that prose alone rather than fixing or flagging it by rewriting.
+    result.driftIsStale = result.driftInjected
+      && projectedBranch(afterSecond, true)
+      && !gateHasCheckRegion((await readText(driftGatePath)).replace(/\r\n/g, '\n')).shaped;
+    // The signal. A run that exits 0 while the documents describe a mechanism the gate no longer has
+    // IS the defect, so a zero exit is the failure — not a pass with a note attached. This is the
+    // arm that currently fails: the generator has no re-projection step, and the honest verdict is
+    // that the gap is real rather than that it is covered.
+    result.driftReported = result.driftInjected && secondRun.code !== 0
+      && /drift|stale|anchor|RAN/i.test(secondRun.output);
+
     result.pass = result.defaultShipsLayer && result.navigationComplete && result.artifactsDeclareLayer
       && result.onDemandNotResident && result.layerBudgetHeld && result.appendPreserves
       && result.thirdPartySurvives && result.appendIdempotent && result.anchorsIntact
       && result.defaultRouteReadable
       && result.switchSuppressesFiles && result.switchClearsRoute && result.switchValueRefused
       && result.projectedForGeneratedGate && result.projectedForHandwrittenGate && result.handGateSurvived
-      && result.projectionHasTeeth && result.noResidualMarkers;
+      && result.projectionHasTeeth && result.noResidualMarkers
+      && result.driftInjected && result.driftReported;
     return result;
   } catch (error) {
     return { ...result, pass: false, error: error.message };
@@ -1742,6 +1790,7 @@ async function checkAgentsLayer() {
     if (foreignDir) await rm(foreignDir, { recursive: true, force: true });
     if (offDir) await rm(offDir, { recursive: true, force: true });
     if (handDir) await rm(handDir, { recursive: true, force: true });
+    if (driftDir) await rm(driftDir, { recursive: true, force: true });
   }
 }
 
@@ -2883,7 +2932,7 @@ async function checkSkillDesignRule() {
 // them would push the next author to delete the wrong copy.
 //
 // Three arms. (1) shapeHeld — the header and the numbering. The numbering is load-bearing because
-// SKILL.md:113 points at "黑名单 11-13"; a gap or a duplicate silently re-points that citation.
+// SKILL.md points at "黑名单 11-13"; a gap or a duplicate silently re-points that citation.
 // (2) rowsSubstantive — three non-empty cells per row, and an 替代做法 that is not the 为什么 restated.
 // An anti-pattern that only says "do not do X" leaves the reader stuck, which is the one thing the
 // column exists to prevent. Reported per row so a failure names the row. (3) failureModesCarried —
@@ -2924,12 +2973,15 @@ function blacklistCells(line) {
   return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim());
 }
 
-// Numbers as written, paired with the line they were written on — a failure that says "row 14" and a
-// failure that says "SKILL.md:169" cost the same reader very different amounts of work.
+// Numbers as written, paired with the line each row sits on, because a failure that says "row 14"
+// and a failure that says "SKILL.md:169" cost the same reader very different amounts of work — and a
+// failure that says "SKILL.md:0" costs them nothing at all, which is what a hardcoded 0 index here
+// used to report on every numbering break and every hollow row.
 function blacklistRows(body) {
-  return body.split('\n').map((line) => blacklistCells(line))
-    .filter((cells) => cells && cells.length === 4 && /^\d+$/.test(cells[0]))
-    .map((cells) => ({ number: Number(cells[0]), cells, line: 0 }));
+  return body.split('\n')
+    .map((line, index) => ({ cells: blacklistCells(line), line: index + 1 }))
+    .filter((entry) => entry.cells && entry.cells.length === 4 && /^\d+$/.test(entry.cells[0]))
+    .map((entry) => ({ number: Number(entry.cells[0]), cells: entry.cells, line: entry.line }));
 }
 
 async function checkBlacklistTable() {

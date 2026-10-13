@@ -929,6 +929,33 @@ function projectBranches(templateName, contents, replacements) {
   return spaced.replace(/([^\n])\n(?=#{1,6} )/g, '$1\n\n');
 }
 
+// Which gate a document on disk was written FOR, read from a branch stamp the renderer wrote into
+// the document itself. Returns 'generated', 'handwritten', or null when the stamp is absent — a
+// document this script did not render (the user wrote it, or wrote over it) has no stamp and is
+// none of this function's business.
+//
+// The stamp exists so this question has ONE source. The first version of this check judged the
+// branch by searching for branch-exclusive PROSE — 'Evidence anchor: <短哈希>' and friends — which
+// is the same literal the self-check's projection arms search for, so the answer existed twice and
+// the templates could be reworded until both copies disagreed. That failure is silent in the worst
+// direction: `includes()` on a reworded template returns false for BOTH branches, the function
+// reports "no stamp, nothing to say", and the stale gate stays green forever. A stamp cannot rot
+// that way, because it is produced by the same render that chose the branch and is not prose anyone
+// edits.
+const BRANCH_STAMP = /<!-- gate-shape: (generated|handwritten) -->/;
+
+function stampedBranch(document) {
+  const match = BRANCH_STAMP.exec(document.replace(/\r\n/g, '\n'));
+  return match ? match[1] : null;
+}
+
+function staleProjectionBranch(document, gateIsShaped) {
+  const stamped = stampedBranch(document);
+  if (stamped === null) return null;
+  const wanted = gateIsShaped ? 'generated' : 'handwritten';
+  return stamped === wanted ? null : stamped;
+}
+
 if (!noAgentsLayer) {
   // Both 细则 make claims about `./init.sh` that are only true of a gate this generator produced —
   // a `RAN` counter, an `has_script` guard, a short-hash evidence anchor, `--add-check` growing it.
@@ -954,7 +981,24 @@ if (!noAgentsLayer) {
     // Same skip rule copyTemplate applies, decided before any reading so a re-run stays as quiet as
     // it was. --force falls through to the foreign-section check below.
     if (!force && await exists(targetPath)) {
-      results.push({ path: targetPath, status: 'skipped', reason: 'exists' });
+      // Skipping is right for an unchanged document and wrong for a stale one. The projection was
+      // decided from the gate at write time and never recomputed, so a gate the user later edited —
+      // deleting the RAN counter, say — leaves a 细则 that still explains `--add-check` and the
+      // evidence anchor for a gate that no longer has them. An agent reading it concludes the
+      // mechanism exists and stops looking, which is the exact harm the two-branch projection was
+      // written to prevent. Skipping it in silence is what let this go unnoticed; skipping it after
+      // saying so is the fix, and it costs the user nothing because the document is still not
+      // rewritten behind their back.
+      const stale = await staleProjectionBranch(await readText(targetPath), shaped);
+      if (stale) {
+        results.push({
+          path: targetPath,
+          status: 'stale',
+          reason: `it describes a ${stale}-gate init.sh, and this target's gate is now ${shaped ? 'anchored' : 'unanchored'}. Re-run with --force to re-project it, or restore the gate.`
+        });
+      } else {
+        results.push({ path: targetPath, status: 'skipped', reason: 'exists' });
+      }
       continue;
     }
 
@@ -967,13 +1011,19 @@ if (!noAgentsLayer) {
       projectBranches(template, await readText(path.join(TEMPLATE_DIR, template)), layerReplacements),
       layerReplacements);
 
+    // The branch stamp, prepended so it lands in the file this script writes rather than in a
+    // template every consumer would have to filter. A comment, because a reader must not trip over
+    // it, and it is the only thing staleProjectionBranch reads to know what the document was
+    // written for.
+    const stamped = `<!-- gate-shape: ${shaped ? 'generated' : 'handwritten'} -->\n${contents}`;
+
     // Refuse before writing, not after: reporting "written" and then deleting someone else's work is
     // the exact failure, and it stays after the read because the PROJECTED text's headings are the
     // ownership test — a name list beside it would be a second contract to keep in sync. This runs
     // on the branch that will actually be written, so it cannot be disarmed by holding a heading
     // only inside the branch that was dropped.
     if (force && await exists(targetPath) && template.endsWith('.md')) {
-      const foreign = holdsForeignSections(await readText(targetPath), contents);
+      const foreign = holdsForeignSections(await readText(targetPath), stamped);
       if (foreign.length > 0) {
         results.push({
           path: targetPath,
@@ -985,7 +1035,7 @@ if (!noAgentsLayer) {
       }
     }
 
-    if (!dryRun) await writeText(targetPath, contents);
+    if (!dryRun) await writeText(targetPath, stamped);
     results.push({ path: targetPath, status: 'written' });
   }
 }
@@ -1052,6 +1102,24 @@ if (orphanSpecLayer) {
   console.log('  documents now skip, so every later run ends the same way until the file below is edited.');
   console.log(`  Merge them into ${agentFile} by hand, in both places: the startup path (the read-on-demand pointer)`);
   console.log('  and 必需产物. Do not add a second copy of a section the file already covers.');
+  process.exitCode = 1;
+}
+
+// A detail document whose branch no longer matches its gate. Same shape as the orphan report above
+// and the same reason for a non-zero exit: the on-disk document makes claims about ./init.sh that
+// are no longer true, and the only channel that can fix it is a re-render the run deliberately does
+// not perform. Silent skipping is what let this drift go unnoticed, so it is reported instead.
+const staleLayerDocs = results.filter((result) => result.status === 'stale');
+if (staleLayerDocs.length > 0) {
+  console.log('');
+  console.log('STALE 细则 PROJECTION — these documents describe a gate this project no longer has:');
+  for (const result of staleLayerDocs) {
+    console.log(`  - ${path.relative(target, result.path)}: ${result.reason}`);
+  }
+  console.log('  The prose was chosen from init.sh when it was first written and is not recomputed,');
+  console.log('  so a gate edited since then leaves it describing a RAN counter, an evidence anchor');
+  console.log('  or --add-check that may not be there. Re-run with --force to re-project, or restore');
+  console.log('  the gate. Nothing was written by this run.');
   process.exitCode = 1;
 }
 

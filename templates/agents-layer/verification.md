@@ -49,8 +49,8 @@
 ## 「定义了但没接线」是发现，不是本仓的缺陷
 
 <!-- if:GENERATED_GATE -->
-`node scripts/validate-harness.mjs` 会报出 `N defined but not wired: npm run lint` 这类结果：
-项目在 `package.json` 里定义了 `lint`，而 `init.sh` 从头到尾没提它。
+本技能的审计器（住在 harness-creator 仓里，不在本仓）会报出 `N defined but not wired:
+npm run lint` 这类结果：项目在 `package.json` 里定义了 `lint`，而 `init.sh` 从头到尾没提它。
 
 **这不会让审计失败**，因为它反映的是目标项目自己的选择，不是本技能产物的缺陷。但它必须被
 看见，原因是门禁的结构：`has_script "lint"` 守卫在脚本缺失时 SKIP 并继续走，只要还有**任何**

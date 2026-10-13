@@ -11,7 +11,8 @@
 // Exit 0 when every relative anchor resolves, 1 when any does not, 2 on usage or environment
 // errors. Zero dependencies, like every other script in this repository.
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -20,13 +21,20 @@ const DEFAULT_TARGETS = ['SKILL.md', 'README.md', 'references'];
 
 const USAGE = `Usage: node scripts/check-links.mjs [--dir DIR]... [--help]
 
-Checks that every relative Markdown link points at a heading that exists.
+Checks that every relative Markdown link points at a heading that exists, and that the
+backtick-quoted pointers these documents route with still resolve:
+
+  - a scoped path (references/gotchas.md, templates/init.sh) must exist in this repository
+  - a bare filename must be a file this repository ships, resolved from the root, scripts/ or
+    references/ — names that exist only under templates/ are artefacts written into a TARGET repo
+  - every reference must be named by the routing document, and every routing entry must have a file
+    behind it, so deleting or renaming a reference fails even though the document still names it
 
   --dir DIR   A file or directory to scan. Repeatable. Relative paths resolve against
               ${ROOT}
               Defaults to: ${DEFAULT_TARGETS.join(', ')}
 
-Exit 0 when every relative anchor resolves, 1 when one does not, 2 on usage errors.`;
+Exit 0 when every relative anchor and pointer resolves, 1 when one does not, 2 on usage errors.`;
 
 // GitHub's heading slug: lowercase, drop punctuation, spaces to hyphens, and disambiguate
 // repeats by appending -1, -2, ... in document order. This is the same rule the reference
@@ -62,6 +70,214 @@ export function linkTargets(markdown) {
   const pattern = /!?\[[^\]]*\]\(\s*<?([^)\s]+)>?(?:\s+"[^"]*")?\s*\)/g;
   for (const match of markdown.matchAll(pattern)) targets.push(match[1]);
   return targets;
+}
+
+// Repository-internal pointers written as backtick-quoted paths — the form this repository
+// actually routes in. SKILL.md points at its nine references that way and carries no Markdown link
+// at all, so the check above sees nothing there: delete a reference and the anchor check stays
+// green while every reader of that document walks to a file that no longer exists. Copying prose
+// into a document has the opposite property — a stale copy is visible in the same diff as the code
+// it described — so pointer-shaped references trade one kind of rot for another unless something
+// checks them.
+//
+// Two shapes, because the documents use two shapes. A scoped path (`references/gotchas.md`,
+// `templates/init.sh`) resolves against the repository root and is checked directly.
+//
+// A BARE filename (`harness-maintenance-pattern.md`) is what SKILL.md's routing list actually
+// ships, and it cannot be checked the same way. Resolving it by asking the repository "do you have
+// a file with this name?" is SELF-REFERENTIAL: delete the file and the question answers no, so the
+// check either skips the token or, worse, reports the pointer itself as unresolvable — the gate
+// stays green on exactly the mutation it exists to catch. That failure was measured, not reasoned
+// about: with the index keyed on disk contents, deleting references/gotchas.md and moving
+// scripts/create-harness.mjs both left `check-links: OK`.
+//
+// So the bare form is checked in the other direction, and the arms below ask it as one question:
+// does the routing document and this repository agree about which files exist? Both sides of that
+// disagreement are covered — a reference nothing points at, and a named entry with no file behind it
+// — which is what survives the index losing a member.
+//
+// This is also what keeps the check free of false alarms without an allowlist. `mission.md`,
+// `tech-stack.md` and `harness-creator-verification.md` are names this skill WRITES INTO A TARGET
+// REPO and are never named here as sources, so no orphan is raised for them; `package.json`,
+// `go.mod` and `CLAUDE.md` are neither shipped files nor routing entries.
+const POINTER_SCOPE = ['references/', 'scripts/', 'templates/', 'agents/'];
+
+// The document that routes the reference set. Everything under references/ must be named here.
+const ROUTING_DOC = 'SKILL.md';
+const ROUTED_DIR = 'references';
+// A bare name is resolved from the routing document's own directory first, the way any relative
+// reference in a Markdown file is read.
+const ROUTING_DOC_DIR = ROOT;
+
+// The directories this repository works in, as opposed to the ones it renders into someone else. A
+// bare name resolving here is a pointer; one that resolves only under templates/ is a produced
+// artefact. A literal rather than a derived list, because the distinction is a decision about what
+// this repository IS, not a fact about its current contents.
+const RUNTIME_DIRS = ['.', 'scripts', ROUTED_DIR];
+
+// Every filename this repository ships, by bare name. Read from the git index rather than from
+// disk for the reason given on pointerTargets: a file that has been removed or renamed is still a
+// name the documents may point at, and a disk walk cannot see that, so a pointer arm keyed on the
+// disk would go blind on the exact edit it is meant to catch. Falls back to a disk walk when git is
+// unavailable, which is correct rather than clever — it is weaker, and the routing arms below do not
+// depend on it.
+function shippedFileIndex() {
+  const index = new Set();
+  let tracked = '';
+  try {
+    tracked = execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch {
+    tracked = '';
+  }
+  if (tracked) {
+    for (const line of tracked.split('\n')) {
+      if (line) index.add(line.split('/').join(path.sep));
+    }
+    return index;
+  }
+  const skip = new Set(['node_modules', 'evals', '.workbuddy', '.scratch', '.git']);
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (skip.has(entry.name) || entry.name.startsWith('.')) continue;
+      const child = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(child);
+      else index.add(entry.name);
+    }
+  };
+  walk(ROOT);
+  return index;
+}
+
+// A token is a pointer when it is a scoped path under a directory this repository ships, or a bare
+// filename this repository is known to ship. Directory-only tokens (`references/`) are excluded:
+// they name a container, and demanding a container resolve as a file is a false alarm rather than a
+// finding.
+//
+// The leading `<技能目录>/` is stripped rather than matched. SKILL.md says outright that the skill
+// directory must not be used as a relative path, and every script it routes to is written that way
+// (`<技能目录>/scripts/check-links.mjs`); stripping the placeholder resolves each one against this
+// repository, which is the only place the file exists. Matching on the raw token instead left every
+// script pointer unexamined while the gate reported OK — measured, not assumed.
+//
+// The bare form needs `shipped`, and it cannot take the index straight from disk. A bare name in
+// README.md (`create-harness.mjs`) has no directory to resolve against, and asking the filesystem
+// "do you have that name" is self-referential on exactly the deletion this check exists to catch —
+// measured: with the index read from disk, moving scripts/create-harness.mjs left the gate green.
+// git is the source instead: a tracked file is a name this repository ships whether or not it is
+// still on disk.
+//
+// Admission is all this function does. A tracked name is a candidate, and whether the file is still
+// THERE is answered once, at the call site, against the directories this repository works in —
+// which is what separates a pointer to a file here from a name this skill writes INTO A TARGET REPO.
+// `mission.md` and `tech-stack.md` are templates of documents written into someone else's
+// repository and exist here only under templates/, so neither is admitted as a pointer; both sides
+// are read off disk, so the rule needs no allowlist of names to maintain and no way to fall behind
+// one. Deciding existence here as well is what made a moved script stop being a pointer at all,
+// dropping the reported count instead of failing (measured, twice).
+export function pointerTargets(markdown, shipped) {
+  const targets = [];
+  for (const match of markdown.matchAll(/`([^`\n]+)`/g)) {
+    const token = match[1].trim().replace(/^<[^>]+>\//, '');
+    if (!/^[A-Za-z0-9_.-]+\.[a-z]+(?:[#?].*)?$/.test(token)) continue;
+    if (POINTER_SCOPE.some((prefix) => token.startsWith(prefix))) targets.push(token);
+    // A bare name is admitted when this repository HAS it at a path a reader would walk to — the root, a
+    // runtime directory — or when the git index still remembers it somewhere else. Neither test
+    // alone works. Disk alone is blind to a MOVED file: the moved script stops being a pointer, the
+    // reported count falls from 101 to 99, and the gate stays green instead of failing (measured,
+    // twice). The index alone is not enough either, because it remembers the templates of documents
+    // this skill writes into a TARGET repo — `templates/spec-layer/mission.md` — and admitting on it
+    // made every mention of the mission document a pointer to a file that is not there (measured: 13
+    // false alarms on a clean tree). So the index admits a name the runtime directories do not
+    // hold, and the caller then asks the only question that matters: does the file still EXIST?
+    else if (RUNTIME_DIRS.some((dir) => existsSync(path.join(ROOT, dir, token)))
+      || (shippedHas(shipped, token) && !producedOnly(token, shipped))) {
+      targets.push(token);
+    }
+  }
+  return targets;
+}
+
+// The index holds repository-relative paths; a document names files by bare name, so membership is
+// asked by basename. Callers pair this with an existence check: the index answers "is this a name
+// this repository uses", never "is the file still there".
+function shippedHas(shipped, token) {
+  for (const candidate of shipped) if (path.basename(candidate) === token) return true;
+  return false;
+}
+
+// A tracked name whose ONLY home is under templates/ is a document this skill renders into a
+// TARGET repo — `mission.md`, `tech-stack.md`, `harness-creator-verification.md`. Decided from the
+// index's full paths, so nothing here has to know how deep templates/ nests, and deliberately narrow:
+// a file that has merely MOVED must not match, or admitting on it would suppress the very report it
+// is there to cause.
+function producedOnly(token, shipped) {
+  for (const candidate of shipped) {
+    if (path.basename(candidate) !== token) continue;
+    if (RUNTIME_DIRS.some((dir) => existsSync(path.join(ROOT, dir, token)))) return false;
+    return candidate.split(path.sep).join('/').startsWith('templates/');
+  }
+  return false;
+}
+// The reverse question: of the files this repository routes, which does the routing document not
+// name AS A ROUTING ENTRY? A file that nothing points at is a reference the reader cannot reach.
+//
+// Scoped to the entries, not to every mention: this used to collect every backtick token in the
+// document, which made a reference named only in passing prose look routed. Deleting the actual
+// routing bullet then left the gate green (measured), and the count printed beside it — 8 entries
+// over 9 files — was the only thing that showed it, with nothing asserting the two agree. Reusing
+// danglingRoutingEntries is what makes the two arms one question asked twice.
+export function unroutedFiles(markdown, routed = []) {
+  const named = new Set(danglingRoutingEntries(markdown).map((entry) => path.basename(entry)));
+  return routed.filter((file) => !named.has(file));
+}
+
+// The other direction, and the one the reverse check cannot reach: a routing entry whose file is
+// gone. The two are one defect — the document and the repository disagree about the reference set —
+// but only this one fires when a file is DELETED, because a deleted file also disappears from the
+// index the reverse check compares against. Measured: dropping references/gotchas.md left the gate
+// green while SKILL.md still told the reader to open it.
+//
+// The entry is identified by SHAPE, not by a list of names: a bullet of the routing section reads
+// "- cross-session memory: `memory-persistence-pattern.md`". That shape is what distinguishes a
+// routed source from a name this skill writes into a target repo — `harness-creator-verification.md`
+// and `docs/agents/` appear in the same section as inline code but never as a routing bullet, which
+// is why this raises nothing for them and needs no allowlist to stay quiet.
+//
+// The shape is "a bullet whose ONLY backtick span is a filename", not "a bullet ending in one". The
+// stricter reading was blind to four rewordings that a real edit makes — a bullet with trailing
+// prose, two names in one bullet, an asterisk bullet, a dash instead of a colon — and blindness there
+// is silent in the worst way: zero entries is a legitimate result for an empty routing section, so
+// de-shaping the list turned the check off without a word. Requiring the filename to be the bullet's
+// only code keeps the discriminator while surviving the rewording; the count is compared against
+// the references on disk at the call site, so a section that stops parsing is now a finding rather
+// than a smaller number.
+export function danglingRoutingEntries(markdown) {
+  const entries = [];
+  for (const line of markdown.split(/\r?\n/)) {
+    const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
+    if (!bullet) continue;
+    const codes = [...bullet[1].matchAll(/`([^`\n]+)`/g)].map((match) => match[1].trim());
+    // Markdown and scripts only. `package.json`, `go.mod` and `Cargo.toml` are quoted all over the
+    // option and detection prose, and a repository legitimately has none of them — widening the
+    // pattern to every filename made each of those a routing entry, so the gate went red on the
+    // documents that were already correct.
+    if (codes.length === 1 && /^[A-Za-z0-9_.-]+\.(md|mjs)$/.test(codes[0])) entries.push(codes[0]);
+  }
+  return entries;
+}
+
+// Locate a bare filename among the directories this repository works in, or null when no shipped
+// file has that name. When the git index remembers a name the disk no longer has, the path it used
+// to have is returned so the caller can name a real location — the caller decides whether the file
+// still EXISTS, because that is the question being asked, and folding the two together is what
+// disarmed the dangling-entry arm once already (measured: deleting references/gotchas.md stayed
+// green while the entry still named it).
+function findShipped(name, shipped, fromDir) {
+  for (const dir of [fromDir, path.join(ROOT, 'scripts'), path.join(ROOT, ROUTED_DIR)]) {
+    const candidate = path.join(dir, name);
+    if (existsSync(candidate)) return candidate;
+  }
+  return shippedHas(shipped, name) ? path.join(ROOT, name) : null;
 }
 
 function isExternal(target) {
@@ -134,8 +350,41 @@ for (const file of files) contents.set(file, readFileSync(file, 'utf8'));
 const problems = [];
 let linkCount = 0;
 let anchorCount = 0;
+let pointerCount = 0;
+
+// One index, shared by every arm: a bare name is judged against what this repository ships, and the
+// routing arms below judge the reverse question with the same list.
+const shippedFiles = shippedFileIndex();
 
 for (const [file, text] of contents) {
+  // Pointer-shaped references resolve against the repository, not against the set of Markdown files
+  // the link loop happens to have collected: `scripts/` and `templates/` carry no Markdown at all,
+  // so a pointer to a script would fail for being un-scannable rather than for being missing.
+  for (const token of pointerTargets(text, shippedFiles)) {
+    pointerCount += 1;
+    const [filePart, anchorPart] = token.split('#');
+    // A bare name has no directory to resolve against. It is located through the index, and when
+    // even the index has no entry for it the name points at something this repository never shipped —
+    // which is a finding, not a skip: `references/gotchas.md` resolves from references/, and a
+    // bare `gone.md` cannot resolve from anywhere.
+    const resolved = filePart.includes('/')
+      ? path.resolve(ROOT, decodeURIComponent(filePart))
+      : findShipped(filePart, shippedFiles, path.dirname(file));
+    if (!resolved) {
+      problems.push(`${path.relative(ROOT, file)}: repository pointer does not resolve: ${token}`);
+      continue;
+    }
+    if (!existsSync(resolved)) {
+      problems.push(`${path.relative(ROOT, file)}: repository pointer does not resolve: ${token}`);
+      continue;
+    }
+    if (!anchorPart) continue;
+    const anchor = decodeURIComponent(anchorPart).toLowerCase();
+    if (!headingSlugs(readFileSync(resolved, 'utf8')).has(anchor)) {
+      problems.push(`${path.relative(ROOT, file)}: anchor #${anchor} does not exist in ${path.relative(ROOT, resolved)}`);
+    }
+  }
+
   for (const target of linkTargets(text)) {
     linkCount += 1;
     if (isExternal(target) || target.startsWith('#')) {
@@ -164,10 +413,46 @@ for (const [file, text] of contents) {
   }
 }
 
+// Both arms run against the routing document specifically: SKILL.md is where the reference set is
+// enumerated, so a reference that stops being named there is one the reader is never told about,
+// and a named entry whose file is gone is one the reader is sent to open for nothing.
+const routingDoc = path.join(ROOT, ROUTING_DOC);
+// Declared outside the branch because the success line reports it: `0 routed files` is the number
+// that says this arm never ran, and a shadowing `const` inside the branch would have printed a
+// permanent 0 next to a PASS — the same blindness this check was added to end.
+let routed = [];
+let entries = 0;
+if (existsSync(routingDoc)) {
+  routed = readdirSync(path.join(ROOT, ROUTED_DIR))
+    .filter((name) => name.endsWith('.md'))
+    .sort();
+  const routingText = readFileSync(routingDoc, 'utf8');
+  for (const orphan of unroutedFiles(routingText, routed)) {
+    problems.push(`${ROUTING_DOC}: ${ROUTED_DIR}/${orphan} is not pointed at by the routing document`);
+  }
+  const named = danglingRoutingEntries(routingText);
+  entries = named.length;
+  for (const entry of named) {
+    if (!/^[A-Za-z0-9_.-]+\.(md|mjs)$/.test(entry)) continue;
+    // Resolved where every other pointer resolves, then judged on EXISTENCE: a name the index still
+    // remembers but the disk no longer has is exactly the dangling case, so the index cannot be
+    // allowed to answer "found" here. Resolving under references/ only, as this did before, made the
+    // non-reference arm unreachable (measured: a legitimate entry for scripts/create-harness.mjs was
+    // reported as missing under references/) and turned every such entry into a false positive.
+    const resolved = findShipped(entry, shippedFiles, ROUTING_DOC_DIR);
+    if (!resolved || !existsSync(resolved)) {
+      problems.push(`${ROUTING_DOC}: routing entry \`${entry}\` names no file in this repository`);
+    }
+  }
+}
+
 if (problems.length) {
   console.error(`check-links: ${problems.length} problem(s)`);
   for (const problem of problems) console.error(`  ${problem}`);
   process.exit(1);
 }
 
-console.log(`check-links: OK (${linkCount} links, ${anchorCount} relative anchors checked across ${files.length} files)`);
+// The pointer count is reported next to the link count on purpose. "0 pointers checked" against a
+// document that routes its references in backticks is the number that reveals this script is blind
+// there, and it would otherwise sit invisibly in a passing run.
+console.log(`check-links: OK (${linkCount} links, ${pointerCount} repository pointers, ${entries} routing entries over ${routed.length} routed files, ${anchorCount} relative anchors checked across ${files.length} files)`);
