@@ -1768,9 +1768,9 @@ async function checkAgentsLayer() {
       && projectedBranch(afterSecond, true)
       && !gateHasCheckRegion((await readText(driftGatePath)).replace(/\r\n/g, '\n')).shaped;
     // The signal. A run that exits 0 while the documents describe a mechanism the gate no longer has
-    // IS the defect, so a zero exit is the failure — not a pass with a note attached. This is the
-    // arm that currently fails: the generator has no re-projection step, and the honest verdict is
-    // that the gap is real rather than that it is covered.
+    // IS the defect, so a zero exit is the failure — not a pass with a note attached. The generator
+    // satisfies it by REPORTING the staleness rather than re-projecting, which appendIdempotent and
+    // handGateSurvived forbid it from doing behind the user's back.
     result.driftReported = result.driftInjected && secondRun.code !== 0
       && /drift|stale|anchor|RAN/i.test(secondRun.output);
 

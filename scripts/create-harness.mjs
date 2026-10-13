@@ -1106,9 +1106,7 @@ if (orphanSpecLayer) {
 }
 
 // A detail document whose branch no longer matches its gate. Same shape as the orphan report above
-// and the same reason for a non-zero exit: the on-disk document makes claims about ./init.sh that
-// are no longer true, and the only channel that can fix it is a re-render the run deliberately does
-// not perform. Silent skipping is what let this drift go unnoticed, so it is reported instead.
+// and the same reason for a non-zero exit.
 const staleLayerDocs = results.filter((result) => result.status === 'stale');
 if (staleLayerDocs.length > 0) {
   console.log('');
