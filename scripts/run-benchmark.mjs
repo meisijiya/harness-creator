@@ -7,12 +7,14 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import {
+  CHECK_REGION_OPEN,
   FALLBACK_INIT_TEMPLATE,
   NEXT_STEPS,
   bottleneckLabel,
   collectCommandReferences,
   exists,
   formatScoreReport,
+  gateHasCheckRegion,
   htmlReport,
   initScriptFromCommands,
   loadHarnessFiles,
@@ -123,7 +125,7 @@ const DISCOVERABLE_CONTENT = [
 const SELF_CHECK_GROUPS = [
   'budget', 'agentsBudget', 'agentsDiscover', 'artifactPurity', 'maintenance', 'skillDesign',
   'wrapupOutput', 'dryRun', 'selfRefs', 'references', 'bottleneckTies', 'foreignAudit', 'blankGate',
-  'blueprint', 'agentFile', 'initGrowth', 'specLayer', 'agentsLayer', 'nextSteps', 'reportContract', 'taskContract', 'maintContract', 'noDeadDecls', 'gateArgs',
+  'blueprint', 'agentFile', 'initGrowth', 'specLayer', 'agentsLayer', 'nextSteps', 'ownGate', 'reportContract', 'taskContract', 'maintContract', 'noDeadDecls', 'gateArgs',
   'specAsk', 'blacklist'
 ];
 
@@ -151,6 +153,7 @@ const SELF_CHECK_REPORT_LINES = new Map([
   ['specLayer', (group) => ` The spec layer is opt-in and says nothing when it is off: a run without --spec-layer still produces the two artifacts and byte-identical content, the two documents exist only when the flag is given, the detected stack never becomes an answer to "what is this project", they are pointed at as read-on-demand rather than as files every session must open, and the same byte/line/working-rule ceilings still hold with the extra pointer. The optional layer is not silent by default: the hint naming --spec-layer appears on stdout when the target carries a manifest the stack detector recognises, stays silent for a bare directory, and appears on the real run as well as on the dry-run preview. Documents on disk that no version of the instruction file names are orphaned — nothing points at them from the one file every session reads — and the run exits non-zero rather than reporting a delivery the next session cannot find; the warning reads the state on disk rather than this run's statuses, so it still fires on the second and third run once both documents SKIP, pointers left by an earlier run are honoured, and a healthy repository re-runs silently and successfully so the warning keeps its meaning (${group.pass ? 'verified' : `default unchanged ${group.offByDefault ? 'ok' : 'CHANGED'}; flag creates the layer ${group.onCreatesLayer ? 'ok' : 'NO'}; stack kept out of the mission ${group.noStackLeak ? 'ok' : 'LEAKED'}; read on demand ${group.onDemandNotResident ? 'ok' : 'RESIDENT'}; budget ${group.budgetHeld ? 'ok' : 'BUSTED'}; re-run skips ${group.reRunSkips ? 'ok' : 'OVERWROTE'}; flag value ${group.flagValueRefused ? 'refused' : 'ACCEPTED'}; zero coupling ${group.purityHeld ? 'ok' : 'NAMED OR BLIND'}; pointers kept, documents re-created ${group.pointersSurviveRedelete ? 'ok' : 'CALLED ORPHAN'}`}).`],
   ['agentsLayer', (group) => ` The instruction file is a router and the detail lives beside it: a default run ships both detail documents with no switch, the instruction file names each of them under its own H3 with a one-line summary, the artifact contract lists them, all three are pointed at as read-on-demand rather than resident, and appending the section to an instruction file another owner wrote leaves that file's existing bytes untouched, survives a third party's block, and is idempotent (${group.pass ? 'verified' : `default ships ${group.defaultShipsLayer ? 'ok' : 'NO'}; navigation ${group.navigationComplete ? 'ok' : 'MISSING'}; artifact contract ${group.artifactsDeclareLayer ? 'ok' : 'MISSING'}; read on demand ${group.onDemandNotResident ? 'ok' : 'RESIDENT'}; append preserves ${group.appendPreserves ? 'ok' : 'REWRITES'}; third party survives ${group.thirdPartySurvives ? 'ok' : 'CLOBBERED'}; idempotent ${group.appendIdempotent ? 'ok' : 'DUPLICATED'}; anchors intact ${group.anchorsIntact ? 'ok' : 'BROKEN'}; budget ${group.layerBudgetHeld ? 'ok' : 'BUSTED'}`}).`],
   ['nextSteps', (group) => ` The gate's closing instructions are one literal with two producers: the generated init.sh, the hand-copy fallback and this repository's own gate all carry the same next-steps block, and it tells the agent to work only on what was explicitly authorized rather than to pick its own next task — a contradiction that was shipping, because the generated gate selected work in the same breath as the instruction file that forbids it (${group.pass ? 'verified' : `generated ${group.generatorAgrees ? 'agrees' : 'DRIFTED'}; fallback ${group.fallbackAgrees ? 'agrees' : 'DRIFTED'}; own gate ${group.ownGateAgrees ? 'agrees' : 'DRIFTED'}; authorizes rather than selects ${group.authorizesRatherThanSelects ? 'ok' : 'SELECTS'}; detector teeth ${group.detectorHasTeeth ? 'ok' : 'BLIND'}`}).`],
+  ['ownGate', (group) => ` The gate this repository runs on itself is checked like any other: it still executes the self-check, it still carries the RAN counter that turns "every step skipped" into a non-zero exit, and every script this skill ships is still reachable from it. Every other arm in this suite grades a throwaway target or one of the two shipped templates, so before these arms a file edit could strip the counter, the refusal, the self-check or a single check step out of the local gate and the suite stayed PASS about itself (${group.pass ? 'verified' : `runs the self-check ${group.runsSelfCheck ? 'ok' : 'NO'}; carries the counter ${group.carriesCounter ? 'ok' : 'MISSING'}; scripts reachable ${group.shipsReachable ? 'ok' : `UNREACHED ${(group.unreached || []).join(', ') || 'none'}`}; step detector ${group.stepTeeth ? 'ok' : 'BLIND'}; counter detector ${group.counterTeeth ? 'ok' : 'BLIND'}; reachability detector ${group.reachTeeth ? 'ok' : 'BLIND'}`}).`],
   ['reportContract', (group) => ` The report a human reads names the subsystem count the model actually has, and the renderer honours the output path it is given instead of exiting 0 at the default one (${group.pass ? 'verified' : `flag ${group.honouredFlag ? 'honoured' : 'DROPPED'}; contradicting claim ${(group.reported || []).join(', ') || 'none'}; detector ${group.seededCaught ? 'has teeth' : 'BLIND'}`}).`],
   ['taskContract', (group) => ` The instruction file scopes work to what the user authorized: explicit authorization to advance, picking and status updates only while an authorized deliverable is being executed, a baseline failure split into pre-existing versus introduced, a commit gated on the definition of done rather than on a passing check, existing modifications and untracked files protected from any cleanup, and a read-only task that only reports harness drift (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-requirement teeth ${group.teeth ? 'ok' : 'BLIND'}; forbidden-list witness ${group.forbidWitness ? 'ok' : 'BLIND'}; old forms ${group.oldFormsRejected ? 'refused' : 'ACCEPTED'}`}).`],
   ['maintContract', (group) => ` A full audit score is not an exit condition in the maintenance reference: the score row still routes to the actual misalignment check, keeps the anti-gaming clause, and the shared content-review table states the read-only, baseline-scope, commit-authorization, existing-work and full-score rules — proven per guard, with the whole table deleted, and by the retired short-circuit row (${group.pass ? 'verified' : `missing ${(group.missing || []).join(', ') || 'none'}; per-guard teeth ${group.teeth ? 'ok' : 'BLIND'}; whole table removed ${group.tableRemovedRefused ? 'refused' : 'ACCEPTED'}; retired row ${group.oldRowRejected ? 'refused' : 'ACCEPTED'}`}).`],
@@ -471,6 +474,7 @@ const CONSOLE_GROUP_LABELS = new Map([
   ['specLayer', 'Spec layer'],
   ['agentsLayer', 'Detail layer'],
   ['nextSteps', 'Next-steps agreement'],
+  ['ownGate', 'Own gate'],
   ['reportContract', 'Report contract'],
   ['taskContract', 'Task authorization'],
   ['maintContract', 'Maintenance contract'],
@@ -1071,20 +1075,28 @@ Runs a lightweight harness benchmark:
      rather than to pick its own next task. The two had drifted apart, and the drift shipped: the
      generated gate selected work in the same breath as the instruction file that forbids selecting
      it. [nextSteps]
-28. Checks that this script's own switches cannot be used to switch it off. The self-check is
+28. Checks this repository's OWN ./init.sh, which every other group reaches only through a
+     throwaway target or one of the two shipped templates: it must still execute the self-check,
+     still carry the RAN counter plus its refusal, and still make every shipped script reachable
+     from it. Measured, not hypothetical — deleting the counter, the refusal or the self-check step
+     left the suite green, and so did deleting a single check step while the counter stayed. The
+     reachability walk is derived from the gate's own steps outward through spawns and imports, not
+     pinned as a list, so adding a step with --add-check cannot turn this red. Each property is
+     proven by dropping the very line it requires. [ownGate]
+29. Checks that this script's own switches cannot be used to switch it off. The self-check is
      asserted by running the real script with a bad invocation and requiring a refusal and a
      non-zero exit, three thresholds and the off switch separately, with the whole refusal logic
      deleted from a copy in turn so a check that would pass without it is caught. --min-score=0 is
      asserted to still run, because a refusal that also ate deliberate relaxations would be its own
      kind of wrong. [gateArgs]
-29. Checks that SKILL.md's first-step rule for raising the spec layer is machine-checked rather
+30. Checks that SKILL.md's first-step rule for raising the spec layer is machine-checked rather
      than trusted to prose: the manifest files it names are compared with the ones the stack
      detector actually recognises, in both directions and with the difference named, the
      non-interactive fallback is required, and the pair is pinned by behaviour — a Go module is
      asked about while a bare directory is not, which is the stack-flag branch the package.json
      hint arms never exercised. The line had no machine carrier at all, and a rule that lives
      only in prose is one nothing can catch an agent misreading. [specAsk]
-30. Checks that SKILL.md's anti-pattern blacklist is machine-checked rather than trusted to prose — the
+31. Checks that SKILL.md's anti-pattern blacklist is machine-checked rather than trusted to prose — the
      table's own row 7 lists "carrying a constraint in prose only" as an anti-pattern while the
      blacklist was one, and README records the measurement: deleting a whole design rule left this
      suite PASS at 100/100. Asserts the header and a gapless 1..N numbering, because SKILL.md cites
@@ -1093,7 +1105,7 @@ Runs a lightweight harness benchmark:
      failure modes this suite was itself bitten by keep their own words, each pinned by a hand-written
      witness that must be refused by exactly the term it dropped. Deliberately does NOT assert
      uniqueness: the table restates a fact where the decision is made, on purpose. [blacklist]
-31. Produces a JSON report and optional HTML report.
+32. Produces a JSON report and optional HTML report.
 
 This is a structural benchmark, not an LLM judge. Use it before/after real agent sessions.`);
   process.exit(0);
@@ -1309,6 +1321,11 @@ const { pass, defaultShipsLayer, defaultRouteReadable, navigationComplete, artif
     const { pass, generatorAgrees, fallbackAgrees, ownGateAgrees, authorizesRatherThanSelects, detectorHasTeeth, error } = selfCheck.nextSteps;
     lines.push(`  Next-steps agreement: ${pass ? 'PASS' : 'FAIL'} — the generated gate carries the shared literal: ${generatorAgrees ? 'ok' : 'DRIFTED'}; the hand-copy fallback agrees: ${fallbackAgrees ? 'ok' : 'DRIFTED'}; this repository's own gate agrees: ${ownGateAgrees ? 'ok' : 'DRIFTED'}; it authorizes rather than telling the agent to pick its own task: ${authorizesRatherThanSelects ? 'ok' : 'SELECTS'}; detector teeth: ${detectorHasTeeth ? 'ok' : 'BLIND'}${error ? ` — ${error}` : ''}`);
   }
+  if (selfCheck.ownGate) {
+    const { pass, runsSelfCheck, carriesCounter, shipsReachable, unreached = [], stepTeeth, counterTeeth, reachTeeth, error } = selfCheck.ownGate;
+    const tooth = (property, teeth) => (property ? (teeth ? 'ok' : 'BLIND') : 'n/a');
+    lines.push(`  Own gate: ${pass ? 'PASS' : 'FAIL'} — this repository's ./init.sh still runs the self-check: ${runsSelfCheck ? 'ok' : 'NO'}; still carries the RAN counter and its refusal: ${carriesCounter ? 'ok' : 'MISSING'}; every shipped script is still reachable from it: ${shipsReachable ? 'ok' : `UNREACHED ${unreached.join(', ') || 'none'}`}; removing the self-check step is caught: ${tooth(runsSelfCheck, stepTeeth)}; removing an anchor is caught: ${tooth(carriesCounter, counterTeeth)}; removing the step that reaches a script is caught: ${tooth(shipsReachable, reachTeeth)}${error ? ` — ${error}` : ''}`);
+  }
   if (selfCheck.reportContract) {
     const { pass, honouredFlag, reported = [], claimsModel, seededCaught, error } = selfCheck.reportContract;
     lines.push(`  Report contract: ${pass ? 'PASS' : 'FAIL'} — --html honoured by the renderer: ${honouredFlag ? 'ok' : 'DROPPED (wrote to the default path)'}; report names the model's subsystem count: ${claimsModel ? 'ok' : 'NO'}; contradicting claim: ${reported.length === 0 ? 'none' : `FOUND (${reported.join(', ')})`}; seeded violation caught: ${seededCaught ? 'ok' : 'NO'}${error ? ` — ${error}` : ''}`);
@@ -1383,6 +1400,7 @@ async function runSelfCheck() {
       specLayer: () => checkSpecLayer(),
       agentsLayer: () => checkAgentsLayer(),
       nextSteps: () => checkNextStepsAgreement(),
+      ownGate: () => checkOwnGate(),
       reportContract: () => checkReportContract(),
       taskContract: async () => (await evaluateContracts()).taskContract,
       maintContract: () => checkMaintContract(),
@@ -1583,11 +1601,12 @@ async function checkAgentsLayer() {
 
     // The anchors --add-check inserts between. The detail layer rewrites the closing instructions
     // of the very file those anchors live in, so this arm proves the rewrite did not move them — an
-    // --add-check that now refuses forever is a silent feature loss.
+    // --add-check that now refuses forever is a silent feature loss. Read with the shared predicate
+    // rather than counting anchor lines here: this is the same question gateHasCheckRegion answers
+    // for --add-check and for the detail layer's prose, and a second copy is a second truth about
+    // which files carry them.
     const init = await readText(path.join(dir, 'init.sh'));
-    const opens = init.split('\n').filter((line) => line.trim() === 'RAN=0').length;
-    const closes = init.split('\n').filter((line) => line.trim() === 'if [ "$RAN" -eq 0 ]; then').length;
-    result.anchorsIntact = opens === 1 && closes === 1 && init.indexOf('RAN=0') < init.indexOf('if [ "$RAN" -eq 0 ]; then');
+    result.anchorsIntact = gateHasCheckRegion(init).shaped;
 
     // The append: a repository whose instruction file another setup skill wrote first. Every byte it
     // already had must come back unchanged, its block must survive, and a second run must not
@@ -2138,6 +2157,109 @@ async function checkNextStepsAgreement() {
     return { ...result, error: error.message };
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true });
+  }
+}
+
+// This repository's own gate is the one instance nothing checked. Every other arm in this suite
+// builds a throwaway target and grades it, or reads one of the two shipped templates; the local
+// init.sh was read for its closing block and for nothing else. Measured rather than imagined:
+// deleting its RAN counter, its `if [ "$RAN" -eq 0 ]` refusal and its check-links step left every
+// group green, and so did deleting the self-check step outright — a gate that verifies nothing about
+// the tooling it exists to guard, reporting PASS about itself.
+//
+// Three properties, because the file has three jobs. It must RUN the self-check, it must CARRY the
+// counter shape, and every script this skill ships must be REACHABLE from it — run as a step, spawned
+// by a step, or imported by one of those. The third is what catches a single step deleted while the
+// counter and the self-check stay: an earlier version of this file asserted only the first two, and
+// dropping one check line passed it. Reachability is DERIVED by walking the gate's own steps outward,
+// never by pinning a list of them — a pinned list turns every future --add-check into a red gate,
+// which is the "gate only grows" rule failing in the opposite direction, and a constant nobody can
+// extend without a code change is the second truth this file keeps refusing to add.
+//
+// The two shape properties are read with gateHasCheckRegion rather than a second copy of the anchor
+// test: a gate that has lost the anchors is a gate --add-check refuses, and a second implementation
+// of that test is a second truth about which files carry them.
+//
+// Teeth are mutants of the file's own text: drop the self-check line and the first predicate must go
+// false; drop an anchor line and the second must; drop the only step that reaches a shipped script
+// and the third must. A detector handed only the shipped file cannot tell "asserted" from "would have
+// asserted".
+async function checkOwnGate() {
+  const result = { pass: false, runsSelfCheck: false, carriesCounter: false, shipsReachable: false, stepTeeth: false, counterTeeth: false, reachTeeth: false, unreached: [] };
+  try {
+    const own = await readText(path.join(skillRoot, 'init.sh'));
+    const lines = own.split('\n').map((line) => line.replace(/\r$/, ''));
+    // Composed from this file's own name rather than written out: a literal relative script
+    // invocation in a shipped file is what the self-reference check exists to flag, and a
+    // hand-written copy of the name is a second truth about what this script is called.
+    const step = `node scripts/${path.basename(fileURLToPath(import.meta.url))} --self-check-only`;
+    const runsStep = (text) => text.split('\n').some((line) => line.replace(/\r$/, '').trim() === step);
+
+    result.runsSelfCheck = runsStep(own);
+    result.carriesCounter = gateHasCheckRegion(own).shaped;
+
+    const withoutStep = lines.filter((line) => line.trim() !== step).join('\n');
+    result.stepTeeth = withoutStep !== own && !runsStep(withoutStep);
+
+    const withoutAnchor = lines.filter((line) => line.trim() !== CHECK_REGION_OPEN).join('\n');
+    result.counterTeeth = withoutAnchor !== own && !gateHasCheckRegion(withoutAnchor).shaped;
+
+    // Walk outward from whatever the gate names, through actual SPAWN SITES and import
+    // statements, and require every shipped script to end up in the set. Comments are stripped and
+    // bare filenames are NOT edges: this file names check-links.mjs in a string constant and prints
+    // its own command in a usage line, and an earlier version of this arm read both as execution —
+    // deleting the only step that reaches that script still reported every script reachable, which is
+    // the exact defect the arm exists to catch.
+    const shipped = (await readdir(path.join(skillRoot, 'scripts'), { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.mjs')).map((entry) => entry.name);
+    const edgesOf = async (source) => {
+      const code = stripLineComments(source);
+      const spawned = [...code.matchAll(/(?:execFileAsync|execFile|spawn|spawnSync|execFileSync)\s*\([^)]*\[\s*([^[\]]*)/g)]
+        .map((match) => [...match[1].matchAll(/([a-z0-9-]+\.mjs)/g)].map((inner) => inner[1])).flat();
+      const imported = [...code.matchAll(/(?:^|\s)(?:import|export)[^;]*?['"]([^'"]+\.mjs)['"]/g)].map((match) => path.basename(match[1]));
+      return [...spawned, ...imported];
+    };
+    const reachFrom = async (seedNames) => {
+      const reached = new Set();
+      const queue = [...seedNames];
+      while (queue.length) {
+        const name = queue.shift();
+        if (reached.has(name) || !shipped.includes(name)) continue;
+        reached.add(name);
+        queue.push(...await edgesOf(await readText(path.join(skillRoot, 'scripts', name))));
+      }
+      return reached;
+    };
+    const seeds = lines.flatMap((line) => [...line.matchAll(/scripts[/\\]([a-z0-9-]+\.mjs)/g)].map((match) => match[1]));
+    const reached = await reachFrom(seeds);
+    result.unreached = shipped.filter((name) => !reached.has(name));
+    result.shipsReachable = result.unreached.length === 0;
+
+    // Teeth: the mutant must make the ARM fail, not merely shrink the reachable set. Comparing sizes
+    // is the trap here — the walk grows a set even when the arm still passes, so an earlier version
+    // of this line reported BLIND on a deletion the arm had already caught correctly. The teeth are
+    // the verdict, recomputed on the mutant by the same predicate.
+    const orphaned = lines.filter((line) => !line.includes('check-links')).join('\n');
+    const orphanedSeeds = orphaned.split('\n')
+      .flatMap((line) => [...line.matchAll(/scripts[/\\]([a-z0-9-]+\.mjs)/g)].map((match) => match[1]));
+    const orphanedReach = await reachFrom(orphanedSeeds);
+    result.reachTeeth = orphaned !== own && orphanedReach.size < reached.size &&
+      shipped.some((name) => !orphanedReach.has(name));
+
+    // Each teeth arm is vacuous when its own property has ALREADY failed — the line it removes is the
+    // line that is gone, so there is nothing left to remove and the mutation cannot demonstrate
+    // anything. Required only in the branch where the property holds, and reported as "n/a" rather
+    // than BLIND in the other: a detector that cannot be shown biting because its target is
+    // already broken is not the same fact as a detector that cannot fail, and printing one for the
+    // other is how a real blind arm gets mistaken for a covered one.
+const teethRequired = (property, teeth) => !property || teeth;
+    result.pass = result.runsSelfCheck && result.carriesCounter && result.shipsReachable &&
+      teethRequired(result.runsSelfCheck, result.stepTeeth) &&
+      teethRequired(result.carriesCounter, result.counterTeeth) &&
+      teethRequired(result.shipsReachable, result.reachTeeth);
+    return result;
+  } catch (error) {
+    return { ...result, error: error.message };
   }
 }
 
